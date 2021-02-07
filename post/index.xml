@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Posts on My New Hugo Site</title>
+    <title>Posts on Xun Blog</title>
     <link>http://fallingxun.github.io/post/</link>
-    <description>Recent content in Posts on My New Hugo Site</description>
+    <description>Recent content in Posts on Xun Blog</description>
     <generator>Hugo -- gohugo.io</generator>
-    <language>en-us</language>
+    <language>zh-cn</language>
     <lastBuildDate>Sun, 07 Feb 2021 15:24:08 +0800</lastBuildDate><atom:link href="http://fallingxun.github.io/post/index.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>TextMeshPro堆内存优化</title>
