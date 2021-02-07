@@ -30,20 +30,20 @@
 
     
     
-      <link href="/index.xml" rel="alternate" type="application/rss+xml" title="My New Hugo Site" />
-      <link href="/index.xml" rel="feed" type="application/rss+xml" title="My New Hugo Site" />
+      <link href="/post/index.xml" rel="alternate" type="application/rss+xml" title="My New Hugo Site" />
+      <link href="/post/index.xml" rel="feed" type="application/rss+xml" title="My New Hugo Site" />
       
     
     
-    <meta property="og:title" content="My New Hugo Site" />
+    <meta property="og:title" content="Posts" />
 <meta property="og:description" content="" />
 <meta property="og:type" content="website" />
-<meta property="og:url" content="http://fallingxun.github.io/" />
+<meta property="og:url" content="http://fallingxun.github.io/post/" />
 <meta property="og:updated_time" content="2021-02-07T15:24:08+08:00" />
-<meta itemprop="name" content="My New Hugo Site">
+<meta itemprop="name" content="Posts">
 <meta itemprop="description" content="">
 <meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="My New Hugo Site"/>
+<meta name="twitter:title" content="Posts"/>
 <meta name="twitter:description" content=""/>
 
 	
@@ -88,7 +88,7 @@
 
       <div class="tc-l pv3 ph3 ph4-ns">
         <h1 class="f2 f-subheadline-l fw2 light-silver mb0 lh-title">
-          My New Hugo Site
+          Posts
         </h1>
         
       </div>
@@ -99,46 +99,27 @@
     <main class="pb7" role="main">
       
 
-  <article class="cf ph3 ph5-l pv3 pv4-l f4 tc-l center measure-wide lh-copy mid-gray">
-    
-  </article>
-  
-  
-  
-  
-  
-  
-  
-    
-    
-
-    <div class="pa3 pa4-ns w-100 w-70-ns center">
+  <article class="pa3 pa4-ns nested-copy-line-height nested-img">
+    <section class="cf ph3 ph5-l pv3 pv4-l f4 tc-l center measure-wide lh-copy mid-gray">
       
-       
-          <h1 class="flex-none">
-            Recent Posts
-          </h1>
-        
-
+    </section>
+    <aside class="flex-ns flex-wrap justify-around mt5">
       
-
-      <section class="w-100 mw8">
-        
-        
-          <div class="relative w-100 mb4">
-            
-<article class="bb b--black-10">
-  <div class="db pv4 ph3 ph0-l no-underline dark-gray">
-    <div class="flex flex-column flex-row-ns">
-      
-      <div class="blah w-100">
-        <h1 class="f3 fw1 athelas mt0 lh-title">
-          <a href="http://fallingxun.github.io/post/textmeshpro%E5%A0%86%E5%86%85%E5%AD%98%E4%BC%98%E5%8C%96/" class="color-inherit dim link">
-            TextMeshPro堆内存优化
-            </a>
-        </h1>
-        <div class="f6 f5-l lh-copy nested-copy-line-height nested-links">
-          问题简介 TextMeshPro(TMP)是Unity的字体插件，具有很强大的功能，然而使用的过程中会发现堆内存的申请频率和大小都不低，尤其是在UI界面的使用上，每次打开界面，都会使得界面上的TMP进行初始化，随着使用时长的增加，就容易引起GC。（当前版本 com.unity.textmeshpro@1.4.1）
+        <div class="relative w-100 w-30-l mb4 bg-white">
+          
+            <div class="mb3 pa4 mid-gray overflow-hidden">
+    
+      <div class="f6">
+        February 7, 2021
+      </div>
+    
+    <h1 class="f3 near-black">
+      <a href="http://fallingxun.github.io/post/textmeshpro%E5%A0%86%E5%86%85%E5%AD%98%E4%BC%98%E5%8C%96/" class="link black dim">
+        TextMeshPro堆内存优化
+      </a>
+    </h1>
+    <div class="nested-links f5 lh-copy nested-copy-line-height">
+      问题简介 TextMeshPro(TMP)是Unity的字体插件，具有很强大的功能，然而使用的过程中会发现堆内存的申请频率和大小都不低，尤其是在UI界面的使用上，每次打开界面，都会使得界面上的TMP进行初始化，随着使用时长的增加，就容易引起GC。（当前版本 com.unity.textmeshpro@1.4.1）
 问题分析 创建50个TMP文本时，会有1.1MB的堆内存申请，从图中可以看出：
  Object.Instantiate()：0.8MB   TextMeshProUGUI..ctor: 301.2KB TMP_TextInfo..ctor: 178.9KB  GameObject.SetActive(): 368.2KB   TextMeshProUGUI.Awake(): 266.8KB TextMeshProUGUI.OnEnable(): 100.3KB  也就是说，主要的堆内存来源于 TextMeshProUGUI 和 TMP_TextInfo 的构造和初始化方法里，查看代码可知，主要原因是由于TMP_Text 和 TMP_TextInfo 在创建时预创建了较多的数组变量，导致申请了较大的堆内存，另一方面，数组变量在中间使用的过程，存在Resize操作，又会产生新的堆内存申请。
 因此，如果我们每次在销毁的时候，将原有申请的内存缓存起来，在下一次创建的时候重新拿出来使用，则可以避免每次都重新申请的问题，即使用对象池。
@@ -147,22 +128,16 @@
 由于保持了原有的数组的模式，所以对原逻辑的修改将会降到最小，只需将new Array的地方改为对象池即可。如：
  修改前：characterInfo = new TMP_CharacterInfo[8]; 修改后：TMP_ArrayPool&lt;TMP_CharacterInfo&gt;.Release(characterInfo); characterInfo = TMP_ArrayPool&lt;TMP_CharacterInfo&gt;.Get(8);  先回收原有的数组，再从池里提取新的长度的对象。每次提取前先释放，为了避免出现数组没回池。例如 TMP 中原本存在的问题：
  当使用 Instantiate(tmp) 时，实例化完成后，TMP_TextInfo() 会执行一次，预创建对应的数组，而在Awake()方法中，会再执行 m_textInfo = new TMP_TextInfo(this); 即创建一个tmp的过程中会触发两次构造函数，创建了两次数组变量，如果没进行先回收再提取，则每次都还是会重新创建新的数组。（经测试，单个TMP此处进行回收后可以减少3.2KB的堆内存申请）  然而，对于 TMP_TextInfo.
-        </div>
-          <a href="http://fallingxun.github.io/post/textmeshpro%E5%A0%86%E5%86%85%E5%AD%98%E4%BC%98%E5%8C%96/" class="ba b--moon-gray bg-light-gray br2 color-inherit dib f7 hover-bg-moon-gray link mt2 ph2 pv1">read more</a>
-        
-      </div>
     </div>
   </div>
-</article>
 
-          </div>
-        
-      </section>
-
+        </div>
       
+    </aside>
+    
 
-      </div>
-  
+
+  </article>
 
     </main>
     <footer class="bg-black bottom-0 w-100 pa3" role="contentinfo">
