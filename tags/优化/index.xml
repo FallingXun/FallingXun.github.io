@@ -1,13 +1,13 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Posts on Xun Blog</title>
-    <link>https://fallingxun.github.io/post/</link>
-    <description>Recent content in Posts on Xun Blog</description>
+    <title>优化 on Xun Blog</title>
+    <link>https://fallingxun.github.io/tags/%E4%BC%98%E5%8C%96/</link>
+    <description>Recent content in 优化 on Xun Blog</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>zh-cn</language>
     <lastBuildDate>Sun, 07 Feb 2021 15:24:08 +0800</lastBuildDate>
     
-        <atom:link href="https://fallingxun.github.io/post/index.xml" rel="self" type="application/rss+xml" />
+        <atom:link href="https://fallingxun.github.io/tags/%E4%BC%98%E5%8C%96/index.xml" rel="self" type="application/rss+xml" />
     
     
     <item>

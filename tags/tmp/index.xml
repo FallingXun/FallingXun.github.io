@@ -1,21 +1,21 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>TMP on Xun Blog</title>
-    <link>http://fallingxun.github.io/tags/tmp/</link>
+    <link>https://fallingxun.github.io/tags/tmp/</link>
     <description>Recent content in TMP on Xun Blog</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>zh-cn</language>
     <lastBuildDate>Sun, 07 Feb 2021 15:24:08 +0800</lastBuildDate>
     
-        <atom:link href="http://fallingxun.github.io/tags/tmp/index.xml" rel="self" type="application/rss+xml" />
+        <atom:link href="https://fallingxun.github.io/tags/tmp/index.xml" rel="self" type="application/rss+xml" />
     
     
     <item>
-      <title>TextMeshPro堆内存优化</title>
-      <link>http://fallingxun.github.io/post/textmeshprogcoptimize/</link>
+      <title>TMP(TextMeshPro)优化——堆内存优化</title>
+      <link>https://fallingxun.github.io/post/textmeshprogcoptimize/</link>
       <pubDate>Sun, 07 Feb 2021 15:24:08 +0800</pubDate>
       
-      <guid>http://fallingxun.github.io/post/textmeshprogcoptimize/</guid>
+      <guid>https://fallingxun.github.io/post/textmeshprogcoptimize/</guid>
       <description>&lt;h3 id=&#34;问题简介&#34;&gt;问题简介&lt;/h3&gt;
 &lt;p&gt;TextMeshPro(TMP)是Unity的字体插件，具有很强大的功能，然而使用的过程中会发现堆内存的申请频率和大小都不低，尤其是在UI界面的使用上，每次打开界面，都会使得界面上的TMP进行初始化，随着使用时长的增加，就容易引起GC。（当前版本 &lt;a href=&#34;mailto:com.unity.textmeshpro@1.4.1&#34;&gt;com.unity.textmeshpro@1.4.1&lt;/a&gt;）。&lt;/p&gt;</description>
     </item>
