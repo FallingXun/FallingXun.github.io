@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Xun&#39;s Blog  | TMP(TextMeshPro)优化篇——描边投影效果</title>
+    <title>Xun&#39;s Blog  | TMP(TextMeshPro)优化篇 (2) — 描边投影效果</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <link href="https://fonts.googleapis.com/css?family=Open+Sans" rel="stylesheet">
@@ -28,7 +28,7 @@
                 <br>
                 <h1 class="title is-size-1">
                     
-                        TMP(TextMeshPro)优化篇——描边投影效果
+                        TMP(TextMeshPro)优化篇 (2) — 描边投影效果
                     
                 </h1>
                 
@@ -81,7 +81,7 @@
 <h3 id="优化流程">优化流程</h3>
 <p>方案三的优化方式能够有较好的收益，所以下面会对方案三的优化流程进行介绍。</p>
 <p>查看TMP的Inspector面板（使用TMP_Shader.shader）</p>
-<p><img src="https://github.com/FallingXun/TextMeshOutline/blob/master/Images/TMP%E6%8F%8F%E8%BE%B9%E5%8F%82%E6%95%B0.png" alt="TMP描边参数"></p>
+<p><img src="https://github.com/FallingXun/TextMeshOutline/blob/master/Images/TMP%E6%8F%8F%E8%BE%B9%E5%8F%82%E6%95%B0.png?raw=true" alt="TMP描边参数"></p>
 <p>可以看到，描边是通过 Softness、Dilate、Outline下的Color、Thickness 四个参数来设置效果的。</p>
 <p>TMP_ShaderUtilities.cs中，可以找到对应的shader定义变量：</p>
 <blockquote>
@@ -91,19 +91,19 @@ Outline下的Color：对应shader的_OutlineColor<br>
 Thickness：对应shader的_OutlineWidth</p>
 </blockquote>
 <p>因此，需要将这些参数传入顶点，这里使用了uv4来进行存储 faceDilate 和 outlineThickness，使用了 tangent 来存储 OutlineColor。（后面会介绍为什么使用 tangent ）</p>
-<p><img src="https://github.com/FallingXun/TextMeshOutline/blob/master/Images/TMP%E6%8F%8F%E8%BE%B9%E5%8F%82%E6%95%B0%E5%8F%98%E9%87%8F%E8%AE%A1%E7%AE%97.png" alt="TMP描边参数变量计算"></p>
+<p><img src="https://github.com/FallingXun/TextMeshOutline/blob/master/Images/TMP%E6%8F%8F%E8%BE%B9%E5%8F%82%E6%95%B0%E5%8F%98%E9%87%8F%E8%AE%A1%E7%AE%97.png?raw=true" alt="TMP描边参数变量计算"></p>
 <p>可以看到，faceDilate 和 outlineThickness 的计算都和 scaleRatio_A 有关联，而 scaleRatio_A 对应shader里的 _ScaleRatioA ，所以，除了这两个参数外，还需要将 scaleRatio_A 传入顶点。</p>
 <p>因此，一共有4个参数通过顶点传输，这里参考了 uv2 的使用方式，将 faceDilate 和 outlineThickness 通过 PackUV 方法压缩成 uv4.x，scaleRatio_A则为 uv4.y。</p>
 <p>outlineColor 有 rgba 4个值信息，如果使用uv3，则需要压缩再传入，在shader侧再解压出来使用。而查看shader，并没有使用 tangent 进行计算，并且 tangent 也是 Vector4 的变量，所以将描边颜色直接传入 tangent ，可以直接在shader侧读出颜色直接使用。</p>
 <p>然而，当transform发生旋转时，会发现输出的outLineColor发生了变化。经过分析，应该是顶点的 tangent 值传到shader前，乘上了旋转矩阵，因此为了保证最终的 tangent 值能够正确，需要在C#侧将 tangent 左乘上旋转矩阵的逆矩阵，即</p>
-<p><img src="https://github.com/FallingXun/TextMeshOutline/blob/master/Images/%E9%A2%9C%E8%89%B2%E5%80%BC%E5%B7%A6%E4%B9%98%E6%97%8B%E8%BD%AC%E7%9F%A9%E9%98%B5%E9%80%86%E7%9F%A9%E9%98%B5.png" alt="颜色值左乘旋转矩阵逆矩阵"></p>
+<p><img src="https://github.com/FallingXun/TextMeshOutline/blob/master/Images/%E9%A2%9C%E8%89%B2%E5%80%BC%E5%B7%A6%E4%B9%98%E6%97%8B%E8%BD%AC%E7%9F%A9%E9%98%B5%E9%80%86%E7%9F%A9%E9%98%B5.png?raw=true" alt="颜色值左乘旋转矩阵逆矩阵"></p>
 <p>同理，投影效果相关参数的修改流程也是一样的。</p>
 <p>修改完相关C#代码和shader后，会发现shader侧并不能成功读取到新增的 uv4 和tangent 的数据，因为Canvas默认优化这些数据的传输，如下图：</p>
-<p><img src="https://github.com/FallingXun/TextMeshOutline/blob/master/Images/Canvas%E7%9A%84AdditionalShaderChannels.png" alt="Canvas的AdditionalShaderChannels"></p>
-<p><img src="https://github.com/FallingXun/TextMeshOutline/blob/master/Images/Canvas%E8%AE%BE%E7%BD%AE%E9%A1%B6%E7%82%B9%E6%95%B0%E6%8D%AE%E8%AF%BB%E5%8F%96.png" alt="Canvas设置顶点数据读取"></p>
+<p><img src="https://github.com/FallingXun/TextMeshOutline/blob/master/Images/Canvas%E7%9A%84AdditionalShaderChannels.png?raw=true" alt="Canvas的AdditionalShaderChannels"></p>
+<p><img src="https://github.com/FallingXun/TextMeshOutline/blob/master/Images/Canvas%E8%AE%BE%E7%BD%AE%E9%A1%B6%E7%82%B9%E6%95%B0%E6%8D%AE%E8%AF%BB%E5%8F%96.png?raw=true" alt="Canvas设置顶点数据读取"></p>
 <p>所以，需要在 TMPro_UGUI_Private.cs 中，原本计算使用增加 uv4 和 tangent 的使用。</p>
 <h3 id="优化结果">优化结果</h3>
-<p><img src="https://github.com/FallingXun/TextMeshOutline/blob/master/Images/TMP%E4%BC%98%E5%8C%96%E6%95%88%E6%9E%9C%E5%B1%95%E7%A4%BA.png" alt="TMP优化效果展示"></p>
+<p><img src="https://github.com/FallingXun/TextMeshOutline/blob/master/Images/TMP%E4%BC%98%E5%8C%96%E6%95%88%E6%9E%9C%E5%B1%95%E7%A4%BA.png?raw=true" alt="TMP优化效果展示"></p>
 <p>如上图所示，优化后，这里显示的有340个TMP，参数各异，但都能合批处理。</p>
 <h3 id="优化总结">优化总结</h3>
 <p>项目上使用最多的字体效果就是描边和投影，所以将这两个部分进行优化，就已经能满足绝大部分项目上的需求，相对来说还是比较实用的。总体优化变量为：<br>
@@ -153,19 +153,19 @@ tangent：effectColorToTangent （描边和投影共用一个颜色值）<br>
     <div class="card-content">
         <h1 class="title is-5">Recent posts</h1>
         
-            <h1><a href="https://fallingxun.github.io/post/googleplayoffline/">GooglePlay——离线配置</a></h1>
+            <h1><a href="https://fallingxun.github.io/post/googleplayoffline/">GooglePlay篇 (3) — 离线配置</a></h1>
             <time class="has-text-grey-light is-size-7">5 July 2021</time>
         
-            <h1><a href="https://fallingxun.github.io/post/googleplaylogin/">GooglePlay——登录篇</a></h1>
+            <h1><a href="https://fallingxun.github.io/post/googleplaypay/">GooglePlay篇 (2) — 支付</a></h1>
             <time class="has-text-grey-light is-size-7">5 July 2021</time>
         
-            <h1><a href="https://fallingxun.github.io/post/googleplaypay/">GooglePlay——支付篇</a></h1>
+            <h1><a href="https://fallingxun.github.io/post/googleplaylogin/">GooglePlay篇 (1)  — 登录</a></h1>
             <time class="has-text-grey-light is-size-7">5 July 2021</time>
         
-            <h1><a href="https://fallingxun.github.io/post/textmeshoutline/">TMP(TextMeshPro)优化篇——描边投影效果</a></h1>
+            <h1><a href="https://fallingxun.github.io/post/textmeshoutline/">TMP(TextMeshPro)优化篇 (2) — 描边投影效果</a></h1>
             <time class="has-text-grey-light is-size-7">8 February 2021</time>
         
-            <h1><a href="https://fallingxun.github.io/post/textmeshprogcoptimize/">TMP(TextMeshPro)优化篇——堆内存</a></h1>
+            <h1><a href="https://fallingxun.github.io/post/textmeshprogcoptimize/">TMP(TextMeshPro)优化篇 (1) — 堆内存</a></h1>
             <time class="has-text-grey-light is-size-7">7 February 2021</time>
         
     </div>
@@ -181,7 +181,7 @@ tangent：effectColorToTangent （描边和投影共用一个颜色值）<br>
         <h1 class="title is-5">Related posts</h1>
       
       
-            <h1><a href="https://fallingxun.github.io/post/textmeshprogcoptimize/">TMP(TextMeshPro)优化篇——堆内存</a></h1>
+            <h1><a href="https://fallingxun.github.io/post/textmeshprogcoptimize/">TMP(TextMeshPro)优化篇 (1) — 堆内存</a></h1>
             <time class="has-text-grey-light is-size-7">7 February 2021</time>
       
     </div>
