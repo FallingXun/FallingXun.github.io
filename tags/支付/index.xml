@@ -1,1 +1,23 @@
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>支付 on Xun's Blog</title><link>http://example.org/tags/%E6%94%AF%E4%BB%98/</link><description>Recent content in 支付 on Xun's Blog</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Mon, 05 Jul 2021 16:55:14 +0800</lastBuildDate><atom:link href="http://example.org/tags/%E6%94%AF%E4%BB%98/index.xml" rel="self" type="application/rss+xml"/><item><title>GooglePlay篇 (2) — 支付</title><link>http://example.org/googleplaypay/</link><pubDate>Mon, 05 Jul 2021 16:55:14 +0800</pubDate><guid>http://example.org/googleplaypay/</guid><description>&lt;p>本文档主要介绍接入Unity的IAP，来实现谷歌的支付功能。&lt;/p></description></item></channel></rss>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>支付 on Xun&#39;s Blog</title>
+    <link>https://fallingxun.github.io/tags/%E6%94%AF%E4%BB%98/</link>
+    <description>Recent content in 支付 on Xun&#39;s Blog</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh-cn</language>
+    <lastBuildDate>Mon, 05 Jul 2021 16:55:14 +0800</lastBuildDate>
+    
+        <atom:link href="https://fallingxun.github.io/tags/%E6%94%AF%E4%BB%98/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>GooglePlay篇 (2) — 支付</title>
+      <link>https://fallingxun.github.io/post/googleplaypay/</link>
+      <pubDate>Mon, 05 Jul 2021 16:55:14 +0800</pubDate>
+      
+      <guid>https://fallingxun.github.io/post/googleplaypay/</guid>
+      <description>&lt;p&gt;本文档主要介绍接入Unity的IAP，来实现谷歌的支付功能。&lt;/p&gt;</description>
+    </item>
+    
+  </channel>
+</rss>
