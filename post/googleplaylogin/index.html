@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Xun&#39;s Blog  | GooglePlay篇 (1)  — 登录</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans" rel="stylesheet">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.1/css/bulma.min.css" />
+    <link rel="stylesheet" href="https://fallingxun.github.io/css/blog.css" />
+    </head>
+<body>
+
+    
+    <nav class="navbar is-fixed-top" role="navigation" aria-label="main navigation">
+        <div class="navbar-brand">
+            <a class="navbar-item" href="https://fallingxun.github.io/">Home</a>
+        </div>
+    </nav>
+    
+
+    
+    <section class="hero is-info is-medium">
+        <div class="hero-body" style="background-image: url(https://fallingxun.github.io/img/bg-blog.jpg);">
+            <div class="container has-text-centered">
+                <br>
+                <h1 class="title is-size-1">
+                    
+                        GooglePlay篇 (1)  — 登录
+                    
+                </h1>
+                
+            </div>
+        </div>
+    </section>
+
+
+<div class="container">
+    <div class="section">
+    
+
+<div class="columns">
+    <div class="column is-9">
+        <div class="tile is-child box">
+            <div class="content">
+                <p>本文档主要是以Google Play SDK for Unity方式接入登录来说明谷歌登录的设置，主要介绍谷歌后台设置、Unity侧设置和安卓设备上的设置等相关情况</p>
+<h3 id="注意事项提交后台包的前核对一下">注意事项（提交后台包的前核对一下）</h3>
+<blockquote>
+<p>提交谷歌后台的apk，注意以下几点</p>
+</blockquote>
+<ol>
+<li>正式包的bundle id，提交后不能修改，如果是  <strong>测试用的尽量使用其他包名</strong>  ，避免污染正式包</li>
+<li>Version和Bundle Version Code（上限100000），  <strong>一旦设定了后不能回退</strong> ，只能往上提升，现在游戏里是 <strong>0.1.x.x</strong>   和  <strong>1</strong>   ，每次提交这里两者都需要自增，所以提交后台包的时候尽量  <strong>以低版本提交</strong>  ，尤其是测试的时候</li>
+<li>Target API Level设置为  <strong>28</strong> ，谷歌的最低要求， <strong>Unity打包的时候也设置成28</strong> ，提交后则 <strong>不能往回降版本</strong></li>
+</ol>
+<h3 id="前期准备">前期准备</h3>
+<blockquote>
+<p>科学上网工具</p>
+<blockquote>
+<p>PC端和安卓端都需要，PC端用于访问google相关的网页，安卓端用于apk连接测试。</p>
+</blockquote>
+</blockquote>
+<blockquote>
+<p>开发者账号</p>
+<blockquote>
+<p>注册条件：谷歌账号 + 25美金（需要VISA信用卡才能支付）。</p>
+</blockquote>
+</blockquote>
+<h3 id="开发者后台配置">开发者后台配置</h3>
+<ol>
+<li>登录开发者后台网址
+<a href="https://developer.android.com/distribute/console">https://developer.android.com/distribute/console</a> 
+使用开发者账号登入（切记<strong>不要在公司网络环境登录</strong>，据说会被封，可以远程家里的电脑或者用虚拟机！！！）</li>
+<li>谷歌后台创建项目
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/1~2.png?raw=true" alt="1~2.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/3~5.png?raw=true" alt="3~5.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/6.png?raw=true" alt="6.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/7.png?raw=true" alt="7.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/8.png?raw=true" alt="8.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/9~10.png?raw=true" alt="9~10.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/11~12.png?raw=true" alt="11~12.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/12.png?raw=true" alt="12.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/13.png?raw=true" alt="13.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/14.png?raw=true" alt="14.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/15.png?raw=true" alt="15.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/16~17.png?raw=true" alt="16~17.png">
+链接地址：https://console.developers.google.com/apis/
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/17.png?raw=true" alt="17.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/18.png?raw=true" alt="18.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/19.png?raw=true" alt="19.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/20.png?raw=true" alt="20.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/20a.png?raw=true" alt="20a.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/20b.png?raw=true" alt="20b.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/21.png?raw=true" alt="21.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/22.png?raw=true" alt="22.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/22a.png?raw=true" alt="22a.png">
+至此，登录相关的后台配置已经配置完成。</li>
+<li>Unity侧配置<br>
+(1) 下载Google Play SDK for Unity
+地址：https://github.com/playgameservices/play-games-plugin-for-unity 
+选择里面current-build内的最新包，导入Unity <br>
+(2) 配置信息
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/23.png?raw=true" alt="23.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/24.png?raw=true" alt="24.png">
+<img src="https://github.com/FallingXun/FallingXun.github.io/blob/master/images/GooglePlay/Login/25.png?raw=true" alt="25.png">
+注意：这里要用<strong>Web客户端的Client ID</strong>，否则会获取不到登录的token返回！！！
+登录代码参照文档说明即可。</li>
+<li>安卓端配置（手机或模拟器）<br>
+(1) 下载Google安装器，安装谷歌相关配置（如果出现登录时提示“无法登陆 与google服务器通信 请稍后重试”，则去下载其他的谷歌安装器：https://www.zhihu.com/question/24693274）<br>
+(2) 安装科学上网工具（如果出现无法获取token，检查Unity侧的配置是否为Web客户端id）</li>
+</ol>
+<h3 id="总结">总结</h3>
+<blockquote>
+<p>谷歌登录的配置流程较多，前期设置好了之后，后面调试支付的时候就不用再进行那么多的配置，关键点是 <strong>开发者账号</strong>、 <strong>提交的apk的要求</strong> 和 <strong>客户端ID的设置</strong>。</p>
+</blockquote>
+            </div>
+        </div>
+    </div>
+    <div class="column is-3">
+        <div class="card">
+    <div class="card-content">
+        <h1 class="title is-5">Tags</h1>
+        <div class="tags">
+        
+            <span class="tag"><a href="https://fallingxun.github.io/tags/googleplay">googleplay</a></span>
+        
+            <span class="tag"><a href="https://fallingxun.github.io/tags/gp">gp</a></span>
+        
+            <span class="tag"><a href="https://fallingxun.github.io/tags/tmp">tmp</a></span>
+        
+            <span class="tag"><a href="https://fallingxun.github.io/tags/unity%E5%A0%86%E5%86%85%E5%AD%98">unity堆内存</a></span>
+        
+            <span class="tag"><a href="https://fallingxun.github.io/tags/%E4%BC%98%E5%8C%96">优化</a></span>
+        
+            <span class="tag"><a href="https://fallingxun.github.io/tags/%E6%8A%95%E5%BD%B1">投影</a></span>
+        
+            <span class="tag"><a href="https://fallingxun.github.io/tags/%E6%8F%8F%E8%BE%B9">描边</a></span>
+        
+            <span class="tag"><a href="https://fallingxun.github.io/tags/%E6%94%AF%E4%BB%98">支付</a></span>
+        
+            <span class="tag"><a href="https://fallingxun.github.io/tags/%E7%99%BB%E5%BD%95">登录</a></span>
+        
+            <span class="tag"><a href="https://fallingxun.github.io/tags/%E7%A6%BB%E7%BA%BF">离线</a></span>
+        
+        </div>          
+    </div>
+</div><br>
+        <div class="card">
+    <div class="card-content">
+        <h1 class="title is-5">Recent posts</h1>
+        
+            <h1><a href="https://fallingxun.github.io/post/googleplayoffline/">GooglePlay篇 (3) — 离线配置</a></h1>
+            <time class="has-text-grey-light is-size-7">5 July 2021</time>
+        
+            <h1><a href="https://fallingxun.github.io/post/googleplaypay/">GooglePlay篇 (2) — 支付</a></h1>
+            <time class="has-text-grey-light is-size-7">5 July 2021</time>
+        
+            <h1><a href="https://fallingxun.github.io/post/googleplaylogin/">GooglePlay篇 (1)  — 登录</a></h1>
+            <time class="has-text-grey-light is-size-7">5 July 2021</time>
+        
+            <h1><a href="https://fallingxun.github.io/post/textmeshoutline/">TMP(TextMeshPro)优化篇 (2) — 描边投影效果</a></h1>
+            <time class="has-text-grey-light is-size-7">8 February 2021</time>
+        
+            <h1><a href="https://fallingxun.github.io/post/textmeshprogcoptimize/">TMP(TextMeshPro)优化篇 (1) — 堆内存</a></h1>
+            <time class="has-text-grey-light is-size-7">7 February 2021</time>
+        
+    </div>
+</div>
+    <br>
+                
+  
+
+
+
+<div class="card">
+    <div class="card-content">
+        <h1 class="title is-5">Related posts</h1>
+      
+      
+            <h1><a href="https://fallingxun.github.io/post/googleplayoffline/">GooglePlay篇 (3) — 离线配置</a></h1>
+            <time class="has-text-grey-light is-size-7">5 July 2021</time>
+      
+            <h1><a href="https://fallingxun.github.io/post/googleplaypay/">GooglePlay篇 (2) — 支付</a></h1>
+            <time class="has-text-grey-light is-size-7">5 July 2021</time>
+      
+    </div>
+</div>
+
+    
+<br>
+        <div class="card">
+    <div class="card-content">
+        <h1 class="title is-5">Archives</h1>
+        
+            <a href="https://fallingxun.github.io/archives/2021">2021</a> (5)<br>
+        
+    </div>
+</div>
+
+    </div>
+</div>
+
+
+    </div>
+</div>
+
+<footer class="footer has-background-grey-darker has-text-white">
+    <div class="content has-text-centered">
+        <p>
+            <span class="icon is-large"><a href="https://twitter.com/" class="mysocial" rel="me"><i class="fab fa-twitter fa-3x"></i></a></span>&nbsp;&nbsp;
+            <span class="icon is-large"><a href="https://www.youtube.com/" class="mysocial" rel="me"><i class="fab fa-youtube fa-3x"></i></a></span>&nbsp;&nbsp;
+            <span class="icon is-large"><a href="https://github.com/" class="mysocial" rel="me"><i class="fab fa-github fa-3x"></i></a></span>&nbsp;&nbsp;
+            <br><br>
+            Copyright &copy; Xun&#39;s Blog 2021 - Theme by <a href="https://jeffprod.com" class="mysocial">JeffProd.com</a>
+            - <a class="mysocial" href="https://fallingxun.github.io/about">About</a>
+        </p>
+    </div>
+</footer>
+
+<script defer src="https://use.fontawesome.com/releases/v5.1.0/js/all.js"></script>
+</body>
+</html>
