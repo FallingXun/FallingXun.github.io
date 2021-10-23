@@ -1,1 +1,23 @@
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Xun's Blog</title><link>http://example.org/</link><description>Recent content on Xun's Blog</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Sat, 23 Oct 2021 09:42:00 +0800</lastBuildDate><atom:link href="http://example.org/index.xml" rel="self" type="application/rss+xml"/><item><title>Lua篇 (1) — ToLua</title><link>http://example.org/lua_tolua/</link><pubDate>Sat, 23 Oct 2021 09:42:00 +0800</pubDate><guid>http://example.org/lua_tolua/</guid><description>Lua 通用 DoString/DoFile 和 Require 都是将脚本加载到lua虚拟机并存到全局表中， DoString/DoFile每次调用都会执行脚本对象，而Require会检查对象是</description></item><item><title>GooglePlay篇 (2) — 支付</title><link>http://example.org/googleplaypay/</link><pubDate>Mon, 05 Jul 2021 16:55:14 +0800</pubDate><guid>http://example.org/googleplaypay/</guid><description>&lt;p>本文档主要介绍接入Unity的IAP，来实现谷歌的支付功能。&lt;/p></description></item><item><title>GooglePlay篇 (1) — 登录</title><link>http://example.org/googleplaylogin/</link><pubDate>Mon, 05 Jul 2021 16:54:14 +0800</pubDate><guid>http://example.org/googleplaylogin/</guid><description>&lt;p>本文档主要是以Google Play SDK for Unity方式接入登录来说明谷歌登录的设置，主要介绍谷歌后台设置、Unity侧设置和安卓设备上的设置等相关情况&lt;/p></description></item><item><title>GooglePlay篇 (3) — 离线配置</title><link>http://example.org/googleplayoffline/</link><pubDate>Mon, 05 Jul 2021 17:56:14 +1900</pubDate><guid>http://example.org/googleplayoffline/</guid><description>&lt;p>谷歌unity的登录和IAP支付插件，很多设置需要在联网状态下进行，离线状态下，不能直接应用，需要进一步进行处理。&lt;/p></description></item><item><title>TMP(TextMeshPro)优化篇 (2) — 描边投影效果</title><link>http://example.org/textmeshoutline/</link><pubDate>Mon, 08 Feb 2021 09:19:01 +0800</pubDate><guid>http://example.org/textmeshoutline/</guid><description>&lt;p>TMP(TextMeshPro)比起原本使用的text，能有更丰富的字体效果表现，基于SDF的实现，可以让字体不会在放大显示后变得模糊，避免了字体贴图的突然扩张。同时，描边和投影效果也不再使用多个text偏移叠加的实现方式，能较大程度减少顶点数量和overdraw。(当前版本 &lt;a href="mailto:com.unity.textmeshpro@1.4.1">com.unity.textmeshpro@1.4.1&lt;/a>)&lt;/p></description></item><item><title>TMP(TextMeshPro)优化篇 (1) — 堆内存</title><link>http://example.org/textmeshprogcoptimize/</link><pubDate>Sun, 07 Feb 2021 15:24:08 +0800</pubDate><guid>http://example.org/textmeshprogcoptimize/</guid><description>&lt;p>TextMeshPro(TMP)是Unity的字体插件，具有很强大的功能，然而使用的过程中会发现堆内存的申请频率和大小都不低，尤其是在UI界面的使用上，每次打开界面，都会使得界面上的TMP进行初始化，随着使用时长的增加，就容易引起GC。（当前版本 &lt;a href="mailto:com.unity.textmeshpro@1.4.1">com.unity.textmeshpro@1.4.1&lt;/a>）。&lt;/p></description></item></channel></rss>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Xun&#39;s Blog</title>
+    <link>https://fallingxun.github.io/</link>
+    <description>Recent content on Xun&#39;s Blog</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh-cn</language>
+    <lastBuildDate>Mon, 05 Jul 2021 16:56:14 +0800</lastBuildDate>
+    
+        <atom:link href="https://fallingxun.github.io/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>Posts</title>
+      <link>https://fallingxun.github.io/post/</link>
+      <pubDate>Mon, 05 Jul 2021 16:56:14 +0800</pubDate>
+      
+      <guid>https://fallingxun.github.io/post/</guid>
+      <description></description>
+    </item>
+    
+  </channel>
+</rss>
