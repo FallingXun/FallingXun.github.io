@@ -1,0 +1,1142 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="Lua篇 (2)  — ToLua">
+<meta property="og:title" content="Lua篇 (2)  — ToLua">
+<meta property="twitter:title" content="Lua篇 (2)  — ToLua">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>Lua篇 (2) — ToLua-</title>
+<link rel=canonical href=/blog/lua_tolua/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/lua title=Lua>
+Lua
+</a>
+<a class=tag href=/tags/tolua title=ToLua>
+ToLua
+</a>
+</div>
+<h1>Lua篇 (2) — ToLua</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Saturday, October 23, 2021
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>ToLua是很多项目都使用的lua框架，为了更好地使用，需要对框架有比较清晰的认识。</p>
+<h3 id=简介>简介</h3>
+<ul>
+<li>所有的Lua框架，都是为了解决热更的问题。但无论代码框架怎么设计，都避免不了需要和CSharp侧交互。而一旦出现交互，就需要了解整体的结构和运作流程，才能更好地使用。</li>
+<li>ToLua的整体结构，主要是以表的形式存在，大致如下：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style=text-align:center>表类型</th>
+<th style=text-align:center>说明</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style=text-align:center>_G</td>
+<td style=text-align:center>全局表，可直接操作</td>
+<td>可自定义设置，如： <br>_G[&ldquo;TestPanel&rdquo;] = { }</td>
+</tr>
+<tr>
+<td style=text-align:center>-10000<br>（LUA_REGISTRYINDEX）</td>
+<td style=text-align:center>注册表，只能通过ref和unref操作</td>
+<td>tolua在这里定义了多类表，常用的有： <br><br>4（LUA_RIDX_UBOX）：存放lua引用C#对象的userdata <br><br>5（LUA_RIDX_FIXEDMAP）：存放被C#引用的对象，如table、function <br><br>7（LUA_RIDX_PACKVEC3）：指向lua的Vector3.New方法 <br><br>26（LUA_RIDX_LOADED）：存放C#类对应的lua表 <br><br>另外，注册表还存放了C#的类结构绑定到lua侧的信息，如GameObject、Component等类在C#的各种属性、方法等。</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>通过上表，可以对ToLua的结构有一个基本的概念。接下来将对整个框架进行分析，从而对ToLua能有一个更加全面的认识。</li>
+</ul>
+<h3 id=初始化>初始化</h3>
+<h4 id=创建luastate>创建LuaState</h4>
+<ul>
+<li>Lua状态机创建方法主要实现如下</li>
+</ul>
+<pre tabindex=0><code>    public LuaState()            
+    {
+    	...
+        InitTypeTraits();
+        InitStackTraits();
+        L = LuaNewState();            
+        LuaException.Init(L);
+        stateMap.Add(L, this);                        
+        OpenToLuaLibs();            
+        ToLua.OpenLibs(L);
+        OpenBaseLibs();
+    	...
+    }       
+</code></pre><ul>
+<li>InitTypeTraits()
+<ul>
+<li>注册常用类型检查函数。</li>
+</ul>
+</li>
+<li>InitStackTraits()
+<ul>
+<li>注册常用类型数据入栈和栈上数据弹出解析函数 。</li>
+</ul>
+</li>
+<li>OpenToLuaLibs()
+<ul>
+<li>打开指定的标准库，注册方法到全局表，包括package、preload、loadlib、seeall、module、require等。</li>
+<li>创建int64和uint64的table，注册到registry表中的LUA_RIDX_INT64和LUA_RIDX_UINT64中。</li>
+<li>注册其他到全局表，如：Mathf、tolua、gettag、settag等。</li>
+</ul>
+</li>
+<li>ToLua.OpenLibs(L)
+<ul>
+<li>AddLuaLoader方法，初始化loader，将lua侧的package_loaders[2]绑定为CSharp的ToLua.Loader方法。lua侧执行require时，会遍历所有loader（即 package_loaders）尝试加载，因此package_loaders[2]，即CSharp的ToLua.Loader会加载对应的lua脚本，所以可以通过修改ToLua.Loader的流程来自定义加载。</li>
+<li>往全局表中注册print、dofile、loadfile方法。</li>
+<li>往tolua表中注册isnull（判断是否为Lua侧的nil或者CSharp侧null）、typeof、tolstring（CSharp侧的数据转lua字符串）、toarray。</li>
+</ul>
+</li>
+<li>OpenBaseLibs()
+<ul>
+<li>注册System、LuaInterface、UnityEngine模块，其中List和Dictionary没有注册创建方法。</li>
+<li>创建Layer表到全局表中，将LayerMask的层级添加到Layer表中。</li>
+<li>初始化反射相关，加载mscorlib和UnityEngine程序集并缓存，注册反射相关方法到tolua表中，包括findtype、loadassembly、getmethod、getconstructor、gettypemethod、getfield、getproperty、createinstance。</li>
+<li>注册CSharp反射相关Wrap的初始化方法，key值为tolua.reflection。</li>
+</ul>
+</li>
+</ul>
+<h4 id=初始化相关库>初始化相关库</h4>
+<ul>
+<li>lua侧需要使用的相关库函数，要进行初始化
+<ul>
+<li>luaopen_pb</li>
+<li>luaopen_struct</li>
+<li>luaopen_lpeg</li>
+<li>cjson（可选）</li>
+<li>&mldr;</li>
+</ul>
+</li>
+</ul>
+<h4 id=绑定>绑定</h4>
+<ul>
+<li>CSharp的相关方法要进行绑定，即注册到lua侧</li>
+</ul>
+<pre tabindex=0><code>    protected virtual void Bind()
+    {        
+        LuaBinder.Bind(luaState);
+        DelegateFactory.Init();   
+        LuaCoroutine.Register(luaState, this);        
+    }
+</code></pre><pre tabindex=0><code>public static class LuaBinder
+{
+    ... 
+
+	public static void Bind(LuaState L)
+	{
+        ...
+		L.BeginModule(&quot;UnityEngine&quot;);
+		UnityEngine_ComponentWrap.Register(L);
+		UnityEngine_TransformWrap.Register(L);
+		...
+        L.BeginModule(&quot;Events&quot;);
+		L.RegFunction(&quot;UnityAction&quot;, UnityEngine_Events_UnityAction);
+		L.EndModule();
+        ...
+		L.EndModule();
+		L.BeginPreLoad();
+		L.AddPreLoad(&quot;UnityEngine.MeshRenderer&quot;, LuaOpen_UnityEngine_MeshRenderer, typeof(UnityEngine.MeshRenderer));
+		L.AddPreLoad(&quot;UnityEngine.BoxCollider&quot;, LuaOpen_UnityEngine_BoxCollider, typeof(UnityEngine.BoxCollider));
+		...
+		L.EndPreLoad();
+		...
+	}
+
+    ...
+</code></pre><ul>
+<li>LuaBinder.Bind 主要的方法有：
+<ul>
+<li>L.BeginModule(&mldr;)
+<ul>
+<li>调用lua的tolua_beginmodule方法，将CSharp中的namespace转化为table表示。如：namespace为A.B，则会创建table A存到全局表中，table B存到table A中，B.name = &ldquo;A.B&rdquo;。</li>
+</ul>
+</li>
+<li>L.EndModule()
+<ul>
+<li>调用lua的tolua_endmodule方法，将栈上的table弹出（beginmodule执行完后栈上会留下当前table），结束module创建，并更新stringbuffer。</li>
+</ul>
+</li>
+<li>XXXWrap.Register(L)
+<ul>
+<li>XXXWrap：CSharp侧的类生成的Wrap文件，用于将CSharp类注册到lua中。生成格式为 命名空间_类名 + Wrap，如：命名空间为A.B，类名为C，则生成的Wrap为 A_B_CWrap。</li>
+</ul>
+</li>
+<li>L.BeginClass(&mldr;)
+<ul>
+<li>如果基类没有注册过，则在Lua侧创建一个table，放到registry表（索引为LUA_REGISTRYINDEX）中。</li>
+<li>在CSharp建立table和基类的映射关系（metaMap、typeMap、genericSet）。</li>
+<li>调用lua的tolua_beginclass方法，创建一个table（tb_loaded），放到registry表中的已加载表（索引为LUA_RIDX_LOADED）中，key值为命名空间+类名，如：A.B.C。</li>
+<li>如果当前类没有创建过table，则创建一个新的table（tb_type）。</li>
+<li>将基类table设置为当前类table的metatable。</li>
+<li>注册元方法__call为class_new_event，主要实现获取元表里的New方法，并将参数传入后调起。</li>
+<li>设置__index和__newindex元方法。</li>
+<li>CSharp注册__gc元方法为CSharp的Collect方法。</li>
+<li>在CSharp侧建立table和当前类的映射关系。</li>
+</ul>
+</li>
+<li>L.EndClass()
+<ul>
+<li>将当前类的table（tb_type）设置为LUA_RIDX_LOADED中table（tb_loaded）的metatable，再将LUA_RIDX_LOADED中table（tb_loaded）设置到当前module的table中，key值为类名，即module中不会直接创建当前类的table，而是持有当前类table的引用。因此获取数据时，则是通过查找LUA_RIDX_LOADED中table（tb_loaded），触发当前类table（tb_type）的__index方法获取数据的。</li>
+</ul>
+</li>
+<li>L.RegFunction(&mldr;)
+<ul>
+<li>将CSharp类方法转成LuaCSFunction，再获取方法指针。</li>
+<li>调用lua的tolua_function，将方法注册到当前类的table中，key值为方法名。</li>
+</ul>
+</li>
+<li>L.RegVar(&mldr;)
+<ul>
+<li>将CSharp类的public变量和属性转成get和set的LuaCSFunction，再获取方法指针。</li>
+<li>调用lua的tolua_variable，创建get和set的table，存入当前类的table中，key值为lightuserdata的&gettag和&settag。</li>
+<li>把get和set的方法存入各自的table中，key值为属性名。</li>
+</ul>
+</li>
+<li>L.BeginPreLoad()
+<ul>
+<li>获取全局表中的package，找到表里的preload，将preload表入栈。</li>
+</ul>
+</li>
+<li>L.AddPreLoad(&mldr;)
+<ul>
+<li>CSharp侧将类型type加入preLoadMap字典中，值为对应的LuaCSFunction。</li>
+<li>将LuaCSFunction压入preload表中，key值为命名空间 + 类名，如:A.B。</li>
+<li>调用lua的tolua_addpreload方法，将命名空间作为module在全局表上创建对应的table。</li>
+<li>在CSharp侧将命名空间加入moduleSet，保证相同命名空间只创建一次table。</li>
+</ul>
+</li>
+<li>L.EndPreLoad()
+<ul>
+<li>将package和preload出栈。实际上并没有直接注册lua表，而是等到调用对应的LuaCSFunstion时，再通过BeginPreModule和EndPreModule进行注册。</li>
+</ul>
+</li>
+<li>L.BeginEnum(&mldr;)
+<ul>
+<li>调用lua的tolua_beginenum，创建一个table（tb_loaded）加入loaded中。</li>
+<li>创建一个table（tb_enum），放入registry表中。</li>
+<li>设置table（tb_enum）的name、__index、__newindex、__gc。</li>
+<li>在CSharp侧建立table（tb_enum）和当前类的映射关系。</li>
+<li>完成BeginEnum后，将Enum的每个值作为变量注册到table（tb_enum）中，设置get方法。</li>
+<li>所有Enum变量注册完后，注册IntToEnum方法到table（tb_enum）中，可将int转成lua侧的Enum表示。</li>
+</ul>
+</li>
+<li>L.EndEnum()
+<ul>
+<li>将当前Enum的table（tb_enum）设置为LUA_RIDX_LOADED中table（tb_loaded）的metatable，再将LUA_RIDX_LOADED中table（tb_loaded）设置到当前module的table中，key值为Enum名。</li>
+<li>完成EndEnum后，设置CSharp的ypeTraits<t>.Check和StackTraits<t>.Push。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>以UnityEngine.Component和UnityEngine.Space为例，进行绑定后,Lua侧的大致表结构如下</li>
+</ul>
+<pre tabindex=0><code>	_G = {
+		UnityEngine = {
+			Component =  LUA_REGISTRYINDEX表中LUA_RIDX_LOADED表的UnityEngine.Component,
+			Space = LUA_REGISTRYINDEX表中LUA_RIDX_LOADED表的UnityEngine.Space,
+			name = &quot;UnityEngine&quot;
+
+			...
+		}
+		
+		...
+	}
+
+	-10000（即 LUA_REGISTRYINDEX） = {
+
+		...
+
+		26(即 LUA_RIDX_LOADED) {
+			UnityEngine.Component 
+				table = {},
+				metatable = ref_Component
+				
+			UnityEngine.Space 
+				table = {},
+				metatable = ref_SpaceEnum
+		},	
+
+		...
+
+		ref_Component（分配的id，UnityEngine.Component）
+			table = {
+				name = &quot;UnityEngine.Component&quot;,
+				ref = ref_Component分配的id,
+				&amp;tag = 1,
+
+				GetComponent = CSharp的UnityEngine_ComponentWrap.GetComponent,
+				TryGetComponent = CSharp的UnityEngine_ComponentWrap.TryGetComponent,
+				...
+				New = CSharp的UnityEngine_ComponentWrap._CreateUnityEngine_Component,
+
+				&amp;gettag = {
+					transform = CSharp的UnityEngine_ComponentWrap.get_transform,
+					gameObject = CSharp的UnityEngine_ComponentWrap.get_gameObject,
+					tag = CSharp的UnityEngine_ComponentWrap.get_tag
+				},
+
+				&amp;settag = {
+					tag = CSharp的UnityEngine_ComponentWrap.set_tag
+				},
+
+				__call = tolua.c中的class_new_event,
+				__index = tolua.c中的class_index_event,
+				__newindex = tolua.c中的class_newindex_event,
+				__gc = CSharp的LuaState.Collect,
+				__eq = CSharp的UnityEngine_ComponentWrap.op_Equality,
+				__tostring = CSharp的ToLua.op_ToString
+			},
+			metatable = ref_UObject
+		
+		ref_UObject（分配的id，UnityEngine.Object）
+			table = {
+				...
+			},
+			metatable = {
+				...
+			}
+		
+		ref_SpaceEnum（分配的id，UnityEngine.Space）
+			table = {
+				name = &quot;Space&quot;
+				__index = tolua.c中的enum_index_event,
+				__newindex = tolua.c中的enum_newindex_event,
+				__gc = CSharp的LuaState.Collect,
+			},
+		...
+	}
+
+	...
+</code></pre><ul>
+<li>DelegateFactory 对委托相关的类型进行管理</li>
+</ul>
+<pre tabindex=0><code>public class DelegateFactory
+{
+	public static void Init()
+	{
+		Register();
+	}
+
+	public static void Register()
+	{
+		dict.Clear();
+		dict.Add(typeof(System.Action), factory.System_Action);
+		dict.Add(typeof(UnityEngine.Events.UnityAction), factory.UnityEngine_Events_UnityAction);
+		...
+
+		DelegateTraits&lt;System.Action&gt;.Init(factory.System_Action);
+		DelegateTraits&lt;UnityEngine.Events.UnityAction&gt;.Init(factory.UnityEngine_Events_UnityAction);
+		...
+
+		TypeTraits&lt;System.Action&gt;.Init(factory.Check_System_Action);
+		TypeTraits&lt;UnityEngine.Events.UnityAction&gt;.Init(factory.Check_UnityEngine_Events_UnityAction);
+		...
+
+		StackTraits&lt;System.Action&gt;.Push = factory.Push_System_Action;
+		StackTraits&lt;UnityEngine.Events.UnityAction&gt;.Push = factory.Push_UnityEngine_Events_UnityAction;
+		...
+	}
+}
+</code></pre><ul>
+<li>
+<p>DelegateFactory.Init</p>
+<ul>
+<li>完成委托类型的注册
+<ul>
+<li>dict.Add(&mldr;)
+<ul>
+<li>在CSharp侧，将委托类型和委托创建方法作为key-value加入字典中</li>
+</ul>
+</li>
+<li>DelegateTraits<t>.Init(&mldr;)
+<ul>
+<li>在CSharp侧，使用泛型记录委托创建方法，可直接调用</li>
+</ul>
+</li>
+<li>TypeTraits<t>.Init(&mldr;)
+<ul>
+<li>在CSharp侧，使用泛型将委托的类型检查方法添加到对应类型的Check，Check方法只返回true或者false，不返回对象，多用于重载变量类型检查</li>
+</ul>
+</li>
+<li>StackTraits<t>.Push = &mldr;
+<ul>
+<li>在CSharp侧，使用泛型将委托的入栈方法添加到对应类型的Push</li>
+<li>StackTraits也有Check，但返回的一个对应的T</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>委托创建方法，继承LuaDelegate，流程为
+<ul>
+<li>先创建LuaDelegate对象，将LuaFunction设置到LuaDelegate的func中</li>
+<li>设置LuaDelegate的method为CSharp的Call或CallWithSelf</li>
+<li>以LuaFunction的ref为key，将LuaDelegate以弱引用形式（WeakReference)缓存到delegateMap中</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p>DelegateTraits</p>
+<ul>
+<li>Init：在CSharp侧，将各种委托类型的委托创建方法加入字典中</li>
+</ul>
+</li>
+</ul>
+<h3 id=访问对象>访问对象</h3>
+<h4 id=lua访问csharp对象>Lua访问CSharp对象</h4>
+<ul>
+<li>Lua侧获取一个CSharp侧对象，常用有几种方式
+<ul>
+<li>CSharp侧将对象注册到Lua的对应table。</li>
+<li>使用CSharp的静态方法，如：GameObject.Find 等。</li>
+<li>使用对象的CSharp的new创建。</li>
+<li>&mldr;</li>
+</ul>
+</li>
+<li>无论使用那种方式，最终都是通过 ToLua.PushUserData 方法来建立映射关系。</li>
+</ul>
+<pre tabindex=0><code>	public static void PushUserData(IntPtr L, object o, int reference)
+    {
+        int index;
+        ObjectTranslator translator = ObjectTranslator.Get(L);
+		// 检查CSharp是否已经对这个对象建立了索引
+        if (translator.Getudata(o, out index))
+        {
+			// 将索引对应的userdata压到Lua栈上
+            if (LuaDLL.tolua_pushudata(L, index))
+            {
+                return;
+            }
+
+            translator.Destroyudata(index);
+        }
+		// CSharp侧为object创建索引index_GameObject
+        index = translator.AddObject(o);
+		// 在Lua侧创建userdata，userdata的值设置为index_GameObject
+        LuaDLL.tolua_pushnewudata(L, reference, index);
+    }
+</code></pre><ul>
+<li>CSharp调用lua的tolua_pushnewudata创建userdata，主要流程为
+<ul>
+<li>创建一个userdata结构（userdata_GameObject），值为index_GameObject，类型为LUA_TUSERDATA。</li>
+<li>将ref_GameObject设置为userdata_GameObject的metabtable。</li>
+<li>将userdata_GameObject存到LUA_REGISTRYINDEX表中的LUA_RIDX_UBOX表，key值为index_GameObject，和userdata_GameObject的值一致。</li>
+<li>保留userdata_GameObject在栈顶（tolua_pushudata方法也是从LUA_RIDX_UBOX表中查找userdata_GameObject并压入栈，即userdata_GameObject位于栈顶）。</li>
+</ul>
+</li>
+<li>此时，Lua栈顶放着userdata_GameObject，而我们要对此GameObject进行操作时，如获取GameObject的activeSelf，则
+<ul>
+<li>查找TestPanel表的GameObject_A，拿到userdata_GameObject。</li>
+<li>调用userdata_GameObject.activeSelf，即查询metatable的__index。</li>
+<li>找到CSharp的UnityEngine_GameObjectWrap.get_activeSelf方法并调用。</li>
+<li>ToLua.ToObject调用lua的tolua_rawnetobj方法，查询当前栈上的userdata的值，即CSharp侧的GameObject对象对应的index_GameObject。</li>
+<li>从ObjectTranslator中获取对应的GameObject，拿到activeSelf值。</li>
+<li>调用lua_pushboolean将activeSelf传到lua侧。</li>
+</ul>
+</li>
+<li>示例代码大致如下：</li>
+</ul>
+<pre tabindex=0><code>	-- TestPanel.lua
+	local state = TestPanel.GameObject_A.activeSelf
+</code></pre><pre tabindex=0><code>	// UnityEngine_GameObjectWrap.cs
+
+	...
+
+	[MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]
+	static int get_activeSelf(IntPtr L)
+	{
+		object o = null;
+
+		try
+		{
+			o = ToLua.ToObject(L, 1);
+			UnityEngine.GameObject obj = (UnityEngine.GameObject)o;
+			bool ret = obj.activeSelf;
+			LuaDLL.lua_pushboolean(L, ret);
+			return 1;
+		}
+		catch(Exception e)
+		{
+			return LuaDLL.toluaL_exception(L, e, o, &quot;attempt to index activeSelf on a nil value&quot;);
+		}
+	}
+
+	...
+</code></pre><pre tabindex=0><code>	// ToLua.cs
+
+	...
+
+	public static object ToObject(IntPtr L, int stackPos)
+    {
+        int udata = LuaDLL.tolua_rawnetobj(L, stackPos);
+
+        if (udata != -1)
+        {
+            ObjectTranslator translator = ObjectTranslator.Get(L);
+            return translator.GetObject(udata);
+        }
+
+        return null;
+    }
+
+	...
+</code></pre><ul>
+<li>Lua侧此时的结构大致如下所示</li>
+</ul>
+<pre tabindex=0><code>	_G = {
+
+		TestPanel = {
+				GameObject_A : userdata_GameObject（从 LUA_RIDX_UBOX 中获取）
+				...
+			}
+	}
+
+	-10000（即 LUA_REGISTRYINDEX） = {
+		...
+
+		4（即 LUA_RIDX_UBOX） = {
+
+			__mode = v （弱表，value为弱引用）
+
+			index_GameObject（CSharp侧的一个UnityEngine.GameObject，index为ObjectTranslator分配）= userdata_GameObject {
+					
+					（头部 Udata*）{
+						...
+						tt = LUA_TUSERDATA
+						metatable = LUA_REGISTRYINDEX.ref_GameObject
+					}
+					（用户自定义数据 user domain*）{
+						index_GameObject
+					}
+				}
+		}
+
+		ref_GameObject（分配的id，UnityEngine.GameObject）
+			table = {
+				...
+				&amp;gettag = {
+					...
+					activeSelf = CSharp的UnityEngine_GameObjectWrap.get_activeSelf,
+					...
+				},
+			},
+			metatable = ref_UObject
+
+
+		...
+	}
+</code></pre><ul>
+<li>当我们的TestPanel不再使用时，TestPanel表会删除（TestPanel = nil)，此时整个table会变成可回收，而表里的变量也同样会标记成可回收，即userdata_GameObject也触发了luaL_unref方法，移除了userdata_GameObject引用，此时userdata_GameObject只有在 LUA_RIDX_UBOX 中有引用，此时的结构如下：</li>
+</ul>
+<pre tabindex=0><code>Lua侧
+	_G = {
+
+	}
+
+	-10000（即 LUA_REGISTRYINDEX） = {
+		...
+
+		4（即 LUA_RIDX_UBOX） = {
+			
+			index_GameObject（CSharp侧的一个UnityEngine.GameObject，index为ObjectTranslator分配）= userdata_GameObject {
+					
+					（头部 Udata*）{
+						...
+						tt = LUA_TUSERDATA
+						metatable = LUA_REGISTRYINDEX.ref_GameObject
+					}
+					（用户自定义数据 user domain*）{
+						index_GameObject
+					}
+				}
+			
+			...
+		}
+		...
+	}
+
+CSharp侧
+	ObjectTranslator.objectsBackMap = {
+		{ go , index_GameObject },
+		...
+	}
+
+	ObjectTranslator.objects[index_GameObject] = go
+</code></pre><ul>
+<li>由于 LUA_RIDX_UBOX 表为值弱表，所以当lua gc触发时，userdata_GameObject由于没有其他引用，所以会被回收，并调起 userdata_GameObject.metatable的.__gc （即 LUA_REGISTRYINDEX.ref_GameObject.__gc） 方法，从而调起CSharp的LuaState.Collect方法，删除 ObjectTranslator.objects 和 ObjectTranslator.objectsBackMap 的引用。</li>
+<li>为了释放已经销毁的UnityEngine.Object的引用关系，CSharp侧提供了一个 LuaState.StepCollect() 方法，放在Update中触发，可以检查已经销毁的对象，移除 ObjectTranslator.objectsBackMap 的已销毁对象，避免字典频繁扩容。</li>
+<li>总的来说，lua侧对CSharp侧对象的引用，只有lua gc触发的时候，才能在CSharp侧对应释放掉引用。</li>
+</ul>
+<h4 id=csharp访问lua对象>CSharp访问Lua对象</h4>
+<ul>
+<li>项目中往往需要将部分逻辑放到CSharp侧编写，因此不可避免有时候会需要读取Lua侧的对象，以LuaTable表示，如：
+<ul>
+<li>CSharp侧创建Lua的table（创建并注册数据给Lua侧使用）。</li>
+<li>Lua侧调用CSharp方法传入table。</li>
+<li>&mldr;</li>
+</ul>
+</li>
+<li>当我们要获取一个Lua侧的table时，通常为</li>
+</ul>
+<pre tabindex=0><code>    stackPos = LuaDLL.abs_index(L, stackPos);
+	// 将栈上stackPos的lua table压到栈上
+    LuaDLL.lua_pushvalue(L, stackPos);
+	// 获取lua侧的table的引用
+    int reference = LuaDLL.toluaL_ref(L);
+	// CSharp侧获取对应的LuaTable
+    return LuaStatic.GetTable(L, reference);
+</code></pre><ul>
+<li>其中，lua侧的 toluaL_ref 方法，先通过stackPos对应的值，查找 LUA_RIDX_FIXEDMAP 表中是否存在有这个key值，如果存在则返回对应的value，即table的reference。如果 LUA_RIDX_FIXEDMAP 表中不存在，则在 LUA_REGISTRYINDEX 中创建一个引用reference，将table作为key，reference作为value，存入 LUA_RIDX_FIXEDMAP 表，然后返回reference值，后续再获取就直接从 LUA_RIDX_FIXEDMAP 表中即可。</li>
+<li>可以看出，lua侧并不会记录CSharp侧对table有多少引用，只保持一次引用，所以需要CSharp侧来管理引用情况。</li>
+</ul>
+<pre tabindex=0><code>	// LuaState.cs
+
+    public LuaTable GetTable(int reference)
+    {
+        LuaTable table = TryGetLuaRef(reference) as LuaTable;
+
+        if (table == null)
+        {                
+            table = new LuaTable(reference, this);
+            funcRefMap.Add(reference, new WeakReference(table));
+        }
+
+        RemoveFromGCList(reference);
+        return table;
+    }
+</code></pre><ul>
+<li>在CSharp侧，LuaTable都在LuaState.funcRefMap中缓存，每次调用TryGetLuaRef，都会触发LuaBaseRef.AddRef，使LuaBaseRef.count的值+1，表示引用加1。此时的结构如下：</li>
+</ul>
+<pre tabindex=0><code>Lua侧
+	_G = {
+
+	}
+
+	-10000（即 LUA_REGISTRYINDEX） = {
+		...
+
+		5（即 LUA_RIDX_FIXEDMAP） = {
+			testtable = test_ref
+		}
+
+		test_ref = testtable
+		...
+	}
+
+CSharp侧
+	LuaState.funcRefMap = {
+		{ test_ref , new WeakReference(LuaTable) },
+		...
+	}
+
+	ObjectTranslator.objects[index_GameObject] = go
+</code></pre><ul>
+<li>当CSharp侧不再使用此LuaTable，则会调用LuaTable.Dispose方法，释放对应的LuaTable。</li>
+</ul>
+<pre tabindex=0><code>	// LuaBaseRef.cs
+
+    public virtual void Dispose()
+    {
+        --count;
+
+        if (count &gt; 0)
+        {
+            return;
+        }
+
+        IsAlive = false;
+        Dispose(true);            
+    }
+
+	...
+
+    public virtual void Dispose(bool disposeManagedResources)
+    {
+        if (!beDisposed)
+        {
+            beDisposed = true;   
+
+            if (reference &gt; 0 &amp;&amp; luaState != null)
+            {
+                luaState.CollectRef(reference, name, !disposeManagedResources);
+            }
+           
+            reference = -1;
+            luaState = null;
+            count = 0;
+        }            
+    }
+
+</code></pre><ul>
+<li>当调用Dispose时，会检查是否还有引用，count > 0，表示还有其他地方引用了这个对象。当没有引用了，则会调用luaState.CollectRef释放LuaTable，从LuaState.funcRefMap中移除，并调起lua侧的toluaL_unref移除引用。</li>
+<li>lua侧的toluaL_unref方法，通过获取 LUA_REGISTRYINDEX 表的 reference对应的table，将 LUA_RIDX_FIXEDMAP 表key值为table的value设为nil，即移除此key-value，然后再移除 LUA_REGISTRYINDEX 表对此table的引用。</li>
+<li>然而，可以发现，当我们的LuaTable如果没有正确执行Dispose方法，则会出现count一直大于0的情况，则无法释放LuaTable，即便我们已经没有再使用它。因此，LuaBaseRef对此做了处理。</li>
+</ul>
+<pre tabindex=0><code>	// LuaBaseRef.cs
+
+    ~LuaBaseRef()
+    {
+        IsAlive = false;
+        Dispose(false);
+    }
+
+</code></pre><ul>
+<li>LuaBaseRef在析构函数中，也做了释放，将LuaTable（LuaBaseRef）加入LuaState.gcList中。在Update方法中，执行LuaState.Collect方法，释放CSharp侧的LuaTable和lua侧的对应table。</li>
+<li>由于LuaTable在CSharp侧，是以弱引用存在于LuaState.funcRefMap中，所以当CSharp侧触发GC（Unity切换场景或主动执行System.GC.Collect方法等）时，由于CSharp侧对LuaTable没有直接引用持有，所以无论当前的引用count是多少，LuaTable都会被回收，进而触发LuaBaseRef的析构函数，实现了释放。</li>
+<li>总的来说，LuaTable能释放的情况有以下情况
+<ul>
+<li>LuaTable为局部变量，方法执行完成后就触发析构函数（Unity中才会触发局部变量的析构函数）释放（立即释放）</li>
+<li>LuaTable为成员变量，手动执行了LuaTable.Dispose方法，LuaTable.count为0，luaState.CollectRef执行进行释放（立即释放）。</li>
+<li>LuaTable为MonoBehavior的成员变量，对应的GameObject销毁后，Mono对象没有其他引用，无论LuaTable.count为多少，都会触发LuaTable析构函数释放（延迟释放）。</li>
+<li>LuaTable为普通Class的成员变量，引用class的对象置为null后，无论LuaTable.count为多少，都会触发LuaTable析构函数释放（延迟释放）。</li>
+<li>LuaTable没有直接引用时，触发CSharp的GC，触发析构函数释放（立即释放）。</li>
+</ul>
+</li>
+<li>因此，为了保证能立即释放，有以下方式
+<ul>
+<li>不直接引用LuaTable，即保持所有LuaTable都为局部变量。</li>
+<li>将LuaTable设为成员变量，则CSharp侧都通过此成员变量获取相同的table，而不再从lua侧重新检查获取，count只有1，只对此LuaTable执行Dispose。</li>
+<li>不同对象从lua侧获取同一个table，都作为成员变量，对所有LuaTable都执行Dispose，保证count减少为0。</li>
+</ul>
+</li>
+</ul>
+<h4 id=时序图>时序图</h4>
+<ul>
+<li>Lua侧访问CSharp对象的时序图为
+<img src="/img/Lua/ToLua/LuaCallCSharpObject.png?raw=true" alt=LuaCallCSharpObject.png>
+</li>
+<li>CSharp访问Lua对象的时序图为
+<img src="/img/Lua/ToLua/CSharpCallLuaObject.png?raw=true" alt=CSharpCallLuaObject.png>
+</li>
+</ul>
+<h3 id=调用方法>调用方法</h3>
+<h4 id=lua调用csharp方法>Lua调用CSharp方法</h4>
+<ul>
+<li>初始化的时候，LuaBinder将CSharp的class对应创建了table存到了 LUA_REGISTRYINDEX 表中，而CSharp的class，对应的各种方法也已经进行了绑定，调用的时候，通过查找_G表，即可找到对应方法，以GameObject为例</li>
+</ul>
+<pre tabindex=0><code>	_G = {
+		UnityEngine = {
+			GameObject =  LUA_REGISTRYINDEX表中LUA_RIDX_LOADED表的UnityEngine.GameObject,
+			name = &quot;UnityEngine&quot;
+			...
+		}
+		
+		...
+	}
+
+	-10000（即 LUA_REGISTRYINDEX） = {
+
+		...
+
+		26(即 LUA_RIDX_LOADED) {
+			UnityEngine.GameObject 
+				table = {},
+				metatable = ref_GameObject
+				
+			UnityEngine.Space 
+				table = {},
+				metatable = ref_SpaceEnum
+		},	
+
+		...
+
+		ref_GameObject（分配的id，UnityEngine.GameObject）
+			table = {
+				...
+				Find = CSharp的UnityEngine_GameObjectWrap.Find,
+
+			},
+			metatable = ref_UObject
+
+		
+		ref_UObject（分配的id，UnityEngine.Object）
+			table = {
+				...
+			},
+			metatable = {
+				...
+			}
+
+		...
+	}
+
+</code></pre><ul>
+<li>当想要调用GameObject.Find时，在lua侧需要执行 UnityEngine.GameObject.Find(&ldquo;test&rdquo;)，则最终会调用CSharp侧的UnityEngine_GameObjectWrap.Find，读取栈上的参数string，并调起UnityEngine.GameObject.Find，最后再把GameObject传回lua。</li>
+</ul>
+<pre tabindex=0><code>	// UnityEngine_GameObjectWrap.cs
+
+	[MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]
+	static int Find(IntPtr L)
+	{
+		try
+		{
+			ToLua.CheckArgsCount(L, 1);
+			string arg0 = ToLua.CheckString(L, 1);
+			UnityEngine.GameObject o = UnityEngine.GameObject.Find(arg0);
+			ToLua.PushSealed(L, o);
+			return 1;
+		}
+		catch (Exception e)
+		{
+			return LuaDLL.toluaL_exception(L, e);
+		}
+	}
+
+	...
+</code></pre><h4 id=csharp调用lua方法>CSharp调用Lua方法</h4>
+<ul>
+<li>和Lua对象一样，有时候也需要调用Lua侧的方法，主要是通过table获取，以LuaFunction表示，如：
+<ul>
+<li>直接通过方法名，找到对应表中的方法。</li>
+<li>找到某个LuaTable，查找表中的方法。</li>
+<li>&mldr;</li>
+</ul>
+</li>
+<li>当我们要获取一个Lua侧的function时，通常为</li>
+</ul>
+<pre tabindex=0><code>	// ToLua.cs
+	...
+
+	stackPos = LuaDLL.abs_index(L, stackPos);
+	// 将栈上stackPos的lua function压到栈上
+    LuaDLL.lua_pushvalue(L, stackPos);
+	// 获取lua侧的function的引用
+	int reference = LuaDLL.toluaL_ref(L);
+	// CSharp侧获取对应的LuaFunction
+	return LuaStatic.GetFunction(L, reference);
+
+</code></pre><ul>
+<li>和LuaTable一样，function也会对应存入 LUA_RIDX_FIXEDMAP 表和 LUA_REGISTRYINDEX 表。销毁机制也和LuaTable一致。</li>
+</ul>
+<h3 id=委托>委托</h3>
+<ul>
+<li>Lua侧的业务，往往需要调用CSharp的逻辑，如加载某些资源。资源通过CSharp代码进行加载，加载完成后，就执行CSharp的回调。由于我们需要执行lua侧的后续逻辑，就需要设置lua侧的方法作为CSharp侧的回调，因此需要创建对应类型的委托。前面提到，DelegateFactory.Init 完成委托类型的初始化，其中 DelegateTraits 注册了各种类型的委托。通过调用 ToLua.CheckDelegate<t> 即可创建对应委托方法，设置时的方法主要为：</li>
+</ul>
+<pre tabindex=0><code>	// ToLua.cs
+	...
+	// 获取栈上的lua function
+	LuaFunction func = ToLua.ToLuaFunction(L, stackPos);
+	// 创建对应类型的静态方法委托
+    return DelegateTraits&lt;T&gt;.Create(func);
+
+</code></pre><ul>
+<li>注意，所有的lua侧委托方法都是静态方法，如果方法中引用了自身table（self），则table释放的时候，需要将CSharp侧对此方法的引用置为null，table才能被lua gc回收。否则即便table已经在CSharp侧Dispose了，但由于委托方法还引用了table，而CSharp还引用着方法，导致table还是不能释放。</li>
+<li>lua方法对应委托创建时会存入 LuaState.delegateMap 中，同样以WeakReference(Delegate.Target)的形式存在。key值有两种情况
+<ul>
+<li>静态方法：key值为对应的LuaFunction的reference。</li>
+<li>成员方法：key值为64位，高位32位为LuaFunction的reference，低位32位为LuaTable的reference。</li>
+</ul>
+</li>
+<li>可见，LuaTable和LuaFunction都会被LuaDelegate引用，所以如果LuaDelegate还有引用，则LuaTable和LuaFunction也不能释放。而由于lua侧的委托方法都是静态方法，所以CSharp不会引用LuaTable，也避免了LuaTable无法释放引起的其他资源卸载问题。而当lua侧的function触发gc时，由于是静态方法，所以直接通过reference就能移除 LuaState.delegateMap 中的引用。</li>
+<li>在场景加载完成后，由于CSharp侧的GC触发，LuaDelegate如果没有直接引用则会被释放，之后通过 LuaState.RefreshDelegateMap 方法，可以将delegateMap中已经释放的LuaDelegate移除，避免delegateMap频繁扩容。</li>
+</ul>
+<h3 id=重载>重载</h3>
+<ul>
+<li>CSharp中存在重载函数的情况，而Lua是弱语言类型，当我们在Lua侧调用一个CSharp方法时，如果此方法是重载的，则我们不能确定应该要调起哪一个对应的方法。因此在生成Wrap文件时，会对重载方法进行处理，通过检查参数个数和类型，来确定应该调用哪个方法。生成重载方法的主要流程为，获取class中所有同名方法，按一定规则进行排序，并确定需要进行类型判断的参数位置。</li>
+<li>排序的规则如下：
+<ul>
+<li>无可选参数的方法排在前面。</li>
+<li>成员方法非可选参数数量+1，参数数量不一样的，数量少的方法排在前面。参数数量一样的，最后一个非可选参数的类型不是object容器的方法排在前面。</li>
+<li>成员方法总参数数量+1，数量小的方法排在前面。</li>
+<li>第一个参数为基本类型（bool、byte、int等）的，排在前面，为object的排在后面。</li>
+<li>从第二个参数开始，基本类型 > long > ulong > object。</li>
+</ul>
+</li>
+<li>确定需要进行类型判断的方法为：
+<ul>
+<li>参数数量不一样，不用进行类型判断。</li>
+<li>参数数量一样的方法，逐一检查参数，相同的不用则进行类型判断，直到找到第一个不一样的，从这个参数起所有都需要进行类型判断检查。</li>
+</ul>
+</li>
+<li>前面提到，TypeTraits<t>.Init 初始化注册了检查类型的方法，通过 TypeTraits<t>.Check 方法可以检查lua方法的参数类型，类型匹配则通过ToLua.ToObject读取对象，强转成对应的类型。</li>
+<li>参数可以传委托方法，当我们没有重载或重载的参数数量不一样时，对应的委托类型参数则使用 ToLua.CheckDelegate<t> 来创建。而当出现参数数量一致，且委托类型参数是需要检查类型的，则会通过ToLua.ToObject来获取对象。以System.Action类型为例，检查类型的方法和获取对象为：</li>
+</ul>
+<pre tabindex=0><code>	// ToLua.cs
+	...
+	bool Check_System_Action(IntPtr L, int pos)
+	{
+		return TypeChecker.CheckDelegateType(typeof(System.Action), L, pos);
+	}
+
+</code></pre><pre tabindex=0><code>	// TypeChecker.cs
+	...
+
+    static public bool CheckDelegateType(Type type, IntPtr L, int pos)
+    {
+        LuaTypes luaType = LuaDLL.lua_type(L, pos);
+
+        switch (luaType)
+        {
+            case LuaTypes.LUA_TNIL:
+                return true;
+            case LuaTypes.LUA_TUSERDATA:                    
+                int udata = LuaDLL.tolua_rawnetobj(L, pos);
+
+                if (udata != -1)
+                {
+                    ObjectTranslator translator = ObjectTranslator.Get(L);
+                    object obj = translator.GetObject(udata);
+                    return obj == null ? true : type == obj.GetType();
+                }
+                return false;
+            default:
+                return false;
+        }
+    }
+
+</code></pre><pre tabindex=0><code>	// ToLua.cs
+	...
+    public static object ToObject(IntPtr L, int stackPos)
+    {
+        int udata = LuaDLL.tolua_rawnetobj(L, stackPos);
+
+        if (udata != -1)
+        {
+            ObjectTranslator translator = ObjectTranslator.Get(L);
+            return translator.GetObject(udata);
+        }
+
+        return null;
+    }
+</code></pre><ul>
+<li>可以看到，检查类型的方法只检查了userdata类型和nil，也就是说，System.Action类型的参数，必须是userdata类型才能匹配，即必须是Lua侧持有的CSharp侧对象。如果传入的参数为lua侧的方法时，则由于类型检查不匹配而无法调起。同样，ToLua.ToObject 方法也是直接通过 udata 获取 ObjectTranslator.objects 的对应对象，所以当出现这种情况时，lua侧的方法是不能正常调起的，这也是目前重载会遇到的问题。</li>
+<li>总的来说，为了避免出现重载引起CSharp侧不能调起lua方法的问题，可以有以下方法：
+<ul>
+<li>避免使用重载函数。</li>
+<li>增加新的重载函数，将所有原有的重载函数参数全组合到新的重载函数中，并将原来的重载函数逻辑整合到此新重载函数中，而原来旧的重载函数使用 [NoToLua] 特性，不生成Wrap，则在lua侧只有这个新的重载方法类型可以传入。</li>
+</ul>
+</li>
+</ul>
+<h3 id=无gc传值>无GC传值</h3>
+<ul>
+<li>前面说到，Lua侧获取CSharp对象是通过userdata的形式，即获取对应的id，而CSharp侧将id和对象存入ObjectTranslator.objects中，由于 ObjectTranslator.objects 中存的对象类型为object，对于值类型的对象，使用object就会需要装拆箱的操作，还会产生gc，因此对于此类对象，则需要有无gc的传值方法，来提升效率。</li>
+<li>对于大部分基本类型，如：bool、int，Lua和CSharp可以通过c的api进行交互，如：
+<ul>
+<li>lua_pushboolean/lua_toboolean</li>
+<li>lua_pushinteger/lua_tointeger</li>
+<li>&mldr;</li>
+</ul>
+</li>
+<li>通过这些方法，将数据压到栈上，或从栈上读取，则实现了数据交互，而不会产生gc。而无gc传值也是基于这种方法，通过规定struct的数据类型和顺序，则可实现入栈和出栈的配套方法。尤其是对频繁调用的类型，如UnityEngine.Vector3，效率上会有很大的提升。</li>
+<li>以Vector3为例，CSharp侧对Vector3创建了Push（将Vector3数据压入栈中）、Check（检查并创建Vector3对象）、To（获取Vector3对象）三个方法：</li>
+</ul>
+<pre tabindex=0><code>	// ToLua.cs
+	...
+	public static void Push(IntPtr L, Vector3 v3)
+    {
+        LuaDLL.tolua_pushvec3(L, v3.x, v3.y, v3.z);
+    }
+
+    static public Vector3 CheckVector3(IntPtr L, int stackPos)
+    {
+        int type = LuaDLL.tolua_getvaluetype(L, stackPos);
+
+        if (type != LuaValueType.Vector3)
+        {
+            LuaDLL.luaL_typerror(L, stackPos, &quot;Vector3&quot;, LuaValueTypeName.Get(type));
+            return Vector3.zero;
+        }
+
+        float x, y, z;
+        LuaDLL.tolua_getvec3(L, stackPos, out x, out y, out z);
+        return new Vector3(x, y, z);
+    }	
+
+    public static Vector3 ToVector3(IntPtr L, int stackPos)
+    {
+        float x = 0, y = 0, z = 0;
+        LuaDLL.tolua_getvec3(L, stackPos, out x, out y, out z);
+        return new Vector3(x, y, z);
+    }	
+
+</code></pre><ul>
+<li>LuaState.OpenBaseLuaLibs 方法，会调用lua侧的 tolua_openluavec3 方法，获取全局表里的 Vector3.New 方法，设置为 LUA_REGISTRYINDEX 表里的 LUA_RIDX_PACKVEC3，Vector3.Get 方法则设置为 LUA_REGISTRYINDEX 表里的 LUA_RIDX_UNPACKVEC3，即</li>
+</ul>
+<pre tabindex=0><code>	_G = {
+		Vector3 = lua侧的Vector3.lua
+		
+		...
+	}
+
+	-10000（即 LUA_REGISTRYINDEX） = {
+
+		...
+
+		&quot;_LOADED&quot; = {
+			UnityEngine.Vector3 = lua侧的Vector3.lua
+		}
+
+		7（即 LUA_RIDX_PACKVEC3） = Vector3.New
+		8（即 LUA_RIDX_UNPACKVEC3）= Vector3.Get
+		...
+	}
+</code></pre><ul>
+<li>lua侧的 tolua_getvec3 方法，会获取 LUA_RIDX_UNPACKVEC3 方法，调用 Vector3.Get 将lua侧的Vector3的x、y、z压入栈中。</li>
+<li>lua侧的 tolua_pushvec3 方法，会获取 LUA_RIDX_PACKVEC3 方法，将参数x、y、z传入，调用 Vector3.New 创建lua侧的Vector3。</li>
+<li>lua侧实现了Vector3对象，对UnityEngine.Vector3的一些常用计算方法在Vector3.lua中做，来避免频繁和CSharp交互。</li>
+</ul>
+<h3 id=泛型>泛型</h3>
+<ul>
+<li>CSharp侧调用Lua侧方法时，LuaFunction提供了两种方法，可简化CSharp侧的调用方式，且不会产生GC
+<ul>
+<li>无返回值：Call，支持9个参数以内（包括9个参数）的泛型调用。</li>
+<li>一个返回值（泛型R1）：Invoke，支持9个参数以内（包括9个参数）的泛型调用。</li>
+</ul>
+</li>
+<li>Lua侧调用CSharp的泛型方法，此方法需要带泛型类型的参数，并且泛型类型需要限定为class。</li>
+<li>前面提到，LuaState.OpenBaseLibs中，List、Dictionary注册了Wrap，即可以在Lua侧调用对应的操作，但是没有注册创建的方法，所以无法在Lua侧创建此类对象。</li>
+</ul>
+<h3 id=反射>反射</h3>
+<ul>
+<li>为了支持反射，CSharp侧提供了LuaReflection，通过 OpenLibs 方法注册反射相关方法。
+<ul>
+<li>tolua.findtype：查找类名获取对应类型</li>
+<li>tolua.loadassembly：加载指定名称的程序集</li>
+<li>tolua.getmethod：获取类型对应的方法，封装成LuaMethod，再转成userdata给lua侧，方便lua侧执行方法</li>
+<li>tolua.getconstructor：获取类型对应的构造函数，封装成LuaConstructor，再转成userdata给lua侧</li>
+<li>tolua.gettypemethod：获取类型对应的方法，带多参数</li>
+<li>tolua.getfield：获取成员变量，封装成LuaField，再转成userdata给lua侧，方便lua侧获取内容</li>
+<li>tolua.getproperty：获取属性，封装成LuaProperty，再转成userdata给lua侧，方便lua侧获取内容</li>
+<li>tolua.createinstance：创建类型示例</li>
+<li>tolua.reflection：初始化LuaMethod、LuaProperty、LuaField、LuaConstructor的Wrap文件注册</li>
+</ul>
+</li>
+</ul>
+<h3 id=64位整型>64位整型</h3>
+<h3 id=协程>协程</h3>
+<h3 id=接口interface>接口（Interface）</h3>
+<ul>
+<li>暂时不支持</li>
+</ul>
+<h3 id=热修复>热修复</h3>
+<h2 id=总结>总结</h2>
+<ul>
+<li>总体来说，ToLua作为使用相对广泛的框架，对于以lua代码为主的项目，能很好地解决热更问题，并且复杂度比较低，比较容易上手。</li>
+<li>通过整体的介绍，将对象的交互流程比较形象地展现出来，可以更清晰地了解数据的流向，也能更好地管理。</li>
+<li>ToLua主要是通过提前生成Wrap代码的方式，让lua侧能够调用CSharp侧的对象。因此如果没有生成Wrap，就需要通过反射来进行调用，效率会变低。</li>
+<li>对于重载变量为委托的问题，不容易被发现，所以需要谨慎使用重载。</li>
+<li>由于ToLua的设计理念是以lua为主体进行开发，因此在热修复上，还是有一些不足，例如：不能在lua侧创建List、Dictionary，没有注册int、float等类型不能直接使用，不支持接口等，需要开发者对框架有比较深入的了解，才能避免出现问题。</li>
+</ul>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/blog/googleplayoffline/ data-toggle=tooltip data-placement=top title="GooglePlay篇 (3) — 离线配置">&larr;
+Previous Post</a>
+</li>
+<li class=next>
+<a href=/blog/lua_main/ data-toggle=tooltip data-placement=top title="Lua篇 (1)  — Lua介绍">Next
+Post &rarr;</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2021
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>

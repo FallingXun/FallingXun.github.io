@@ -1,0 +1,247 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="TMP(TextMeshPro)优化篇 (1) — 堆内存">
+<meta property="og:title" content="TMP(TextMeshPro)优化篇 (1) — 堆内存">
+<meta property="twitter:title" content="TMP(TextMeshPro)优化篇 (1) — 堆内存">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>TMP(TextMeshPro)优化篇 (1) — 堆内存-</title>
+<link rel=canonical href=/blog/textmeshprogcoptimize/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/tmp title=TMP>
+TMP
+</a>
+<a class=tag href=/tags/unity%E5%A0%86%E5%86%85%E5%AD%98 title=Unity堆内存>
+Unity堆内存
+</a>
+<a class=tag href=/tags/%E4%BC%98%E5%8C%96 title=优化>
+优化
+</a>
+</div>
+<h1>TMP(TextMeshPro)优化篇 (1) — 堆内存</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Sunday, February 7, 2021
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>TextMeshPro(TMP)是Unity的字体插件，具有很强大的功能，然而使用的过程中会发现堆内存的申请频率和大小都不低，尤其是在UI界面的使用上，每次打开界面，都会使得界面上的TMP进行初始化，随着使用时长的增加，就容易引起GC。（当前版本 <a href=mailto:com.unity.textmeshpro@1.4.1>com.unity.textmeshpro@1.4.1</a>）。</p>
+<h3 id=问题分析>问题分析</h3>
+<p>
+<img src="https://note.youdao.com/yws/api/personal/file/769CF678B39D48F48C888E0F875C6FAA?method=download&shareKey=0b3cf721618c02c2b88c872248e64ab2" alt=image>
+创建50个TMP文本时，会有1.1MB的堆内存申请，从图中可以看出：</p>
+<ol>
+<li>Object.Instantiate()：0.8MB</li>
+</ol>
+<ul>
+<li>TextMeshProUGUI..ctor: 301.2KB</li>
+<li>TMP_TextInfo..ctor: 178.9KB</li>
+</ul>
+<ol start=2>
+<li>GameObject.SetActive(): 368.2KB</li>
+</ol>
+<ul>
+<li>TextMeshProUGUI.Awake(): 266.8KB</li>
+<li>TextMeshProUGUI.OnEnable(): 100.3KB</li>
+</ul>
+<p>也就是说，主要的堆内存来源于 <strong>TextMeshProUGUI</strong> 和 <strong>TMP_TextInfo</strong> 的构造和初始化方法里，查看代码可知，主要原因是由于<strong>TMP_Text</strong> 和 <strong>TMP_TextInfo</strong> 在创建时预创建了较多的数组变量，导致申请了较大的堆内存，另一方面，数组变量在中间使用的过程，存在Resize操作，又会产生新的堆内存申请。</p>
+<p>因此，如果我们每次在销毁的时候，将原有申请的内存缓存起来，在下一次创建的时候重新拿出来使用，则可以避免每次都重新申请的问题，即使用对象池。</p>
+<h3 id=优化流程>优化流程</h3>
+<p>TMP中有对象池的模式，TMP_ListPool中，提供了List<t>的对象池结构，TMP其中也有使用到此结构，如果同样使用此结构，则需要将原来使用数组的地方全部改为List，显然会有非常大的工作量，而且非常容易产生难以排查的bug。</p>
+<p>因此，为了尽可能降低复杂度，这里使用了 Dictionary + Stack + Array 的对象池结构，即 Dictionary&lt;int, Stack&lt;T[]&#187;，Dictionary使用Array.Length作为索引key值，不同类型不同长度的数组放进不同的栈里保存，由于TMP预定义的数组长度大部分是定长的，所以大部分进入池中的数组复用率将会比较高。</p>
+<p>由于保持了原有的数组的模式，所以对原逻辑的修改将会降到最小，只需将new Array的地方改为对象池即可。如：</p>
+<ul>
+<li>修改前：characterInfo = new TMP_CharacterInfo[8];</li>
+<li>修改后：TMP_ArrayPool&lt;TMP_CharacterInfo>.Release(characterInfo);
+characterInfo = TMP_ArrayPool&lt;TMP_CharacterInfo>.Get(8);</li>
+</ul>
+<p>先回收原有的数组，再从池里提取新的长度的对象。每次提取前先释放，为了避免出现数组没回池。例如 TMP 中原本存在的问题：</p>
+<ul>
+<li>当使用 Instantiate(tmp) 时，实例化完成后，TMP_TextInfo() 会执行一次，预创建对应的数组，而在Awake()方法中，会再执行 m_textInfo = new TMP_TextInfo(this); 即创建一个tmp的过程中会触发两次构造函数，创建了两次数组变量，如果没进行先回收再提取，则每次都还是会重新创建新的数组。（经测试，单个TMP此处进行回收后可以减少3.2KB的堆内存申请）</li>
+</ul>
+<p>然而，对于 TMP_TextInfo.Resize<t>(ref T[] array, int size) 方法，则与上述相反，需要先从池里提取新的长度的数组，再进行数组回收。因为旧数组的数据需要拷贝到新数组里，如果先执行回收，则会清除旧数组的数据，所以这里需要调换执行顺序。</p>
+<h3 id=测试数据>测试数据</h3>
+<h4 id=首次创建50个>首次创建50个</h4>
+<p>
+<img src="https://note.youdao.com/yws/api/personal/file/CB784244C3BF4EE3B0029B3AE7574D8C?method=download&shareKey=6e67721d591ff6e9c0ab3c1159bf6ee2" alt=无对象池首次创建50个>
+</p>
+<ul>
+<li>无对象池首次创建50个</li>
+</ul>
+<p>
+<img src="https://note.youdao.com/yws/api/personal/file/0BF88C17BE8C4413BD7BABC6AC434C4F?method=download&shareKey=89bce78c0cca509b93aebc14c1a22413" alt=有对象池首次创建50个>
+</p>
+<ul>
+<li>有对象池首次创建50个</li>
+</ul>
+<blockquote>
+<p>首次创建50个时，开启对象池后，TextMeshProUGUI.Awake()方法降低了157KB，主要来自前面说的 TextInfo 二次构造产生的堆内存。</p>
+</blockquote>
+<h4 id=首次销毁50个>首次销毁50个</h4>
+<p>
+<img src="https://note.youdao.com/yws/api/personal/file/424A4DDE3B2C49859E24B91FC0443889?method=download&shareKey=88110dfd0d9fa4c3a35328ca5173c080" alt=无对象池首次销毁50个>
+</p>
+<ul>
+<li>无对象池首次销毁50个</li>
+</ul>
+<p>
+<img src="https://note.youdao.com/yws/api/personal/file/52319CD7766E4B96934A63DF9808C704?method=download&shareKey=675a20f6cd665af85ab61a2664010547" alt=有对象池首次销毁50个>
+</p>
+<ul>
+<li>有对象池首次销毁50个</li>
+</ul>
+<blockquote>
+<p>首次销毁50个时，开启对象池后，由于创建了池，所以会产生额外的内存占用。</p>
+</blockquote>
+<h4 id=二次创建50个>二次创建50个</h4>
+<p>
+<img src="https://note.youdao.com/yws/api/personal/file/4A0600BB13C84F36BE1D9B5F97F9390E?method=download&shareKey=f08c5e812306ba97fca1bbb8e9b08f9e" alt=无对象池二次创建50个>
+</p>
+<ul>
+<li>无对象池二次创建50个</li>
+</ul>
+<p>
+<img src="https://note.youdao.com/yws/api/personal/file/C8FC6B79ED794018AB222ACB6B851151?method=download&shareKey=9af88a2ce37ab81e2cd9970707cb103c" alt=有对象池二次创建50个>
+</p>
+<ul>
+<li>有对象池二次创建50个</li>
+</ul>
+<blockquote>
+<p>二次创建50个时，开启对象池后，TextMeshProUGUI..ctor()从301.2KB降到48KB，TextMeshProUGUI.Awake()从178.9KB降到0KB，如果多次销毁创建，则累计能节省很大的堆内存占用。</p>
+</blockquote>
+<h4 id=二次销毁50个>二次销毁50个</h4>
+<p>
+<img src="https://note.youdao.com/yws/api/personal/file/26E3C489ED2348988C8A303120BB96D5?method=download&shareKey=8127d0e1b4935fdbace61e8c2b45efe5" alt=无对象池二次销毁50个>
+</p>
+<ul>
+<li>无对象池二次销毁50个</li>
+</ul>
+<p>
+<img src="https://note.youdao.com/yws/api/personal/file/6A545906672948A290CF24E1DAB0B635?method=download&shareKey=a42b0e30d660c829c2448b9c7080ae21" alt=有对象池二次销毁50个>
+</p>
+<ul>
+<li>有对象池二次销毁50个</li>
+</ul>
+<h3 id=总结>总结</h3>
+<p>TMP的堆内存占用，还是相对比较明显的，尤其是在频繁创建销毁的UI界面上，长时间开关界面将会累计较高的内存占用，从而容易引起GC触发，通过使用对象池，能有效地避免这一问题。</p>
+<h3 id=后续优化>后续优化</h3>
+<ol>
+<li>TMP_MeshInfo中有较多的数组创建，可进行对象池处理</li>
+<li>检查堆内存占用较大的方法，可根据情况进行细致检查</li>
+<li>由于对象池会把内存长期占用，可增加管理器进行按需释放</li>
+</ol>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/blog/lua_xlua/ data-toggle=tooltip data-placement=top title="Lua篇 (3)  — xLua">&larr;
+Previous Post</a>
+</li>
+<li class=next>
+<a href=/blog/textmeshoutline/ data-toggle=tooltip data-placement=top title="TMP(TextMeshPro)优化篇 (2) — 描边投影效果">Next
+Post &rarr;</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2021
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>

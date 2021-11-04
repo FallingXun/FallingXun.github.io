@@ -1,0 +1,158 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="Lua篇 (3)  — xLua">
+<meta property="og:title" content="Lua篇 (3)  — xLua">
+<meta property="twitter:title" content="Lua篇 (3)  — xLua">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>Lua篇 (3) — xLua-</title>
+<link rel=canonical href=/blog/lua_xlua/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/lua title=Lua>
+Lua
+</a>
+<a class=tag href=/tags/xlua title=xLua>
+xLua
+</a>
+</div>
+<h1>Lua篇 (3) — xLua</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Monday, January 1, 0001
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>由于很多旧项目是以CSharp开发的，热更时就会遇到难题。而xLua框架的出现，让很多项目能够在改动最小的情况下，支持热更新功能。</p>
+<h3 id=简介>简介</h3>
+<h3 id=初始化>初始化</h3>
+<h4 id=创建luastate>创建LuaState</h4>
+<h4 id=初始化相关库>初始化相关库</h4>
+<h4 id=绑定>绑定</h4>
+<h3 id=访问对象>访问对象</h3>
+<h4 id=lua访问csharp对象>Lua访问CSharp对象</h4>
+<h4 id=csharp访问lua对象>CSharp访问Lua对象</h4>
+<h4 id=时序图>时序图</h4>
+<h3 id=调用方法>调用方法</h3>
+<h4 id=lua调用csharp方法>Lua调用CSharp方法</h4>
+<h4 id=csharp调用lua方法>CSharp调用Lua方法</h4>
+<h3 id=委托>委托</h3>
+<h3 id=重载>重载</h3>
+<h3 id=无gc传值>无GC传值</h3>
+<h3 id=泛型>泛型</h3>
+<h3 id=反射>反射</h3>
+<h3 id=64位整型>64位整型</h3>
+<h3 id=协程>协程</h3>
+<h3 id=接口interface>接口（Interface）</h3>
+<h3 id=热修复>热修复</h3>
+<h2 id=总结>总结</h2>
+<hr>
+<ul class=pager>
+<li class=next>
+<a href=/blog/textmeshprogcoptimize/ data-toggle=tooltip data-placement=top title="TMP(TextMeshPro)优化篇 (1) — 堆内存">Next
+Post &rarr;</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2021
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>
