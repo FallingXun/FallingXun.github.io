@@ -454,6 +454,9 @@ post-container">
 <h3 id=访问对象>访问对象</h3>
 <h4 id=lua访问csharp对象>Lua访问CSharp对象</h4>
 <ul>
+<li>Lua侧访问CSharp对象的流程图为
+<img src="/img/Lua/ToLua/LuaCallCSharpObject.png?raw=true" alt=LuaCallCSharpObject.png>
+</li>
 <li>Lua侧获取一个CSharp侧对象，常用有几种方式
 <ul>
 <li>CSharp侧将对象注册到Lua的对应table。</li>
@@ -638,6 +641,9 @@ CSharp侧
 </ul>
 <h4 id=csharp访问lua对象>CSharp访问Lua对象</h4>
 <ul>
+<li>CSharp访问Lua对象的流程图为
+<img src="/img/Lua/ToLua/CSharpCallLuaObject.png?raw=true" alt=CSharpCallLuaObject.png>
+</li>
 <li>项目中往往需要将部分逻辑放到CSharp侧编写，因此不可避免有时候会需要读取Lua侧的对象，以LuaTable表示，如：
 <ul>
 <li>CSharp侧创建Lua的table（创建并注册数据给Lua侧使用）。</li>
@@ -769,6 +775,7 @@ CSharp侧
 </ul>
 </li>
 </ul>
+<h3 id=调用方法>调用方法</h3>
 <h4 id=lua调用csharp方法>Lua调用CSharp方法</h4>
 <ul>
 <li>初始化的时候，LuaBinder将CSharp的class对应创建了table存到了 LUA_REGISTRYINDEX 表中，而CSharp的class，对应的各种方法也已经进行了绑定，调用的时候，通过查找_G表，即可找到对应方法，以GameObject为例</li>
