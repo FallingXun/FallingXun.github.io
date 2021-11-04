@@ -7,17 +7,17 @@
 <meta property="og:type" content="article">
 <meta property="og:image" content="https://fallingxun.github.io//">
 <meta property="twitter:image" content="https://fallingxun.github.io//">
-<meta name=title content="Lua">
-<meta property="og:title" content="Lua">
-<meta property="twitter:title" content="Lua">
+<meta name=title content="Lua篇 (3)  — xLua">
+<meta property="og:title" content="Lua篇 (3)  — xLua">
+<meta property="twitter:title" content="Lua篇 (3)  — xLua">
 <meta name=description content>
 <meta property="og:description" content>
 <meta property="twitter:description" content>
 <meta property="twitter:card" content="summary">
 <meta name=keyword content>
 <link rel="shortcut icon" href=/img/favicon.ico>
-<title>Lua-</title>
-<link rel=canonical href=/tags/lua/>
+<title>Lua篇 (3) — xLua-</title>
+<link rel=canonical href=/post/lua%E7%AF%87-3-xlua/>
 <link rel=stylesheet href=/css/iDisqus.min.css>
 <link rel=stylesheet href=/css/bootstrap.min.css>
 <link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
@@ -50,76 +50,90 @@
 </div>
 </nav>
 <script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
-<header class=intro-header style="background-image:url('/')">
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
 <div class=container>
 <div class=row>
 <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
-<div class=site-heading>
-<h1>Xun's Blog </h1>
-<span class=subheading></span>
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/lua title=Lua>
+Lua
+</a>
+<a class=tag href=/tags/xlua title=xLua>
+xLua
+</a>
+</div>
+<h1>Lua篇 (3) — xLua</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Monday, January 1, 0001
+</span>
 </div>
 </div>
 </div>
 </div>
 </header>
+<article>
 <div class=container>
 <div class=row>
-<div class="col-lg-8 col-lg-offset-1
-col-md-8 col-md-offset-1
-col-sm-12
-col-xs-12
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
 post-container">
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/lua%E7%AF%87-2-tolua/>
-<h2 class=post-title>
-Lua篇 (2) — ToLua
-</h2>
-<div class=post-content-preview>
-<p>ToLua是很多项目都使用的lua框架，为了更好地使用，需要对框架有比较清晰的认识。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Thursday, November 4, 2021
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/lua%E7%AF%87-1-lua%E4%BB%8B%E7%BB%8D/>
-<h2 class=post-title>
-Lua篇 (1) — Lua介绍
-</h2>
-<div class=post-content-preview>
-<p>随着游戏行业的发展，热更已经成为游戏开发不可或缺的功能。热更有很多方案，lua热更是使用较广泛，也相对稳定的方案。因此，需要对lua有一定程度的了解，对于lua热更框架才能理解得更加透彻。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Saturday, October 23, 2021
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/lua%E7%AF%87-3-xlua/>
-<h2 class=post-title>
-Lua篇 (3) — xLua
-</h2>
-<div class=post-content-preview>
 <p>由于很多旧项目是以CSharp开发的，热更时就会遇到难题。而xLua框架的出现，让很多项目能够在改动最小的情况下，支持热更新功能。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, January 1, 0001
-</p>
-</div>
+<h3 id=简介>简介</h3>
+<h3 id=初始化>初始化</h3>
+<h4 id=创建luastate>创建LuaState</h4>
+<h4 id=初始化相关库>初始化相关库</h4>
+<h4 id=绑定>绑定</h4>
+<h3 id=访问对象>访问对象</h3>
+<h4 id=lua访问csharp对象>Lua访问CSharp对象</h4>
+<h4 id=csharp访问lua对象>CSharp访问Lua对象</h4>
+<h4 id=时序图>时序图</h4>
+<h3 id=调用方法>调用方法</h3>
+<h4 id=lua调用csharp方法>Lua调用CSharp方法</h4>
+<h4 id=csharp调用lua方法>CSharp调用Lua方法</h4>
+<h3 id=委托>委托</h3>
+<h3 id=重载>重载</h3>
+<h3 id=无gc传值>无GC传值</h3>
+<h3 id=泛型>泛型</h3>
+<h3 id=反射>反射</h3>
+<h3 id=64位整型>64位整型</h3>
+<h3 id=协程>协程</h3>
+<h3 id=接口interface>接口（Interface）</h3>
+<h3 id=热修复>热修复</h3>
+<h2 id=总结>总结</h2>
 <hr>
+<ul class=pager>
+<li class=next>
+<a href=/post/tmptextmeshpro%E4%BC%98%E5%8C%96%E7%AF%87-1-%E5%A0%86%E5%86%85%E5%AD%98/ data-toggle=tooltip data-placement=top title="TMP(TextMeshPro)优化篇 (1) — 堆内存">Next
+Post &rarr;</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
 </div>
-<div class="col-lg-3 col-lg-offset-0
-col-md-3 col-md-offset-0
-col-sm-12
-col-xs-12
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
 sidebar-container">
 </div>
 </div>
 </div>
+</article>
 <footer>
 <div class=container>
 <div class=row>
