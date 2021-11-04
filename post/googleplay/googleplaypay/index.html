@@ -7,17 +7,17 @@
 <meta property="og:type" content="article">
 <meta property="og:image" content="https://fallingxun.github.io//">
 <meta property="twitter:image" content="https://fallingxun.github.io//">
-<meta name=title content="GooglePlay篇 (1)  — 登录">
-<meta property="og:title" content="GooglePlay篇 (1)  — 登录">
-<meta property="twitter:title" content="GooglePlay篇 (1)  — 登录">
+<meta name=title content="GooglePlay篇 (2) — 支付">
+<meta property="og:title" content="GooglePlay篇 (2) — 支付">
+<meta property="twitter:title" content="GooglePlay篇 (2) — 支付">
 <meta name=description content>
 <meta property="og:description" content>
 <meta property="twitter:description" content>
 <meta property="twitter:card" content="summary">
 <meta name=keyword content>
 <link rel="shortcut icon" href=/img/favicon.ico>
-<title>GooglePlay篇 (1) — 登录-</title>
-<link rel=canonical href=/post/googleplaylogin/>
+<title>GooglePlay篇 (2) — 支付-</title>
+<link rel=canonical href=/post/googleplay/googleplaypay/>
 <link rel=stylesheet href=/css/iDisqus.min.css>
 <link rel=stylesheet href=/css/bootstrap.min.css>
 <link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
@@ -63,17 +63,17 @@ GooglePlay
 <a class=tag href=/tags/gp title=GP>
 GP
 </a>
-<a class=tag href=/tags/%E7%99%BB%E5%BD%95 title=登录>
-登录
+<a class=tag href=/tags/%E6%94%AF%E4%BB%98 title=支付>
+支付
 </a>
 </div>
-<h1>GooglePlay篇 (1) — 登录</h1>
+<h1>GooglePlay篇 (2) — 支付</h1>
 <h2 class=subheading></h2>
 <span class=meta>
 Posted by
 Xun
 on
-Monday, July 5, 2021
+Tuesday, July 6, 2021
 </span>
 </div>
 </div>
@@ -86,84 +86,67 @@ Monday, July 5, 2021
 <div class="col-lg-8 col-lg-offset-2
 col-md-10 col-md-offset-1
 post-container">
-<p>本文档主要是以Google Play SDK for Unity方式接入登录来说明谷歌登录的设置，主要介绍谷歌后台设置、Unity侧设置和安卓设备上的设置等相关情况</p>
-<h3 id=注意事项提交后台包的前核对一下>注意事项（提交后台包的前核对一下）</h3>
-<blockquote>
-<p>提交谷歌后台的apk，注意以下几点</p>
-</blockquote>
-<ol>
-<li>正式包的bundle id，提交后不能修改，如果是 <strong>测试用的尽量使用其他包名</strong> ，避免污染正式包</li>
-<li>Version和Bundle Version Code（上限100000）， <strong>一旦设定了后不能回退</strong> ，只能往上提升，现在游戏里是 <strong>0.1.x.x</strong> 和 <strong>1</strong> ，每次提交这里两者都需要自增，所以提交后台包的时候尽量 <strong>以低版本提交</strong> ，尤其是测试的时候</li>
-<li>Target API Level设置为 <strong>28</strong> ，谷歌的最低要求， <strong>Unity打包的时候也设置成28</strong> ，提交后则 <strong>不能往回降版本</strong></li>
-</ol>
+<p>本文档主要介绍接入Unity的IAP，来实现谷歌的支付功能。</p>
 <h3 id=前期准备>前期准备</h3>
 <blockquote>
-<p>科学上网工具</p>
-<blockquote>
-<p>PC端和安卓端都需要，PC端用于访问google相关的网页，安卓端用于apk连接测试。</p>
-</blockquote>
-</blockquote>
-<blockquote>
-<p>开发者账号</p>
-<blockquote>
-<p>注册条件：谷歌账号 + 25美金（需要VISA信用卡才能支付）。</p>
-</blockquote>
+<p>同<a href=https://fallingxun.github.io/post/googleplaylogin/>登录篇</a>，并进行了登录所需的前期准备工作。</p>
 </blockquote>
 <h3 id=开发者后台配置>开发者后台配置</h3>
 <ol>
 <li>登录开发者后台网址
 <a href=https://developer.android.com/distribute/console>https://developer.android.com/distribute/console</a>
-使用开发者账号登入（切记<strong>不要在公司网络环境登录</strong>，据说会被封，可以远程家里的电脑或者用虚拟机！！！）</li>
-<li>谷歌后台创建项目
-<img src="/img/GooglePlay/Login/1~2.png?raw=true" alt=1~2.png>
-<img src="/img/GooglePlay/Login/3~5.png?raw=true" alt=3~5.png>
-<img src="/img/GooglePlay/Login/6.png?raw=true" alt=6.png>
-<img src="/img/GooglePlay/Login/7.png?raw=true" alt=7.png>
-<img src="/img/GooglePlay/Login/8.png?raw=true" alt=8.png>
-<img src="/img/GooglePlay/Login/9~10.png?raw=true" alt=9~10.png>
-<img src="/img/GooglePlay/Login/11~12.png?raw=true" alt=11~12.png>
-<img src="/img/GooglePlay/Login/12.png?raw=true" alt=12.png>
-<img src="/img/GooglePlay/Login/13.png?raw=true" alt=13.png>
-<img src="/img/GooglePlay/Login/14.png?raw=true" alt=14.png>
-<img src="/img/GooglePlay/Login/15.png?raw=true" alt=15.png>
-<img src="/img/GooglePlay/Login/16~17.png?raw=true" alt=16~17.png>
-链接地址：https://console.developers.google.com/apis/
-<img src="/img/GooglePlay/Login/17.png?raw=true" alt=17.png>
-<img src="/img/GooglePlay/Login/18.png?raw=true" alt=18.png>
-<img src="/img/GooglePlay/Login/19.png?raw=true" alt=19.png>
-<img src="/img/GooglePlay/Login/20.png?raw=true" alt=20.png>
-<img src="/img/GooglePlay/Login/20a.png?raw=true" alt=20a.png>
-<img src="/img/GooglePlay/Login/20b.png?raw=true" alt=20b.png>
-<img src="/img/GooglePlay/Login/21.png?raw=true" alt=21.png>
-<img src="/img/GooglePlay/Login/22.png?raw=true" alt=22.png>
-<img src="/img/GooglePlay/Login/22a.png?raw=true" alt=22a.png>
-至此，登录相关的后台配置已经配置完成。</li>
-<li>Unity侧配置<br>
-(1) 下载Google Play SDK for Unity
-地址：https://github.com/playgameservices/play-games-plugin-for-unity
-选择里面current-build内的最新包，导入Unity <br>
-(2) 配置信息
-<img src="/img/GooglePlay/Login/23.png?raw=true" alt=23.png>
-<img src="/img/GooglePlay/Login/24.png?raw=true" alt=24.png>
-<img src="/img/GooglePlay/Login/25.png?raw=true" alt=25.png>
-注意：这里要用<strong>Web客户端的Client ID</strong>，否则会获取不到登录的token返回！！！
-登录代码参照文档说明即可。</li>
-<li>安卓端配置（手机或模拟器）<br>
-(1) 下载Google安装器，安装谷歌相关配置（如果出现登录时提示“无法登陆 与google服务器通信 请稍后重试”，则去下载其他的谷歌安装器：https://www.zhihu.com/question/24693274）<br>
-(2) 安装科学上网工具（如果出现无法获取token，检查Unity侧的配置是否为Web客户端id）</li>
+使用开发者账号登入（切记 <strong>不要在公司网络环境登录</strong> ，据说会被封，可以远程家里的电脑或者用虚拟机！！！）</li>
+<li>上传有支付权限的apk
+<uses-permission android:name=com.android.vending.BILLING></li>
+<li>配置商品
+<img src="/img/GooglePlay/Pay/1.png?raw=true" alt=1.png>
+<img src="/img/GooglePlay/Pay/2.png?raw=true" alt=2.png>
+<img src="/img/GooglePlay/Pay/3.png?raw=true" alt=3.png>
+<img src="/img/GooglePlay/Pay/4~7.png?raw=true" alt=4~7.png>
+<img src="/img/GooglePlay/Pay/8.png?raw=true" alt=8.png>
+<img src="/img/GooglePlay/Pay/9.png?raw=true" alt=9.png>
+<img src="/img/GooglePlay/Pay/10.png?raw=true" alt=10.png>
+<img src="/img/GooglePlay/Pay/11.png?raw=true" alt=11.png>
+<img src="/img/GooglePlay/Pay/12~13.png?raw=true" alt=12~13.png>
+<img src="/img/GooglePlay/Pay/14.png?raw=true" alt=14.png>
+</li>
 </ol>
+<h3 id=unity-iap设置>Unity IAP设置</h3>
+<p>
+<img src="/img/GooglePlay/Pay/IAP/1~2.png?raw=true" alt=1~2.png>
+<img src="/img/GooglePlay/Pay/IAP/3.png?raw=true" alt=3.png>
+<img src="/img/GooglePlay/Pay/IAP/4.png?raw=true" alt=4.png>
+<img src="/img/GooglePlay/Pay/IAP/5.png?raw=true" alt=5.png>
+<img src="/img/GooglePlay/Pay/IAP/6.png?raw=true" alt=6.png>
+<img src="/img/GooglePlay/Pay/IAP/7.png?raw=true" alt=7.png>
+UDP包：统一分发的功能包
+UnityChannel包：接入国内运营商的插件包
+UnityIAP：IAP基础包
+<img src="/img/GooglePlay/Pay/IAP/8.png?raw=true" alt=8.png>
+<img src="/img/GooglePlay/Pay/IAP/9.png?raw=true" alt=9.png>
+<img src="/img/GooglePlay/Pay/IAP/10.png?raw=true" alt=10.png>
+<img src="/img/GooglePlay/Pay/IAP/11.png?raw=true" alt=11.png>
+初始化支付相关信息需要在 <strong>成功登录后才能正常获取</strong> ，暂未确定是不是因为测试包环境的问题。
+<img src="/img/GooglePlay/Pay/IAP/12.png?raw=true" alt=12.png>
+<img src="/img/GooglePlay/Pay/IAP/13.png?raw=true" alt=13.png>
+</p>
+<h3 id=android设备配置>Android设备配置</h3>
+<blockquote>
+<p>谷歌后台审核测试包一般两三天后可以通过，通过后即可加入测试账号，即可拉起支付。</p>
+</blockquote>
 <h3 id=总结>总结</h3>
 <blockquote>
-<p>谷歌登录的配置流程较多，前期设置好了之后，后面调试支付的时候就不用再进行那么多的配置，关键点是 <strong>开发者账号</strong>、 <strong>提交的apk的要求</strong> 和 <strong>客户端ID的设置</strong>。</p>
+<p>谷歌支付的后台配置没有那么复杂，前期登录的流程配置完成后支付只需要配置商品即可，最主要的就是测试账号需要apk审核通过后，才会给验证网址进行二次验证，之后才能获取到后台的商品。
+Unity IAP的使用相对比较简单，可根据需求导入对应库，避免冗余。</p>
 </blockquote>
 <hr>
 <ul class=pager>
 <li class=previous>
-<a href=/post/textmeshoutline/ data-toggle=tooltip data-placement=top title="TMP(TextMeshPro)优化篇 (2) — 描边投影效果">&larr;
+<a href=/post/googleplay/googleplaylogin/ data-toggle=tooltip data-placement=top title="GooglePlay篇 (1)  — 登录">&larr;
 Previous Post</a>
 </li>
 <li class=next>
-<a href=/post/googleplaypay/ data-toggle=tooltip data-placement=top title="GooglePlay篇 (2) — 支付">Next
+<a href=/post/googleplay/googleplayoffline/ data-toggle=tooltip data-placement=top title="GooglePlay篇 (3) — 离线配置">Next
 Post &rarr;</a>
 </li>
 </ul>
