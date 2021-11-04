@@ -2,7 +2,7 @@
 <head>
 <meta charset=utf-8>
 <meta http-equiv=x-ua-compatible content="IE=edge">
-<title>Xun's Blog | Lua篇 (1) — ToLua</title>
+<title>Xun's Blog | Lua篇 (2) — ToLua</title>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <link href="https://fonts.googleapis.com/css?family=Open+Sans" rel=stylesheet>
 <link rel=stylesheet href=https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css>
@@ -20,7 +20,7 @@
 <div class="container has-text-centered">
 <br>
 <h1 class="title is-size-1">
-Lua篇 (1) — ToLua
+Lua篇 (2) — ToLua
 </h1>
 </div>
 </div>
@@ -31,7 +31,7 @@ Lua篇 (1) — ToLua
 <div class="column is-9">
 <div class="tile is-child box">
 <div class=content>
-<h2 id=tolua>ToLua</h2>
+<p>ToLua是很多项目都使用的lua框架，为了更好地使用，需要对框架有比较清晰的认识。</p>
 <h3 id=简介>简介</h3>
 <ul>
 <li>所有的Lua框架，都是为了解决热更的问题。但无论代码框架怎么设计，都避免不了需要和CSharp侧交互。而一旦出现交互，就需要了解整体的结构和运作流程，才能更好地使用。</li>
@@ -49,12 +49,12 @@ Lua篇 (1) — ToLua
 <tr>
 <td style=text-align:center>_G</td>
 <td style=text-align:center>全局表，可直接操作</td>
-<td>可自定义设置，如： _G[&ldquo;TestPanel&rdquo;] = { }</td>
+<td>可自定义设置，如： <br>_G[&ldquo;TestPanel&rdquo;] = { }</td>
 </tr>
 <tr>
-<td style=text-align:center>-10000（LUA_REGISTRYINDEX）</td>
+<td style=text-align:center>-10000<br>（LUA_REGISTRYINDEX）</td>
 <td style=text-align:center>注册表，只能通过ref和unref操作</td>
-<td>tolua在这里定义了多类表，常用的有： 4（LUA_RIDX_UBOX）：存放lua引用C#对象的userdata 5（LUA_RIDX_FIXEDMAP）：存放被C#引用的对象，如table、function 7（LUA_RIDX_PACKVEC3）：指向lua的Vector3.New方法 26（LUA_RIDX_LOADED）：存放C#类对应的lua表 另外，注册表还存放了C#的类结构绑定到lua侧的信息，如GameObject、Component等类在C#的各种属性、方法等。</td>
+<td>tolua在这里定义了多类表，常用的有： <br><br>4（LUA_RIDX_UBOX）：存放lua引用C#对象的userdata <br><br>5（LUA_RIDX_FIXEDMAP）：存放被C#引用的对象，如table、function <br><br>7（LUA_RIDX_PACKVEC3）：指向lua的Vector3.New方法 <br><br>26（LUA_RIDX_LOADED）：存放C#类对应的lua表 <br><br>另外，注册表还存放了C#的类结构绑定到lua侧的信息，如GameObject、Component等类在C#的各种属性、方法等。</td>
 </tr>
 </tbody>
 </table>
@@ -68,15 +68,15 @@ Lua篇 (1) — ToLua
 </ul>
 <pre tabindex=0><code>	public LuaState()            
 	{
-		...
-    	InitTypeTraits();
-    	InitStackTraits();
-    	L = LuaNewState();            
-    	LuaException.Init(L);
-    	stateMap.Add(L, this);                        
-    	OpenToLuaLibs();            
-    	ToLua.OpenLibs(L);
-    	OpenBaseLibs();
+        ...
+        InitTypeTraits();
+        InitStackTraits();
+        L = LuaNewState();            
+        LuaException.Init(L);
+        stateMap.Add(L, this);                        
+        OpenToLuaLibs();            
+        ToLua.OpenLibs(L);
+        OpenBaseLibs();
     	...
 	}        
 </code></pre><ul>
@@ -239,7 +239,7 @@ Lua篇 (1) — ToLua
 <li>L.EndEnum()
 <ul>
 <li>将当前Enum的table（tb_enum）设置为LUA_RIDX_LOADED中table（tb_loaded）的metatable，再将LUA_RIDX_LOADED中table（tb_loaded）设置到当前module的table中，key值为Enum名。</li>
-<li>完成EndEnum后，设置CSharp的ypeTraits.Check和StackTraits.Push。</li>
+<li>完成EndEnum后，设置CSharp的ypeTraits<t>.Check和StackTraits<t>.Push。</li>
 </ul>
 </li>
 </ul>
@@ -364,17 +364,17 @@ Lua篇 (1) — ToLua
 <li>在CSharp侧，将委托类型和委托创建方法作为key-value加入字典中</li>
 </ul>
 </li>
-<li>DelegateTraits.Init(&mldr;)
+<li>DelegateTraits<t>.Init(&mldr;)
 <ul>
 <li>在CSharp侧，使用泛型记录委托创建方法，可直接调用</li>
 </ul>
 </li>
-<li>TypeTraits.Init(&mldr;)
+<li>TypeTraits<t>.Init(&mldr;)
 <ul>
 <li>在CSharp侧，使用泛型将委托的类型检查方法添加到对应类型的Check，Check方法只返回true或者false，不返回对象，多用于重载变量类型检查</li>
 </ul>
 </li>
-<li>StackTraits.Push = &mldr;
+<li>StackTraits<t>.Push = &mldr;
 <ul>
 <li>在CSharp侧，使用泛型将委托的入栈方法添加到对应类型的Push</li>
 <li>StackTraits也有Check，但返回的一个对应的T</li>
@@ -816,7 +816,7 @@ CSharp侧
 </ul>
 <h3 id=委托>委托</h3>
 <ul>
-<li>Lua侧的业务，往往需要调用CSharp的逻辑，如加载某些资源。资源通过CSharp代码进行加载，加载完成后，就执行CSharp的回调。由于我们需要执行lua侧的后续逻辑，就需要设置lua侧的方法作为CSharp侧的回调，因此需要创建对应类型的委托。前面提到，DelegateFactory.Init 完成委托类型的初始化，其中 DelegateTraits 注册了各种类型的委托。通过调用 ToLua.CheckDelegate 即可创建对应委托方法，设置时的方法主要为：</li>
+<li>Lua侧的业务，往往需要调用CSharp的逻辑，如加载某些资源。资源通过CSharp代码进行加载，加载完成后，就执行CSharp的回调。由于我们需要执行lua侧的后续逻辑，就需要设置lua侧的方法作为CSharp侧的回调，因此需要创建对应类型的委托。前面提到，DelegateFactory.Init 完成委托类型的初始化，其中 DelegateTraits 注册了各种类型的委托。通过调用 ToLua.CheckDelegate<t> 即可创建对应委托方法，设置时的方法主要为：</li>
 </ul>
 <pre tabindex=0><code>	// ToLua.cs
 	...
@@ -854,8 +854,8 @@ CSharp侧
 <li>参数数量一样的方法，逐一检查参数，相同的不用则进行类型判断，直到找到第一个不一样的，从这个参数起所有都需要进行类型判断检查。</li>
 </ul>
 </li>
-<li>前面提到，TypeTraits.Init 初始化注册了检查类型的方法，通过 TypeTraits.Check 方法可以检查lua方法的参数类型，类型匹配则通过ToLua.ToObject读取对象，强转成对应的类型。</li>
-<li>参数可以传委托方法，当我们没有重载或重载的参数数量不一样时，对应的委托类型参数则使用 ToLua.CheckDelegate 来创建。而当出现参数数量一致，且委托类型参数是需要检查类型的，则会通过ToLua.ToObject来获取对象。以System.Action类型为例，检查类型的方法和获取对象为：</li>
+<li>前面提到，TypeTraits<t>.Init 初始化注册了检查类型的方法，通过 TypeTraits<t>.Check 方法可以检查lua方法的参数类型，类型匹配则通过ToLua.ToObject读取对象，强转成对应的类型。</li>
+<li>参数可以传委托方法，当我们没有重载或重载的参数数量不一样时，对应的委托类型参数则使用 ToLua.CheckDelegate<t> 来创建。而当出现参数数量一致，且委托类型参数是需要检查类型的，则会通过ToLua.ToObject来获取对象。以System.Action类型为例，检查类型的方法和获取对象为：</li>
 </ul>
 <pre tabindex=0><code>	// ToLua.cs
 	...
@@ -1049,7 +1049,7 @@ CSharp侧
 <div class=card>
 <div class=card-content>
 <h1 class="title is-5">Recent posts</h1>
-<h1><a href=https://fallingxun.github.io/post/lua_tolua/>Lua篇 (1) — ToLua</a></h1>
+<h1><a href=https://fallingxun.github.io/post/lua_tolua/>Lua篇 (2) — ToLua</a></h1>
 <time class="has-text-grey-light is-size-7">23 October 2021</time>
 <h1><a href=https://fallingxun.github.io/post/googleplaypay/>GooglePlay篇 (2) — 支付</a></h1>
 <time class="has-text-grey-light is-size-7">5 July 2021</time>

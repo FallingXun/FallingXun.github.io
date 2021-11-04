@@ -52,7 +52,7 @@ TMP(TextMeshPro)优化篇 (1) — 堆内存
 <p>也就是说，主要的堆内存来源于 <strong>TextMeshProUGUI</strong> 和 <strong>TMP_TextInfo</strong> 的构造和初始化方法里，查看代码可知，主要原因是由于<strong>TMP_Text</strong> 和 <strong>TMP_TextInfo</strong> 在创建时预创建了较多的数组变量，导致申请了较大的堆内存，另一方面，数组变量在中间使用的过程，存在Resize操作，又会产生新的堆内存申请。</p>
 <p>因此，如果我们每次在销毁的时候，将原有申请的内存缓存起来，在下一次创建的时候重新拿出来使用，则可以避免每次都重新申请的问题，即使用对象池。</p>
 <h3 id=优化流程>优化流程</h3>
-<p>TMP中有对象池的模式，TMP_ListPool中，提供了List的对象池结构，TMP其中也有使用到此结构，如果同样使用此结构，则需要将原来使用数组的地方全部改为List，显然会有非常大的工作量，而且非常容易产生难以排查的bug。</p>
+<p>TMP中有对象池的模式，TMP_ListPool中，提供了List<t>的对象池结构，TMP其中也有使用到此结构，如果同样使用此结构，则需要将原来使用数组的地方全部改为List，显然会有非常大的工作量，而且非常容易产生难以排查的bug。</p>
 <p>因此，为了尽可能降低复杂度，这里使用了 Dictionary + Stack + Array 的对象池结构，即 Dictionary&lt;int, Stack&lt;T[]&#187;，Dictionary使用Array.Length作为索引key值，不同类型不同长度的数组放进不同的栈里保存，由于TMP预定义的数组长度大部分是定长的，所以大部分进入池中的数组复用率将会比较高。</p>
 <p>由于保持了原有的数组的模式，所以对原逻辑的修改将会降到最小，只需将new Array的地方改为对象池即可。如：</p>
 <ul>
@@ -64,7 +64,7 @@ characterInfo = TMP_ArrayPool&lt;TMP_CharacterInfo>.Get(8);</li>
 <ul>
 <li>当使用 Instantiate(tmp) 时，实例化完成后，TMP_TextInfo() 会执行一次，预创建对应的数组，而在Awake()方法中，会再执行 m_textInfo = new TMP_TextInfo(this); 即创建一个tmp的过程中会触发两次构造函数，创建了两次数组变量，如果没进行先回收再提取，则每次都还是会重新创建新的数组。（经测试，单个TMP此处进行回收后可以减少3.2KB的堆内存申请）</li>
 </ul>
-<p>然而，对于 TMP_TextInfo.Resize(ref T[] array, int size) 方法，则与上述相反，需要先从池里提取新的长度的数组，再进行数组回收。因为旧数组的数据需要拷贝到新数组里，如果先执行回收，则会清除旧数组的数据，所以这里需要调换执行顺序。</p>
+<p>然而，对于 TMP_TextInfo.Resize<t>(ref T[] array, int size) 方法，则与上述相反，需要先从池里提取新的长度的数组，再进行数组回收。因为旧数组的数据需要拷贝到新数组里，如果先执行回收，则会清除旧数组的数据，所以这里需要调换执行顺序。</p>
 <h3 id=测试数据>测试数据</h3>
 <h4 id=首次创建50个>首次创建50个</h4>
 <p><img src="https://note.youdao.com/yws/api/personal/file/CB784244C3BF4EE3B0029B3AE7574D8C?method=download&shareKey=6e67721d591ff6e9c0ab3c1159bf6ee2" alt=无对象池首次创建50个></p>
@@ -145,7 +145,7 @@ characterInfo = TMP_ArrayPool&lt;TMP_CharacterInfo>.Get(8);</li>
 <div class=card>
 <div class=card-content>
 <h1 class="title is-5">Recent posts</h1>
-<h1><a href=https://fallingxun.github.io/post/lua_tolua/>Lua篇 (1) — ToLua</a></h1>
+<h1><a href=https://fallingxun.github.io/post/lua_tolua/>Lua篇 (2) — ToLua</a></h1>
 <time class="has-text-grey-light is-size-7">23 October 2021</time>
 <h1><a href=https://fallingxun.github.io/post/googleplaypay/>GooglePlay篇 (2) — 支付</a></h1>
 <time class="has-text-grey-light is-size-7">5 July 2021</time>
