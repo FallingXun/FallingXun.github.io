@@ -7,17 +7,17 @@
 <meta property="og:type" content="article">
 <meta property="og:image" content="https://fallingxun.github.io//">
 <meta property="twitter:image" content="https://fallingxun.github.io//">
-<meta name=title content="Lua篇 (3)  — xLua">
-<meta property="og:title" content="Lua篇 (3)  — xLua">
-<meta property="twitter:title" content="Lua篇 (3)  — xLua">
+<meta name=title content="GooglePlay篇 (3) — 离线配置">
+<meta property="og:title" content="GooglePlay篇 (3) — 离线配置">
+<meta property="twitter:title" content="GooglePlay篇 (3) — 离线配置">
 <meta name=description content>
 <meta property="og:description" content>
 <meta property="twitter:description" content>
 <meta property="twitter:card" content="summary">
 <meta name=keyword content>
 <link rel="shortcut icon" href=/img/favicon.ico>
-<title>Lua篇 (3) — xLua-</title>
-<link rel=canonical href=/blog/lua_xlua/>
+<title>GooglePlay篇 (3) — 离线配置-</title>
+<link rel=canonical href=/post/googleplay%E7%AF%87-3-%E7%A6%BB%E7%BA%BF%E9%85%8D%E7%BD%AE/>
 <link rel=stylesheet href=/css/iDisqus.min.css>
 <link rel=stylesheet href=/css/bootstrap.min.css>
 <link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
@@ -57,20 +57,23 @@
 <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
 <div class=post-heading>
 <div class=tags>
-<a class=tag href=/tags/lua title=Lua>
-Lua
+<a class=tag href=/tags/googleplay title=GooglePlay>
+GooglePlay
 </a>
-<a class=tag href=/tags/xlua title=xLua>
-xLua
+<a class=tag href=/tags/gp title=GP>
+GP
+</a>
+<a class=tag href=/tags/%E7%A6%BB%E7%BA%BF title=离线>
+离线
 </a>
 </div>
-<h1>Lua篇 (3) — xLua</h1>
+<h1>GooglePlay篇 (3) — 离线配置</h1>
 <h2 class=subheading></h2>
 <span class=meta>
 Posted by
 Xun
 on
-Monday, January 1, 0001
+Wednesday, July 7, 2021
 </span>
 </div>
 </div>
@@ -83,33 +86,70 @@ Monday, January 1, 0001
 <div class="col-lg-8 col-lg-offset-2
 col-md-10 col-md-offset-1
 post-container">
-<p>由于很多旧项目是以CSharp开发的，热更时就会遇到难题。而xLua框架的出现，让很多项目能够在改动最小的情况下，支持热更新功能。</p>
-<h3 id=简介>简介</h3>
-<h3 id=初始化>初始化</h3>
-<h4 id=创建luastate>创建LuaState</h4>
-<h4 id=初始化相关库>初始化相关库</h4>
-<h4 id=绑定>绑定</h4>
-<h3 id=访问对象>访问对象</h3>
-<h4 id=lua访问csharp对象>Lua访问CSharp对象</h4>
-<h4 id=csharp访问lua对象>CSharp访问Lua对象</h4>
-<h4 id=时序图>时序图</h4>
-<h3 id=调用方法>调用方法</h3>
-<h4 id=lua调用csharp方法>Lua调用CSharp方法</h4>
-<h4 id=csharp调用lua方法>CSharp调用Lua方法</h4>
-<h3 id=委托>委托</h3>
-<h3 id=重载>重载</h3>
-<h3 id=无gc传值>无GC传值</h3>
-<h3 id=泛型>泛型</h3>
-<h3 id=反射>反射</h3>
-<h3 id=64位整型>64位整型</h3>
-<h3 id=协程>协程</h3>
-<h3 id=接口interface>接口（Interface）</h3>
-<h3 id=热修复>热修复</h3>
-<h2 id=总结>总结</h2>
+<p>谷歌unity的登录和IAP支付插件，很多设置需要在联网状态下进行，离线状态下，不能直接应用，需要进一步进行处理。</p>
+<h3 id=踩坑点>踩坑点</h3>
+<ol>
+<li><strong>UnityEditor.Purchasing.dll</strong>：编辑器下的工具库，会自动对 UnityEngine.Purchasing.dll 的平台环境进行设置，需要在Service视窗里进行开关设置。</li>
+</ol>
+<blockquote>
+<p>**存在问题：**默认情况下会关闭Editor平台，所以编辑器下不能正常调用对应的类和方法。自行设置后，重新导入后会被重置，出现编译报错。关闭此dll的话会引起其他引用丢失，同样会有编译报错。
+**解决方法：**将IAP的package移到Packages文件夹下，修改 UnityEngine.Purchasing.dll.meta 里的guid，防止被自动检测修改设置，然后自行设置所需的平台。</p>
+</blockquote>
+<ol start=2>
+<li><strong>Play Services Resolver</strong> 机制：谷歌为unity提供的管理项目的库的机制，能防止库的多版本引用冲突。</li>
+</ol>
+<blockquote>
+<p>**存在问题：**编译成功等多种情况下会触发，触发的时候会删除本地所有带有Gspr标签的库，然后根据 **Dependences.xml重新从远程仓库拉取整合，离线状态下则只能进行删除操作，并不能重新生成，导致库丢失。
+**解决方法：**关闭此项机制。
+<img src="/img/GooglePlay/Offline/1.png?raw=true" alt=1.png>
+<img src="/img/GooglePlay/Offline/2.png?raw=true" alt=2.png>
+</p>
+</blockquote>
+<ol start=3>
+<li>**安卓库管理：**引入多方插件的时候容易产生库冲突，需要自行维护所有相关的安卓库</li>
+</ol>
+<blockquote>
+<p>**存在问题：**本人测试出现tpns-release.aar里的华为相关库和android-support-v4.jar里的部分类重复或冲突。
+**解决方法：**删除tpns-release.aar，删除android-support-v4.jar里的部分重复类，但这是临时方案，后续需要进行系统的规划。</p>
+</blockquote>
+<h3 id=后续操作>后续操作</h3>
+<ol>
+<li>新增或删除第三方插件时，需要导入渠道sdk的接入工程里编译，检查是否会有冲突的，重新生成渠道的配置。</li>
+<li>更换正式的谷歌配置信息时，需要重新生成配置文件。</li>
+<li>谷歌相关的所有资源，需要剥离出去，构建的时候再拷贝回去，总共有以下几项</li>
+</ol>
+<blockquote>
+<p>Project/Assets/Scripts/SDK/Channel/Agent/ChannelAgentGooglePlay.cs （渠道的调用代码）
+Project/Assets/ExternalDependencyManager/ （后续考虑移除此部分模块，不使用Resolver）
+Project/Assets/GooglePlayGames/
+Project/Assets/Plugins/
+<a href=mailto:Project/Packages/com.unity.purchasing@2.0.3>Project/Packages/com.unity.purchasing@2.0.3</a>/
+Project/ProjectSettings/AndroidResolverDependencies.xml
+Project/ProjectSettings/GvhProjectSettings.xml
+Project/ProjectSettings/GooglePlayGameSettings.xml</p>
+</blockquote>
+<ol start=4>
+<li>构建线配合需求：</li>
+</ol>
+<blockquote>
+<p>回滚工程，删除非版本文件，包括非Assets文件夹下的文件
+按渠道划分，构建时拷贝渠道的文件到对应的目录下
+游戏包的初始配置，VersionConfig的相关配置信息设置，后续应该会扩展，目前需要：</p>
+<blockquote>
+<p>mStartPlatformType（启动平台类型）
+mTargetPlatformTypes（所有目标类型平台）
+mLoginIp（登录服ip）
+mLoginPort（登录服端口）</p>
+</blockquote>
+</blockquote>
 <hr>
 <ul class=pager>
+<li class=previous>
+<a href=/post/googleplay%E7%AF%87-2-%E6%94%AF%E4%BB%98/ data-toggle=tooltip data-placement=top title="GooglePlay篇 (2) — 支付">&larr;
+Previous Post</a>
+</li>
 <li class=next>
-<a href=/blog/textmeshprogcoptimize/ data-toggle=tooltip data-placement=top title="TMP(TextMeshPro)优化篇 (1) — 堆内存">Next
+<a href=/post/lua%E7%AF%87-1-lua%E4%BB%8B%E7%BB%8D/ data-toggle=tooltip data-placement=top title="Lua篇 (1)  — Lua介绍">Next
 Post &rarr;</a>
 </li>
 </ul>
