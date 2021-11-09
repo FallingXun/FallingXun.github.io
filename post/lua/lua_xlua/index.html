@@ -95,8 +95,169 @@ post-container">
 <p>由于很多旧项目是以CSharp开发的，热更时就会遇到难题。而xLua框架的出现，让很多项目能够在改动最小的情况下，支持热更新功能。</p>
 <h3 id=简介>简介</h3>
 <h3 id=初始化>初始化</h3>
-<h4 id=创建luastate>创建LuaState</h4>
-<h4 id=初始化相关库>初始化相关库</h4>
+<h4 id=创建luaenv>创建LuaEnv</h4>
+<ul>
+<li>Lua状态机的创建方法主要实现如下</li>
+</ul>
+<pre tabindex=0><code>    public LuaEnv()
+    {
+
+        ...
+                
+        rawL = LuaAPI.luaL_newstate();
+
+        //Init Base Libs
+        LuaAPI.luaopen_xlua(rawL);
+        LuaAPI.luaopen_i64lib(rawL);
+
+        translator = new ObjectTranslator(this, rawL);
+        translator.createFunctionMetatable(rawL);
+        translator.OpenLib(rawL);
+        ObjectTranslatorPool.Instance.Add(rawL, translator);
+
+        LuaAPI.lua_atpanic(rawL, StaticLuaCallbacks.Panic);
+
+#if !XLUA_GENERAL
+        LuaAPI.lua_pushstdcallcfunction(rawL, StaticLuaCallbacks.Print);
+        if (0 != LuaAPI.xlua_setglobal(rawL, &quot;print&quot;))
+        {
+            throw new Exception(&quot;call xlua_setglobal fail!&quot;);
+        }
+#endif
+
+        //template engine lib register
+        TemplateEngine.LuaTemplate.OpenLib(rawL);
+
+        AddSearcher(StaticLuaCallbacks.LoadBuiltinLib, 2); // just after the preload searcher
+        AddSearcher(StaticLuaCallbacks.LoadFromCustomLoaders, 3);
+#if !XLUA_GENERAL
+        AddSearcher(StaticLuaCallbacks.LoadFromResource, 4);
+        AddSearcher(StaticLuaCallbacks.LoadFromStreamingAssetsPath, -1);
+#endif
+        DoString(init_xlua, &quot;Init&quot;);
+        init_xlua = null;
+
+#if (!UNITY_SWITCH &amp;&amp; !UNITY_WEBGL) || UNITY_EDITOR
+        AddBuildin(&quot;socket.core&quot;, StaticLuaCallbacks.LoadSocketCore);
+        AddBuildin(&quot;socket&quot;, StaticLuaCallbacks.LoadSocketCore);
+#endif
+
+        AddBuildin(&quot;CS&quot;, StaticLuaCallbacks.LoadCS);
+
+        LuaAPI.lua_newtable(rawL); //metatable of indexs and newindexs functions
+        LuaAPI.xlua_pushasciistring(rawL, &quot;__index&quot;);
+        LuaAPI.lua_pushstdcallcfunction(rawL, StaticLuaCallbacks.MetaFuncIndex);
+        LuaAPI.lua_rawset(rawL, -3);
+
+        LuaAPI.xlua_pushasciistring(rawL, Utils.LuaIndexsFieldName);
+        LuaAPI.lua_newtable(rawL);
+        LuaAPI.lua_pushvalue(rawL, -3);
+        LuaAPI.lua_setmetatable(rawL, -2);
+        LuaAPI.lua_rawset(rawL, LuaIndexes.LUA_REGISTRYINDEX);
+
+        LuaAPI.xlua_pushasciistring(rawL, Utils.LuaNewIndexsFieldName);
+        LuaAPI.lua_newtable(rawL);
+        LuaAPI.lua_pushvalue(rawL, -3);
+        LuaAPI.lua_setmetatable(rawL, -2);
+        LuaAPI.lua_rawset(rawL, LuaIndexes.LUA_REGISTRYINDEX);
+
+        LuaAPI.xlua_pushasciistring(rawL, Utils.LuaClassIndexsFieldName);
+        LuaAPI.lua_newtable(rawL);
+        LuaAPI.lua_pushvalue(rawL, -3);
+        LuaAPI.lua_setmetatable(rawL, -2);
+        LuaAPI.lua_rawset(rawL, LuaIndexes.LUA_REGISTRYINDEX);
+
+        LuaAPI.xlua_pushasciistring(rawL, Utils.LuaClassNewIndexsFieldName);
+        LuaAPI.lua_newtable(rawL);
+        LuaAPI.lua_pushvalue(rawL, -3);
+        LuaAPI.lua_setmetatable(rawL, -2);
+        LuaAPI.lua_rawset(rawL, LuaIndexes.LUA_REGISTRYINDEX);
+
+        LuaAPI.lua_pop(rawL, 1); // pop metatable of indexs and newindexs functions
+
+        LuaAPI.xlua_pushasciistring(rawL, MAIN_SHREAD);
+        LuaAPI.lua_pushthread(rawL);
+        LuaAPI.lua_rawset(rawL, LuaIndexes.LUA_REGISTRYINDEX);
+
+        LuaAPI.xlua_pushasciistring(rawL, CSHARP_NAMESPACE);
+        if (0 != LuaAPI.xlua_getglobal(rawL, &quot;CS&quot;))
+        {
+            throw new Exception(&quot;get CS fail!&quot;);
+        }
+        LuaAPI.lua_rawset(rawL, LuaIndexes.LUA_REGISTRYINDEX);
+
+#if !XLUA_GENERAL &amp;&amp; (!UNITY_WSA || UNITY_EDITOR)
+        translator.Alias(typeof(Type), &quot;System.MonoType&quot;);
+#endif
+
+        if (0 != LuaAPI.xlua_getglobal(rawL, &quot;_G&quot;))
+        {
+            throw new Exception(&quot;get _G fail!&quot;);
+        }
+        translator.Get(rawL, -1, out _G);
+        LuaAPI.lua_pop(rawL, 1);
+
+        errorFuncRef = LuaAPI.get_error_func_ref(rawL);
+
+        if (initers != null)
+        {
+            for (int i = 0; i &lt; initers.Count; i++)
+            {
+                initers[i](this, translator);
+            }
+        }
+
+        translator.CreateArrayMetatable(rawL);
+        translator.CreateDelegateMetatable(rawL);
+        translator.CreateEnumerablePairs(rawL);
+    }
+
+</code></pre><ul>
+<li>xLua的状态机构造函数比较庞大，将所有初始化操作全部集中在这里，接下来将逐一来分析其作用（以lua-5.3.5为例）。</li>
+<li></li>
+<li>LuaAPI.luaopen_xlua
+<ul>
+<li>初始化lua侧的基本库，包括package、coroutine、table、io、os、string、math、utf8、debug等。</li>
+</ul>
+</li>
+<li>LuaAPI.luaopen_i64lib
+<ul>
+<li>初始化64位整型，包括int64和uint64。</li>
+</ul>
+</li>
+</ul>
+<h4 id=objecttranslator>ObjectTranslator</h4>
+<ul>
+<li>ObjectTranslator中进行了一些初始化操作，主要为
+<ul>
+<li>缓存程序集，包括当前运行的程序集、mscorlib、System、System.Core。</li>
+<li>创建ObjectCaster，初始化基本类型、LuaTable、LuaFunction的转化委托（返回object）。</li>
+<li>创建ObjectCheckers，初始化基本类型、LuaTable、LuaFunction的类型检查。</li>
+<li>创建MethodWrapsCache，建立运行时方法Wrap的缓存。</li>
+<li>创建StaticLuaCallbacks，将一些常用的方法转成LuaFunction
+<ul>
+<li>LuaGC：lua对象gc回收</li>
+<li>ToString：调用CSharp的ToString</li>
+<li>EnumAnd：枚举与操作</li>
+<li>EnumOr：枚举或操作</li>
+<li>StaticCSFunction：lua方法委托</li>
+<li>FixCSFunction：lua修复的方法委托</li>
+<li>DelegateConstructor：委托构造方法</li>
+</ul>
+</li>
+<li>将一些特殊方法转成LuaFunction
+<ul>
+<li>StaticLuaCallbacks.ImportType：注册CSharp的class到lua侧</li>
+<li>StaticLuaCallbacks.LoadAssembly：加载程序集到ObjectTranslator.assemblies</li>
+<li>StaticLuaCallbacks.Cast：将某个对象的metatable设置为CSharp的class</li>
+</ul>
+</li>
+<li>创建一个表放入 LUA_REGISTRYINDEX 表，再创建一个值弱表（{__mode = &ldquo;v&rdquo;}），设置为此表的metatable。</li>
+<li>创建方法的metatable，包含__gc方法，放入 LUA_REGISTRYINDEX 表。</li>
+<li></li>
+</ul>
+</li>
+</ul>
 <h4 id=绑定>绑定</h4>
 <h3 id=访问对象>访问对象</h3>
 <h4 id=lua访问csharp对象>Lua访问CSharp对象</h4>
@@ -111,7 +272,37 @@ post-container">
 <h3 id=泛型>泛型</h3>
 <h3 id=反射>反射</h3>
 <h3 id=64位整型>64位整型</h3>
-<h3 id=协程>协程</h3>
+<pre tabindex=0><code>    _G = {
+        uint64 = {
+            tostring = i64lib.c的 uint64_tostring 方法
+            compare = i64lib.c的 uint64_compare 方法
+            divide = i64lib.c的 uint64_divide 方法
+            remainder = i64lib.c的 uint64_remainder 方法
+            parse = i64lib.c的 uint64_parse 方法
+        }
+    }
+
+    -10000（即 LUA_REGISTRYINDEX） = {
+        ...
+
+        -- 5.1.5版本才有
+        8（即 INT64_META_REF） = {
+            __add = i64lib.c的 int64_add 方法
+            __sub = i64lib.c的 int64_sub 方法
+            __mul = i64lib.c的 int64_mul 方法
+            __div = i64lib.c的 int64_div 方法
+            __mod = i64lib.c的 int64_mod 方法
+            __unm = i64lib.c的 int64_unm 方法
+            __pow = i64lib.c的 int64_pow 方法
+            __tostring = i64lib.c的 int64_tostring 方法
+            __eq = i64lib.c的 int64_eq 方法
+            __lt = i64lib.c的 int64_lt 方法
+            __le = i64lib.c的 int64_le 方法
+            __tostring = i64lib.c的 int64_tostring 方法
+        }
+
+    }
+</code></pre><h3 id=协程>协程</h3>
 <h3 id=接口interface>接口（Interface）</h3>
 <h3 id=热修复>热修复</h3>
 <h2 id=总结>总结</h2>
