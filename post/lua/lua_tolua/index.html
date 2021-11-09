@@ -1081,12 +1081,100 @@ CSharp侧
 </li>
 </ul>
 <h3 id=64位整型>64位整型</h3>
+<ul>
+<li>前面提到，在CSharp的 OpenToLuaLibs 方法中，调用了lua侧的 tolua_openlibs 进行初始化库，其中对lua侧的int64和uint64进行了初始化。
+<ul>
+<li>tolua_openint64</li>
+<li>tolua_openuint64</li>
+</ul>
+</li>
+<li>初始化完后，在lua侧的结构大致如下：</li>
+</ul>
+<pre tabindex=0><code>	_G = {
+		...
+
+		int64 = LUA_REGISTRYINDEX 表的 LUA_RIDX_INT64 表
+		uint64 = LUA_REGISTRYINDEX 表的 LUA_RIDX_UINT64 表
+	}
+
+	26(即 LUA_RIDX_LOADED) {
+			...
+
+			int64 = LUA_REGISTRYINDEX 表的 LUA_RIDX_UINT64 表
+		},	
+
+	-10000（即 LUA_REGISTRYINDEX） = {
+		...
+
+		20（即 LUA_RIDX_INT64） = {
+			__add = int64.c的 _int64add 方法
+			__sub = int64.c的 _int64sub 方法
+			__mul = int64.c的 _int64mul 方法
+			__div = int64.c的 _int64div 方法
+			__mod = int64.c的 _int64mod 方法
+			__unm = int64.c的 _int64unm 方法
+			__pow = int64.c的 _int64pow 方法
+			__tostring = int64.c的 _int64tostring 方法
+			tostring = int64.c的 _int64tostring 方法
+			__eq = int64.c的 _int64eq 方法
+			__lt = int64.c的 _int64lt 方法
+			__le = int64.c的 _int64le 方法
+			.name = &quot;int64&quot;
+			new = int64.c的 tolua_newint64 方法
+			equals = int64.c的 _int64equals 方法
+			tonum2 = int64.c的 _int64tonum 方法
+			__index = LUA_REGISTRYINDEX 表的 LUA_RIDX_INT64 表
+		}
+
+		27（即 LUA_RIDX_UINT64 = {
+			__add = uint64.c的 _uint64add 方法
+			__sub = uint64.c的 _uint64sub 方法
+			__mul = uint64.c的 _uint64mul 方法
+			__div = uint64.c的 _uint64div 方法
+			__mod = uint64.c的 _uint64mod 方法
+			__unm = uint64.c的 _uint64unm 方法
+			__pow = uint64.c的 _uint64pow 方法
+			__tostring = uint64.c的 _uint64tostring 方法
+			tostring = uint64.c的 _uint64tostring 方法
+			__eq = uint64.c的 _uint64eq 方法
+			__lt = uint64.c的 _uint64lt 方法
+			__le = uint64.c的 _uint64le 方法
+			.name = &quot;uint64&quot;
+			new = uint64.c的 tolua_newuint64 方法
+			equals = uint64.c的 _uint64equals 方法
+			tonum2 = uint64.c的 _uint64tonum 方法
+			__index = LUA_REGISTRYINDEX 表的 LUA_RIDX_UINT64 表
+		}
+	}
+</code></pre><ul>
+<li>以int64为例，从CSharp侧传到Lua侧时，调用 tolua_pushint64 方法，创建userdata，将int64的值设为userdata的值，将 LUA_RIDX_INT64 设为userdata的metatable，即</li>
+</ul>
+<pre tabindex=0><code>	userdata_int64 = {
+				
+		（头部 Udata*）{
+				...
+				tt = LUA_TUSERDATA
+				metatable = LUA_REGISTRYINDEX.LUA_RIDX_INT64
+		}
+		（用户自定义数据 user domain*）{
+			int64的值
+		}
+	}
+</code></pre><ul>
+<li>而从Lua侧传到CSharp侧时，则调用 tolua_toint64，lua侧的int64有几种格式，LUA_TNUMBER、LUA_TSTRING、LUA_TUSERDATA，将lua侧的数据解析成int64在传回CSharp使用。</li>
+</ul>
 <h3 id=协程>协程</h3>
+<ul>
+<li>推荐使用lua的协程</li>
+</ul>
 <h3 id=接口interface>接口（Interface）</h3>
 <ul>
 <li>暂时不支持</li>
 </ul>
 <h3 id=热修复>热修复</h3>
+<ul>
+<li>支持一定程度的热修复，需要提前生成</li>
+</ul>
 <h2 id=总结>总结</h2>
 <ul>
 <li>总体来说，ToLua作为使用相对广泛的框架，对于以lua代码为主的项目，能很好地解决热更问题，并且复杂度比较低，比较容易上手。</li>
