@@ -228,37 +228,102 @@ post-container">
 </ul>
 <h4 id=objecttranslator>ObjectTranslator</h4>
 <ul>
-<li>ObjectTranslator中进行了一些初始化操作，主要为
+<li>ObjectTranslator中进行了一些初始化操作，主要为：
 <ul>
 <li>缓存程序集，包括当前运行的程序集、mscorlib、System、System.Core。</li>
 <li>创建ObjectCaster，初始化基本类型、LuaTable、LuaFunction的转化委托（返回object）。</li>
 <li>创建ObjectCheckers，初始化基本类型、LuaTable、LuaFunction的类型检查。</li>
 <li>创建MethodWrapsCache，建立运行时方法Wrap的缓存。</li>
-<li>创建StaticLuaCallbacks，将一些常用的方法转成LuaFunction
+<li>创建StaticLuaCallbacks，将一些常用的方法转成LuaFunction：
 <ul>
-<li>LuaGC：lua对象gc回收</li>
-<li>ToString：调用CSharp的ToString</li>
-<li>EnumAnd：枚举与操作</li>
-<li>EnumOr：枚举或操作</li>
-<li>StaticCSFunction：lua方法委托</li>
-<li>FixCSFunction：lua修复的方法委托</li>
-<li>DelegateConstructor：委托构造方法</li>
+<li>LuaGC：lua对象gc回收。</li>
+<li>ToString：调用CSharp的ToString。</li>
+<li>EnumAnd：枚举与操作。</li>
+<li>EnumOr：枚举或操作。</li>
+<li>StaticCSFunction：lua方法委托。</li>
+<li>FixCSFunction：lua修复的方法委托。</li>
+<li>DelegateConstructor：委托构造方法。</li>
 </ul>
 </li>
-<li>将一些特殊方法转成LuaFunction
+<li>将一些特殊方法转成LuaFunction：
 <ul>
-<li>StaticLuaCallbacks.ImportType：注册CSharp的class到lua侧</li>
-<li>StaticLuaCallbacks.LoadAssembly：加载程序集到ObjectTranslator.assemblies</li>
-<li>StaticLuaCallbacks.Cast：将某个对象的metatable设置为CSharp的class</li>
+<li>StaticLuaCallbacks.ImportType：注册CSharp的class到lua侧。</li>
+<li>StaticLuaCallbacks.LoadAssembly：加载程序集到ObjectTranslator.assemblies。</li>
+<li>StaticLuaCallbacks.Cast：将某个对象的metatable设置为CSharp的class。</li>
 </ul>
 </li>
 <li>创建一个表放入 LUA_REGISTRYINDEX 表，再创建一个值弱表（{__mode = &ldquo;v&rdquo;}），设置为此表的metatable。</li>
-<li>创建方法的metatable，包含__gc方法，放入 LUA_REGISTRYINDEX 表。</li>
-<li></li>
+<li>创建function的metatable，包含__gc方法，放入 LUA_REGISTRYINDEX 表。</li>
+<li>注册方法到lua侧：
+<ul>
+<li>xlua.import_type：CSharp侧的StaticLuaCallbacks.ImportType。</li>
+<li>xlua.import_generic_type：CSharp侧的StaticLuaCallbacks.ImportGenericType。</li>
+<li>xlua.cast：CSharp侧的StaticLuaCallbacks.Cast。</li>
+<li>xlua.load_assembly：CSharp侧的StaticLuaCallbacks.LoadAssembly。</li>
+<li>xlua.access：CSharp侧的StaticLuaCallbacks.XLuaAccess。</li>
+<li>xlua.private_accessible：CSharp侧的StaticLuaCallbacks.XLuaPrivateAccessible。</li>
+<li>xlua.metatable_operation：CSharp侧的StaticLuaCallbacks.XLuaMetatableOperation。</li>
+<li>xlua.tofunction：CSharp侧的StaticLuaCallbacks.ToFunction。</li>
+<li>xlua.get_generic_method：CSharp侧的StaticLuaCallbacks.GetGenericMethod。</li>
+<li>xlua.release：CSharp侧的StaticLuaCallbacks.ReleaseCsObject。</li>
+</ul>
+</li>
+<li>创建新表存入 LUA_REGISTRYINDEX 表，作为array的metatable。</li>
+<li>创建新表存入 LUA_REGISTRYINDEX 表，delegate的metatable。</li>
 </ul>
 </li>
 </ul>
-<h4 id=绑定>绑定</h4>
+<h4 id=初始化lua环境>初始化lua环境</h4>
+<ul>
+<li>执行 init_xlua 脚本，对lua环境进行初始化：
+<ul>
+<li>创建 CS 表，设置metatable方法：
+<ul>
+<li>__index方法：查找对应的类型，如：CS.UnityEngine.GameObject，则调起 StaticLuaCallbacks.ImportType，将CSharp侧的类注册到lua侧，并将此类型缓存到 CS 表中。</li>
+<li>__newindex方法：输出报错信息，当前没有这个类型。</li>
+<li>__call方法：泛型类对象获取，如：CS.System.Collections.Generic.List(CS.System.String)，则会调起 StaticLuaCallbacks.ImportGenericType，获取指定类型的泛型type。由于每次调用都会触发 StaticLuaCallbacks.ImportGenericType 方法，而此方法中使用Type.MakeGenericType来构造泛型对象，需要创建Type数组，所以会有gc产生，可以缓存对象重复使用。</li>
+</ul>
+</li>
+<li>注册 typeof 方法为CSharp的 Type.UnderlyingSystemType。</li>
+<li>注册 setfenv 和 getfenv 方法。</li>
+<li>注册 xlua.hotfix 方法，可以进行热修复。</li>
+<li>注册 xlua.setmetatable 方法为 xlua.metatable_operation(cs)。</li>
+<li>注册 xlua.setmetatable 方法为 xlua.metatable_operation(cs, mt)。</li>
+<li>注册 xlua.setclass 方法，可实现CSharp的class或者struct在lua侧改造。</li>
+<li>注册 base 方法，可实现调用CSharp父类对象方法（Hotfix.BASE_RPOXY_PERFIX标识）。</li>
+</ul>
+</li>
+</ul>
+<h4 id=方法设置>方法设置</h4>
+<ul>
+<li>注册lua侧的print方法为CSharp侧的StaticLuaCallbacks.Print。</li>
+<li>设置lua侧的package.seachers方法，用于require调起：
+<ul>
+<li>package.seachers[2]（即 searcher_Lua）设置为CSharp侧的StaticLuaCallbacks.LoadBuiltinLib。</li>
+<li>package.seachers[3]（即 searcher_C）设置为CSharp侧的StaticLuaCallbacks.LoadFromCustomLoaders。</li>
+<li>package.seachers[4]（即 searcher_Croot）设置为CSharp侧的StaticLuaCallbacks.LoadFromResource。</li>
+<li>package.seachers[5]（即 NULL）设置为CSharp侧的StaticLuaCallbacks.LoadFromStreamingAssetsPath。</li>
+</ul>
+</li>
+<li>设置CSharp侧LoadBuiltinLib的查找字典LuaEnv.buildin_initer，当调用package.seachers[2]时，会从字典中中找：
+<ul>
+<li>socket.core：CSharp侧的StaticLuaCallbacks.LoadSocketCore。</li>
+<li>socket：CSharp侧的StaticLuaCallbacks.LoadSocketCore。</li>
+<li>CS：CSharp侧的StaticLuaCallbacks.LoadCS，获取 LUA_REGISTRYINDEX 表里的 xlua_csharp_namespace 表。</li>
+</ul>
+</li>
+<li>设置index和newindex相关表：
+<ul>
+<li>创建新表meta，设置 __index 方法为CSharp侧的 StaticLuaCallbacks.MetaFuncIndex，查找当前表里对应type的内容。</li>
+<li>创建新表，key值为 LuaIndexs，存入 LUA_REGISTRYINDEX 中，设置其metatable为meta表。</li>
+<li>创建新表，key值为 LuaNewIndexs，存入 LUA_REGISTRYINDEX 中，设置其metatable为meta表。</li>
+<li>创建新表，key值为 LuaClassIndexs，存入 LUA_REGISTRYINDEX 中，设置其metatable为meta表。</li>
+<li>创建新表，key值为 LuaClassNewIndexs，存入 LUA_REGISTRYINDEX 中，设置其metatable为meta表。</li>
+</ul>
+</li>
+<li>设置主线程到 LUA_REGIXTRYINDEX 中，key值为 xlua_main_thread。</li>
+<li>将 _G 中的 CS 表，存入 LUA_REGISTRYINDEX 中，key值为 xlua_csharp_namespace。</li>
+</ul>
 <h3 id=访问对象>访问对象</h3>
 <h4 id=lua访问csharp对象>Lua访问CSharp对象</h4>
 <h4 id=csharp访问lua对象>CSharp访问Lua对象</h4>
