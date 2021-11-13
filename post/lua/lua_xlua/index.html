@@ -214,7 +214,9 @@ post-container">
 
 </code></pre><ul>
 <li>xLua的状态机构造函数比较庞大，将所有初始化操作全部集中在这里，接下来将逐一来分析其作用（以lua-5.3.5为例）。</li>
-<li></li>
+</ul>
+<h4 id=初始化相关库>初始化相关库</h4>
+<ul>
 <li>LuaAPI.luaopen_xlua
 <ul>
 <li>初始化lua侧的基本库，包括package、coroutine、table、io、os、string、math、utf8、debug等。</li>
@@ -252,8 +254,8 @@ post-container">
 <li>StaticLuaCallbacks.Cast：将某个对象的metatable设置为CSharp的class。</li>
 </ul>
 </li>
-<li>创建一个表放入 LUA_REGISTRYINDEX 表，再创建一个值弱表（{__mode = &ldquo;v&rdquo;}），设置为此表的metatable。</li>
-<li>创建function的metatable，包含__gc方法，放入 LUA_REGISTRYINDEX 表。</li>
+<li>创建一个表放入 LUA_REGISTRYINDEX 表，id为 ObjectTranslator.cacheRef，再创建一个值弱表（{__mode = &ldquo;v&rdquo;}），设置为此表的metatable。</li>
+<li>创建 LuaCSFunction 的 metatable，包含__gc方法，放入 LUA_REGISTRYINDEX 表。</li>
 <li>注册方法到lua侧：
 <ul>
 <li>xlua.import_type：CSharp侧的StaticLuaCallbacks.ImportType。</li>
@@ -268,8 +270,8 @@ post-container">
 <li>xlua.release：CSharp侧的StaticLuaCallbacks.ReleaseCsObject。</li>
 </ul>
 </li>
-<li>创建新表存入 LUA_REGISTRYINDEX 表，作为array的metatable。</li>
-<li>创建新表存入 LUA_REGISTRYINDEX 表，delegate的metatable。</li>
+<li>创建新表存入 LUA_REGISTRYINDEX 表，作为array的metatable，id为 common_array_meta。</li>
+<li>创建新表存入 LUA_REGISTRYINDEX 表，作为delegate的metatable，id为 common_delegate_meta。</li>
 </ul>
 </li>
 </ul>
@@ -279,7 +281,7 @@ post-container">
 <ul>
 <li>创建 CS 表，设置metatable方法：
 <ul>
-<li>__index方法：查找对应的类型，如：CS.UnityEngine.GameObject，则调起 StaticLuaCallbacks.ImportType，将CSharp侧的类注册到lua侧，并将此类型缓存到 CS 表中。</li>
+<li>__index方法：查找对应的类型，如：CS.UnityEngine.GameObject，则调起CSharp侧的 StaticLuaCallbacks.ImportType，将CSharp侧的类注册到lua侧，并将此类型缓存到 CS 表中。</li>
 <li>__newindex方法：输出报错信息，当前没有这个类型。</li>
 <li>__call方法：泛型类对象获取，如：CS.System.Collections.Generic.List(CS.System.String)，则会调起 StaticLuaCallbacks.ImportGenericType，获取指定类型的泛型type。由于每次调用都会触发 StaticLuaCallbacks.ImportGenericType 方法，而此方法中使用Type.MakeGenericType来构造泛型对象，需要创建Type数组，所以会有gc产生，可以缓存对象重复使用。</li>
 </ul>
@@ -323,9 +325,278 @@ post-container">
 </li>
 <li>设置主线程到 LUA_REGIXTRYINDEX 中，key值为 xlua_main_thread。</li>
 <li>将 _G 中的 CS 表，存入 LUA_REGISTRYINDEX 中，key值为 xlua_csharp_namespace。</li>
+<li>初始化前面创建的array的metatable，进行相关注册：
+<ul>
+<li>__gc 方法设为CSharp侧的 StaticLuaCallbacks.LuaGC。</li>
+<li>__tostring 方法设为CSharp侧的 StaticLuaCallbacks.ToString。</li>
+<li>Length 方法设为CSharp侧的 StaticLuaCallbacks.ArrayLength。</li>
+<li>__index 方法设为CSharp侧的 StaticLuaCallbacks.ArrayIndexer。</li>
+<li>__newindex 方法设为CSharp侧的 StaticLuaCallbacks.ArrayNewIndexer。</li>
 </ul>
-<h3 id=访问对象>访问对象</h3>
+</li>
+<li>初始化前面创建的delegate的metatable，进行相关注册：
+<ul>
+<li>__gc 方法设为CSharp侧的 StaticLuaCallbacks.LuaGC。</li>
+<li>__tostring 方法设为CSharp侧的 StaticLuaCallbacks.ToString。</li>
+<li>__call 方法设为CSharp侧的 StaticLuaCallbacks.DelegateCall。</li>
+<li>__add 方法设为CSharp侧的 StaticLuaCallbacks.DelegateCombine。</li>
+<li>__sub 方法设为CSharp侧的 StaticLuaCallbacks.DelegateRemove。</li>
+<li>__index 方法设为CSharp侧的 StaticLuaCallbacks.ArrayIndexer。</li>
+<li>__newindex 方法设为CSharp侧的 StaticLuaCallbacks.ArrayNewIndexer。</li>
+</ul>
+</li>
+<li>创建迭代访问Pairs方法，存入到 LUA_REGISTRYINDEX 中，id为 enumerable_pairs_func。</li>
+</ul>
+<h4 id=结构>结构</h4>
+<ul>
+<li>经过初始化后，当前lua侧的结构大致如下：</li>
+</ul>
+<pre tabindex=0><code>    _G = {
+        ...
+
+        xlua.import_type = CSharp侧的StaticLuaCallbacks.ImportType
+        xlua.import_generic_type = CSharp侧的StaticLuaCallbacks.ImportGenericType
+        xlua.cast = CSharp侧的StaticLuaCallbacks.Cast
+        xlua.load_assembly = CSharp侧的StaticLuaCallbacks.LoadAssembly
+        xlua.access = CSharp侧的StaticLuaCallbacks.XLuaAccess
+        xlua.private_accessible = CSharp侧的StaticLuaCallbacks.XLuaPrivateAccessible
+        xlua.metatable_operation = CSharp侧的StaticLuaCallbacks.XLuaMetatableOperation
+        xlua.tofunction = CSharp侧的StaticLuaCallbacks.ToFunction
+        xlua.get_generic_method = CSharp侧的StaticLuaCallbacks.GetGenericMethod
+        xlua.release = CSharp侧的StaticLuaCallbacks.ReleaseCsObject
+
+        CS（所有CSharp的对应表）:
+            table = {
+
+            },
+            metatable = {
+                __index = CSharp侧 LuaEnv.init_xlua 中的 __index(key),
+                __newindex = CSharp侧 LuaEnv.init_xlua 中的 __newindex(),
+                __call = CSharp侧 LuaEnv.init_xlua 中的 __call(...),
+            }
+
+        typeof = CSharp的 Type.UnderlyingSystemType
+        setfenv = CSharp侧 LuaEnv.init_xlua 中的 setfenv
+        getfenv = CSharp侧 LuaEnv.init_xlua 中的 getfenv
+        xlua.hotfix = CSharp侧 LuaEnv.init_xlua 中的 xlua.hotfix
+        xlua.setmetatable = xlua.metatable_operation(cs)
+        xlua.setmetatable = xlua.metatable_operation(cs, mt)
+        xlua.setclass = CSharp侧 LuaEnv.init_xlua 中的 xlua.setclass
+        base = CSharp侧 LuaEnv.init_xlua 中的 base
+
+        print = CSharp侧的 StaticLuaCallbacks.Print
+    }
+
+    -10000（即 LUA_REGISTRYINDEX） = {
+        ...
+
+        ref_cacheRef（分配的id，在CSharp侧为 ObjectTranslator.cacheRef）
+            table = {
+
+            },
+            metatable = {
+                __mode = v
+            }
+
+        ref_LuaCSFunction（分配的id，在CSharp侧存到 ObjectTranslator.typeIdMap） = {
+            __gc = CSharp侧的 StaticLuaCallbacks.LuaGC,
+            &amp;tag = 1
+        }
+
+        ref_common_array_meta = {
+            __gc = CSharp侧的 StaticLuaCallbacks.LuaGC
+            __tostring = CSharp侧的 StaticLuaCallbacks.ToString
+            Length = CSharp侧的 StaticLuaCallbacks.ArrayLength
+            __index = CSharp侧的 StaticLuaCallbacks.ArrayIndexer
+            __newindex = CSharp侧的 StaticLuaCallbacks.ArrayNewIndexer           
+        }
+
+        ref_common_delegate_meta = {
+            __gc = CSharp侧的 StaticLuaCallbacks.LuaGC
+            __tostring = CSharp侧的 StaticLuaCallbacks.ToString
+            __call = CSharp侧的 StaticLuaCallbacks.DelegateCall
+            __add = CSharp侧的 StaticLuaCallbacks.DelegateCombine
+            __sub = CSharp侧的 StaticLuaCallbacks.DelegateRemove
+            __index = CSharp侧的 StaticLuaCallbacks.ArrayIndexer
+            __newindex = CSharp侧的 StaticLuaCallbacks.ArrayNewIndexer
+        }
+
+        ref_enumerable_pairs_func = CSharp侧 ObjectTranslator.CreateEnumerablePairs方法中的lua代码方法
+
+        LuaIndexs ：
+            table = {},
+            metatable = {
+                __index = StaticLuaCallbacks.MetaFuncIndex
+            }
+
+        LuaNewIndexs ：
+            table = {},
+            metatable = {
+                __index = StaticLuaCallbacks.MetaFuncIndex
+            }
+
+        LuaClassIndexs ：
+            table = {},
+            metatable = {
+                __index = StaticLuaCallbacks.MetaFuncIndex
+            }
+        
+        LuaClassNewIndexs ：
+            table = {},
+            metatable = {
+                __index = StaticLuaCallbacks.MetaFuncIndex
+            }
+
+        xlua_csharp_namespace = _G.CS 表
+    }
+</code></pre><h3 id=访问对象>访问对象</h3>
 <h4 id=lua访问csharp对象>Lua访问CSharp对象</h4>
+<ul>
+<li>当我们在Lua侧，要获取CSharp对象时，以GameObject为例，当我们查找某个GameObject时，在lua侧会使用</li>
+</ul>
+<pre tabindex=0><code>    -- Test.lua
+
+    local go = CS.UnityEngine.GameObject.Find(&quot;TestGameObject&quot;);
+</code></pre><ul>
+<li>调用CSharp侧的GameObject.Find来获取对象，这里有几个步骤：
+<ul>
+<li>获取 _G.CS 表，查找 CS.UnityEngine 对象。</li>
+<li>CS 表中不存在 UnityEngine，则触发CSharp侧的 StaticLuaCallbacks.ImportType方法，查找对应类。</li>
+<li>由于UnityEngine不为class，所以设置 CS.UnityEngine 的 table 为 { &ldquo;.fqn&rdquo; = &ldquo;UnityEngine&rdquo; }，metatable为CS表的metatable。</li>
+<li>查找GameObject对象，同样触发CSharp侧的 StaticLuaCallbacks.ImportType方法，查找UnityEngine.GameObject，并注册到lua侧中。</li>
+<li>查找Find方法，传入参数并执行，触发CSharp侧的 GameObject.Find 方法，找到对应的GameObject。</li>
+<li>调用ObjectTranslator.Push，创建index，返回lua侧。</li>
+<li>lua侧使用index创建userdata，持有GameObject对象。</li>
+</ul>
+</li>
+<li>在整个过程中，有两个步骤是比较重要的：
+<ul>
+<li>把CSharp的类注册到Lua侧。</li>
+<li>将CSharp的对象绑定到Lua侧。</li>
+</ul>
+</li>
+</ul>
+<h5 id=注册csharp类>注册CSharp类</h5>
+<ul>
+<li>注册CSharp类的主要方法为 ObjectTranslator.GetTypeId ，其主要流程为：
+<ul>
+<li>查找 ObjectTranslator.typeIdMap 中是否有对应类型，有则直接返回。</li>
+<li>如果是 Array 类型，则返回 common_array_meta 。</li>
+<li>如果是 MulticastDelegate 类型，调用 TryDelayWrapLoader 方法创建类型的metatable。</li>
+<li>如果 LUA_REGISTRYINDEX 表中没有此类型的metatable，则调用 TryDelayWrapLoader 方法创建（key值为type.FullName）。</li>
+<li>如果是 Enum 类型，则在metatable中设置方法：
+<ul>
+<li>__band 设置为 StaticLuaCallbacks.EnumAnd。</li>
+<li>__bor 设置为 StaticLuaCallbacks.EnumOr。</li>
+</ul>
+</li>
+<li>如果是 IEnumerable 类型，则设置 __pairs 为 ref_enumerable_pairs_func的方法。</li>
+<li>将此metatable存到 LUA_REGISTRYINDEX 表中，id为lua侧创建的引用 type_id。</li>
+<li>将 type_id 存入 typeIdMap 中。</li>
+</ul>
+</li>
+<li>ObjectTranslator.TryDelayWrapLoader 为创建metatable的方法，主要有两种方式：
+<ul>
+<li>预先生成CSharp侧的Wrap脚本，将类型和 XXXWrap.__Register 存入ObjectTranslator.delayWrap中，通过调用 __Register 方法，进行注册。</li>
+<li>通过反射进行注册。</li>
+</ul>
+</li>
+<li>Wrap注册主要有以下方法：
+<ul>
+<li>Utils.BeginObjectRegister：注册类实例对象相关信息。
+<ul>
+<li>将type的对应metatable压入栈上。</li>
+<li>如果传入type为空，或者type是ObjectTranslator.custom_push_funcs（[LuaCallCSharp]的Enum、[GCOptimize]）且不为decimal，则设置 __gc 方法为CSharp侧的 StaticLuaCallbacks.LuaGC。</li>
+<li>设置 __tostring 方法为CSharp侧的 StaticLuaCallbacks.ToString。</li>
+<li>如果方法数量（method_count）不为0，则创建method_count大小的table到栈上，否则压入nil。</li>
+<li>如果get属性数量（getter_count）不为0，则创建getter_count大小的table到栈上，否则压入nil。</li>
+<li>如果set属性数量（setter_count）不为0，则创建setter_count大小的table到栈上，否则压入nil。</li>
+<li>当前栈顶的情况为：
+<ul>
+<li>-1 ： set的table</li>
+<li>-2 ： get的table</li>
+<li>-3 ： method的table</li>
+<li>-4 ： type的metatable</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Utils.RegisterFunc：注册方法。
+<ul>
+<li>传入注册的方法的类型idx，和入栈顺序对应上：
+<ul>
+<li>Utils.OBJ_META_IDX：-4，metatable。</li>
+<li>Utils.METHOD_IDX、Utils.：-3，普通方法表。</li>
+<li>Utils.GETTER_IDX：-2，get方法表。</li>
+<li>Utils.SETTER_IDX：-1，set方法表。</li>
+<li>Utils.CLS_IDX：-4，class的table。</li>
+<li>Utils.CLS_META_IDX：-3，class的metatable。</li>
+<li>Utils.CLS_GETTER_IDX：-2，class的get方法表。</li>
+<li>Utils.CLS_SETTER_IDX：-1，class的set方法表。</li>
+</ul>
+</li>
+<li>获取方法在栈上的位置（栈顶位置 + idx + 1）。</li>
+<li>将方法名和方法设置到栈上对应位置的table中。</li>
+</ul>
+</li>
+<li>Utils.EndObjectRegister：完成实例对象注册。
+<ul>
+<li>设置metatable的__index：
+<ul>
+<li>将"__index"字符串入栈。</li>
+<li>将method的table入栈。</li>
+<li>将get的table入栈。</li>
+<li>将CSharp侧的csIndexer方法入栈。</li>
+<li>将type的基类base_type入栈。</li>
+<li>将 LUA_REGISTRYINDEX 表中的 LuaIndexs 表入栈。</li>
+<li>将CSharp侧的arrayIndexer方法入栈。</li>
+<li>调用lua侧的 gen_obj_indexer 方法，将nil入栈，然后创建一个包括7个值的闭包，将对应值出栈，闭包压入栈上。
+<ul>
+<li>闭包的值对应为 [1]: methods, [2]:getters, [3]:csindexer, [4]:base, [5]:indexfuncs, [6]:arrayindexer, [7]:baseindex</li>
+<li>传入的参数对应为 [1]: obj, [2]: key</li>
+</ul>
+</li>
+<li>将闭包存入type的对应metatable中，key值为__index。</li>
+</ul>
+</li>
+<li>设置metatable的__newindex：
+<ul>
+<li>将"__newindex"字符串入栈。</li>
+<li>将set的table入栈。</li>
+<li>将CSharp侧的csNewIndexer方法入栈。</li>
+<li>将type的基类base_type入栈。</li>
+<li>将 LUA_REGISTRYINDEX 表中的 LuaNewIndexs 表入栈。</li>
+<li>将CSharp侧的arrayNewIndexer方法入栈。</li>
+<li>调用lua侧的 gen_obj_newindexer 方法，将nil入栈，然后创建一个包括6个值的闭包，将对应值出栈，闭包压入栈上。
+<ul>
+<li>闭包的值对应为 [1]:setters, [2]:csnewindexer, [3]:base, [4]:newindexfuncs, [5]:arrayindexer, [6]:basenewindex</li>
+<li>传入的参数对应为 [1]: obj, [2]: key, [3]: value</li>
+</ul>
+</li>
+<li>将闭包存入type的对应metatable中，key值为__newindex。</li>
+</ul>
+</li>
+<li>将set、get、method的table和type的metatable出栈，恢复栈顶信息。</li>
+</ul>
+</li>
+<li>Utils.BeginClassRegister：注册类相关信息，主要为静态对象、常量、枚举。
+<ul>
+<li>创建一个新表 cls_table，大小为类的静态对象和方法、常量、枚举的数量总数量 + 1。</li>
+<li>设置type的userdata到cls_table中，key值为 UnderlyingSystemType（每个class都会注册这个key-value，所以cls_table的总大小+1）。</li>
+<li>将类型按 &ldquo;.&rdquo; 分割，创建对应table，存入 LUA_REGISTRYINDEX 表中的 xlua_csharp_namespace 表，如 UnityEngine.GameObject ，则创建key值 UnityEngine 的表存入 xlua_csharp_namespace 表，再将 cls_table 存入 UnityEngine 表中，key值为 GameObject。</li>
+<li>将 cls_tabble 表存到 xlua_csharp_namespace 表，key值为type的userdata。</li>
+<li>创建新表 meta_table，设置__call方法为CSharp传入的creator方法。</li>
+<li>创建get的table入栈。</li>
+<li>创建set的table入栈。</li>
+<li>设置为 cls_table 的metatable为 meta_table。</li>
+</ul>
+</li>
+<li>Utils.RegisterObject</li>
+<li>Utils.EndClassRegister</li>
+</ul>
+</li>
+</ul>
+<h5 id=绑定csharp对象>绑定CSharp对象</h5>
 <h4 id=csharp访问lua对象>CSharp访问Lua对象</h4>
 <h4 id=时序图>时序图</h4>
 <h3 id=调用方法>调用方法</h3>
