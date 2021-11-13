@@ -501,7 +501,10 @@ post-container">
 <li>通过反射进行注册。</li>
 </ul>
 </li>
-<li>Wrap注册主要有以下方法：
+</ul>
+<h6 id=wrap注册>Wrap注册</h6>
+<ul>
+<li>Wrap方式主要是预先生成Wrap文件，然后通过 __Register 方法初始化，主要有以下方法：
 <ul>
 <li>Utils.BeginObjectRegister：注册类实例对象相关信息。
 <ul>
@@ -550,13 +553,14 @@ post-container">
 <li>将type的基类base_type入栈。</li>
 <li>将 LUA_REGISTRYINDEX 表中的 LuaIndexs 表入栈。</li>
 <li>将CSharp侧的arrayIndexer方法入栈。</li>
-<li>调用lua侧的 gen_obj_indexer 方法，将nil入栈，然后创建一个包括7个值的闭包，将对应值出栈，闭包压入栈上。
+<li>调用lua侧的 gen_obj_indexer 方法，将nil入栈，然后创建一个包括7个值的闭包，方法为 obj_indexer，将对应值出栈，闭包压入栈上。
 <ul>
 <li>闭包的值对应为 [1]: methods, [2]:getters, [3]:csindexer, [4]:base, [5]:indexfuncs, [6]:arrayindexer, [7]:baseindex</li>
 <li>传入的参数对应为 [1]: obj, [2]: key</li>
 </ul>
 </li>
-<li>将闭包存入type的对应metatable中，key值为__index。</li>
+<li>将闭包存入 LuaIndexs 表，key为type的userdata。</li>
+<li>设置type的metatable方法，key值为__index，value为 LuaIndexs 表。</li>
 </ul>
 </li>
 <li>设置metatable的__newindex：
@@ -567,13 +571,14 @@ post-container">
 <li>将type的基类base_type入栈。</li>
 <li>将 LUA_REGISTRYINDEX 表中的 LuaNewIndexs 表入栈。</li>
 <li>将CSharp侧的arrayNewIndexer方法入栈。</li>
-<li>调用lua侧的 gen_obj_newindexer 方法，将nil入栈，然后创建一个包括6个值的闭包，将对应值出栈，闭包压入栈上。
+<li>调用lua侧的 gen_obj_newindexer 方法，将nil入栈，然后创建一个包括6个值的闭包，方法为 obj_newindexer，将对应值出栈，闭包压入栈上。
 <ul>
 <li>闭包的值对应为 [1]:setters, [2]:csnewindexer, [3]:base, [4]:newindexfuncs, [5]:arrayindexer, [6]:basenewindex</li>
 <li>传入的参数对应为 [1]: obj, [2]: key, [3]: value</li>
 </ul>
 </li>
-<li>将闭包存入type的对应metatable中，key值为__newindex。</li>
+<li>将闭包存入 LuaNewIndexs 表，key为type的userdata。</li>
+<li>设置type的metatable方法，key值为__newindex，value为 LuaNewIndexs 表。</li>
 </ul>
 </li>
 <li>将set、get、method的table和type的metatable出栈，恢复栈顶信息。</li>
@@ -583,16 +588,75 @@ post-container">
 <ul>
 <li>创建一个新表 cls_table，大小为类的静态对象和方法、常量、枚举的数量总数量 + 1。</li>
 <li>设置type的userdata到cls_table中，key值为 UnderlyingSystemType（每个class都会注册这个key-value，所以cls_table的总大小+1）。</li>
+<li>调用CSharp的 Util.SetCSTable 方法，注册type对应lua侧表：
+<ul>
 <li>将类型按 &ldquo;.&rdquo; 分割，创建对应table，存入 LUA_REGISTRYINDEX 表中的 xlua_csharp_namespace 表，如 UnityEngine.GameObject ，则创建key值 UnityEngine 的表存入 xlua_csharp_namespace 表，再将 cls_table 存入 UnityEngine 表中，key值为 GameObject。</li>
-<li>将 cls_tabble 表存到 xlua_csharp_namespace 表，key值为type的userdata。</li>
+<li>将 cls_table 表存到 xlua_csharp_namespace 表，key值为type的userdata。</li>
+</ul>
+</li>
 <li>创建新表 meta_table，设置__call方法为CSharp传入的creator方法。</li>
 <li>创建get的table入栈。</li>
 <li>创建set的table入栈。</li>
 <li>设置为 cls_table 的metatable为 meta_table。</li>
 </ul>
 </li>
-<li>Utils.RegisterObject</li>
-<li>Utils.EndClassRegister</li>
+<li>Utils.RegisterObject：注册对象，通常为Enum值、常量等。
+<ul>
+<li>根据传入的类型idx，将对象设置到栈上对应table中，key值为传入的name。</li>
+</ul>
+</li>
+<li>Utils.EndClassRegister
+<ul>
+<li>设置cls_table的index：
+<ul>
+<li>将"__index"入栈。</li>
+<li>将get的table入栈。</li>
+<li>将cls的table入栈。</li>
+<li>将type的基类入栈。</li>
+<li>将 LUA_REGISTRYINDEX 表中的 LuaClassIndexs 表入栈。</li>
+<li>调用lua侧的 gen_cls_indexer 方法，将nil入栈，然后创建一个包括5个值的闭包，方法为 cls_indexer，将对应值出栈，闭包压入栈上。
+<ul>
+<li>闭包的值对应为 [1]:getters, [2]:feilds, [3]:base, [4]:indexfuncs, [5]:baseindex</li>
+<li>传入的参数对应为 [1]: obj, [2]: key</li>
+</ul>
+</li>
+<li>将闭包存入 LuaClassIndexs 表，key值为type的userdata。</li>
+<li>设置cls_table的metatable方法，key值为__index，value为 LuaClassIndexs 表。</li>
+</ul>
+</li>
+<li>设置cls的newindex：
+<ul>
+<li>将"__newindex"入栈。</li>
+<li>将set的table入栈。</li>
+<li>将type的基类入栈。</li>
+<li>将 LUA_REGISTRYINDEX 表中的 LuaClassNewIndexs 表入栈。</li>
+<li>调用lua侧的 gen_cls_newindexer 方法，将nil入栈，然后创建一个包括4个值的闭包，方法为 cls_newindexer，将对应值出栈，闭包压入栈上。
+<ul>
+<li>闭包的值对应为 [1]:setters, [2]:base, [3]:indexfuncs, [4]:baseindex</li>
+<li>传入的参数对应为 [1]: obj, [2]: key, [3]: value</li>
+</ul>
+</li>
+<li>将闭包存入 LuaClassNewIndexs 表，key值为type的userdata。</li>
+<li>设置cls_table的metatable方法，key值为__newindex，value为 LuaClassNewIndexs 表。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h6 id=反射注册>反射注册</h6>
+<ul>
+<li>反射注册的流程和Wrap流程基本一致，只是没有预先生成代码，主要流程为：
+<ul>
+<li>创建type的metatable，为obj_meta，存到 LUA_REGISTRYINDEX 表，key值为type.FullName。</li>
+<li>设置 &tag 为 1。</li>
+<li>创建cls_meta、obj_field、obj_getter、obj_setter、cls_field表。</li>
+<li>调用CSharp侧的 Util.SetCSTable 方法，注册type对应lua侧表。</li>
+<li>创建cls_getter、cls_setter表。</li>
+<li>
+<h2 id=调用-makereflectionwrap-方法进行wrap注册>调用 makeReflectionWrap 方法，进行Wrap注册：</h2>
+</li>
 </ul>
 </li>
 </ul>
