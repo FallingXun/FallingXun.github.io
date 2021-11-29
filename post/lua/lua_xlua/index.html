@@ -654,8 +654,19 @@ post-container">
 <li>创建cls_meta、obj_field、obj_getter、obj_setter、cls_field表。</li>
 <li>调用CSharp侧的 Util.SetCSTable 方法，注册type对应lua侧表。</li>
 <li>创建cls_getter、cls_setter表。</li>
-<li>
-<h2 id=调用-makereflectionwrap-方法进行wrap注册>调用 makeReflectionWrap 方法，进行Wrap注册：</h2>
+<li>调用 makeReflectionWrap 方法，进行Wrap注册：
+<ul>
+<li>定义flag为 BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Static | access，access根据需求设置，可为 BindingFlags.Public 或 BindingFlags.NonPublic 或两者同时设置。</li>
+<li>获取当前type符合flag类型的所有变量fields。</li>
+<li>获取当前type符合类型（flag | BindingFlags.Public | BindingFlags.NonPublic）的所有事件all_events。</li>
+<li>遍历fields对变量进行处理：
+<ul>
+<li>静态变量，如果变量名以 &ldquo;__Hotfix&rdquo; 或 &ldquo;_c__Hotfix&rdquo; 开头，且为委托，则不处理。</li>
+<li>如果 all_events 中有这个变量名，则在 fieldName 前加 &ldquo;&"。</li>
+<li></li>
+</ul>
+</li>
+</ul>
 </li>
 </ul>
 </li>
