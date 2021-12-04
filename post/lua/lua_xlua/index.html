@@ -663,6 +663,61 @@ post-container">
 <ul>
 <li>静态变量，如果变量名以 &ldquo;__Hotfix&rdquo; 或 &ldquo;_c__Hotfix&rdquo; 开头，且为委托，则不处理。</li>
 <li>如果 all_events 中有这个变量名，则在 fieldName 前加 &ldquo;&"。</li>
+<li>如果变量为静态，且有默认值并不能被修改，则存入 cls_field 中，key为 fieldName，value为变量的值。</li>
+<li>如果没有默认值或者能被修改，则使用 translator.PushFixCSFunction 方法，将get和set的方法存入 StaticLuaCallback.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包，key值为 fieldName，存入表中。
+<ul>
+<li>静态变量：存入cls_getter、cls_setter。</li>
+<li>成员变量：存入obj_getter、obj_setter。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>获取当前type符合flag类型的所有events。</li>
+<li>遍历events对事件进行处理：
+<ul>
+<li>获取事件对应的Wrap方法
+<ul>
+<li>MethodWrapsCache.methodsCache[type].methodsOfType[eventName]中存在，则直接返回。</li>
+<li>如果没有缓存，则创建Wrap方法，Wrap会创建一个委托，绑定栈上 start_idx + 2 的方法，并根据 start_idx + 1 的值（"+&ldquo;或&rdquo;-"），执行事件添加或移除。</li>
+</ul>
+</li>
+<li>将event存入表中，key值为 eventInfo.Name，value为Wrap方法。
+<ul>
+<li>静态事件：存入cls_field。</li>
+<li>成员事件：存入obj_field。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>获取当前type符合flag类型的所有有参属性。</li>
+<li>设置out的item_getter、item_setter为有参属性的get、set。</li>
+<li>获取当前type符合flag类型的所有方法methods。</li>
+<li>创建方法的容器 Dictionary&lt;MethodKey, List<memberinfo>> pending_methods。</li>
+<li>遍历methods对方法进行处理：
+<ul>
+<li>创建方法的MethodKey：new MethodKey { Name = method_name, IsStatic = method.IsStatic }。</li>
+<li>如果 pending_methods 中是否存在此key，则将方法加入 List<memberinfo> 中。</li>
+<li>如果方法为有参属性（get为一个参数，set为两个参数），第一个参数类型不是继承string，则不处理此方法。</li>
+<li>如果方法为特殊名字方法（MethodBase.IsSpecialName），且以"add_"、&ldquo;remove_&ldquo;开头的，则不处理此方法。</li>
+<li>如果方法为特殊名字方法（MethodBase.IsSpecialName），且以"op_&ldquo;开头的，如果 InternalGlobals.supportOp 中包含此方法，则加入 List<memberinfo> 中，否则不处理。InternalGlobals.supportOp 包括：
+<ul>
+<li>{ &ldquo;op_Addition&rdquo;, &ldquo;__add&rdquo; }</li>
+<li>{ &ldquo;op_Subtraction&rdquo;, &ldquo;__sub&rdquo; }</li>
+<li>{ &ldquo;op_Multiply&rdquo;, &ldquo;__mul&rdquo; }</li>
+<li>{ &ldquo;op_Division&rdquo;, &ldquo;__div&rdquo; }</li>
+<li>{ &ldquo;op_Equality&rdquo;, &ldquo;__eq&rdquo; }</li>
+<li>{ &ldquo;op_UnaryNegation&rdquo;, &ldquo;__unm&rdquo; }</li>
+<li>{ &ldquo;op_LessThan&rdquo;, &ldquo;__lt&rdquo; }</li>
+<li>{ &ldquo;op_LessThanOrEqual&rdquo;, &ldquo;__le&rdquo; }</li>
+<li>{ &ldquo;op_Modulus&rdquo;, &ldquo;__mod&rdquo; }</li>
+<li>{ &ldquo;op_BitwiseAnd&rdquo;, &ldquo;__band&rdquo; }</li>
+<li>{ &ldquo;op_BitwiseOr&rdquo;, &ldquo;__bor&rdquo; }</li>
+<li>{ &ldquo;op_ExclusiveOr&rdquo;, &ldquo;__bxor&rdquo; }</li>
+<li>{ &ldquo;op_OnesComplement&rdquo;, &ldquo;__bnot&rdquo; }</li>
+<li>{ &ldquo;op_LeftShift&rdquo;, &ldquo;__shl&rdquo; }</li>
+<li>{ &ldquo;op_RightShift&rdquo;, &ldquo;__shr&rdquo; }</li>
+</ul>
+</li>
 <li></li>
 </ul>
 </li>
