@@ -718,11 +718,90 @@ post-container">
 <li>{ &ldquo;op_RightShift&rdquo;, &ldquo;__shr&rdquo; }</li>
 </ul>
 </li>
-<li></li>
+<li>如果方法为特殊名字方法（MethodBase.IsSpecialName），且以"get_"、&ldquo;set__&ldquo;开头，则使用 translator.PushFixCSFunction 方法，将get、set方法存入 StaticLuaCallback.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包，key值为 methodName，静态方法存入cls_getter、cls_setter，其他存入obj_getter、obj_setter。</li>
+<li>如果方法为构造函数，则不处理。</li>
+<li>其他情况，则将方法加入 List<memberinfo> 中。</li>
+</ul>
+</li>
+<li>遍历extension_methods对扩展方法进行处理：
+<ul>
+<li>创建方法的MethodKey：new MethodKey { Name = method_name, IsStatic = method.IsStatic }。</li>
+<li>如果 pending_methods 中是否存在此key，则将方法加入 List<memberinfo> 中。</li>
+</ul>
+</li>
+<li>遍历pending_methods中的所有对象：
+<ul>
+<li>如果 MethodKey.Name 以&rdquo;__op"开头，则使用 translator.PushFixCSFunction 方法，将 List<memberinfo> 的方法存入 StaticLuaCallback.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包，key值为 MethodKey.Name，存入obj_meta中。</li>
+<li>其他对象，同样使用 translator.PushFixCSFunction 方法，如果 MethodKey.IsStatic 为静态，则存入cls_field表，否则存入obj_field表。</li>
 </ul>
 </li>
 </ul>
 </li>
+<li>初始化 obj 的 metatable：
+<ul>
+<li>将CSharp侧的 StaticLuaCallbacks.LuaGC 方法存入 obj_meta 表，key值为 __gc。</li>
+<li>将CSharp侧的 StaticLuaCallbacks.ToString 方法存入 obj_meta 表，key值为 __tostring。</li>
+<li>设置 __index 方法：
+<ul>
+<li>将&rdquo;__index"入栈。</li>
+<li>将 obj_field 表入栈。</li>
+<li>将 obj_getter 表入栈。</li>
+<li>使用 translator.PushFixCSFunction 方法，将 makeReflectionWrap 返回的 item_getter 方法存入 StaticLuaCallback.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包并入栈。</li>
+<li>将当前type的基类入栈（translator.PushAny）。</li>
+<li>将 LuaIndexs 表入栈。</li>
+<li>将 nil 入栈。</li>
+<li>调用lua侧的 gen_obj_indexer 方法，将nil入栈，然后创建一个包括7个值的闭包，方法为 obj_indexer，将对应值出栈，闭包压入栈上。</li>
+<li>将闭包存入 LuaIndexs 表，key值为type的userdata。</li>
+<li>将闭包存入 obj_meta 表，key值为 __index。</li>
+</ul>
+</li>
+<li>设置 __newindex 方法：
+<ul>
+<li>将&rdquo;__newindex"入栈。</li>
+<li>将 obj_setter 表入栈。</li>
+<li>使用 translator.PushFixCSFunction 方法，将 makeReflectionWrap 返回的 item_setter 方法存入 StaticLuaCallback.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包并入栈。</li>
+<li>将当前type的基类入栈（translator.Push）。</li>
+<li>将 LuaNewIndexs 表入栈。</li>
+<li>将 nil 入栈。</li>
+<li>调用lua侧的 gen_obj_newindexer 方法，将nil入栈，然后创建一个包括6个值的闭包，方法为 obj_newindexer，将对应值出栈，闭包压入栈上。</li>
+<li>将闭包存入 LuaNewIndexs 表，key值为type的userdata。</li>
+<li>将闭包存入 obj_meta 表，key值为 __newindex。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>将type存入cls_field表，key值为 UnderlyingSystemType。</li>
+<li>如果type为枚举，则使用 translator.PushFixCSFunction 方法，为 genEnumCastFrom 方法创建闭包，存入cls_field表，key值为 __CastFrom。</li>
+<li>初始化 cls 的 metatable
+<ul>
+<li>设置 __index 方法：
+<ul>
+<li>将&rdquo;__index"入栈。</li>
+<li>将 cls_getter 表入栈。</li>
+<li>将 cls_field 表入栈。</li>
+<li>将当前type的基类入栈（translator.Push）。</li>
+<li>将 LuaClassIndexs 表入栈。</li>
+<li>调用lua侧的 gen_cls_indexer 方法，将nil入栈，然后创建一个包括5个值的闭包，方法为 cls_indexer，将对应值出栈，闭包压入栈上。</li>
+<li>将闭包存入 LuaClassIndexs 表，key值为type的userdata。</li>
+<li>将闭包存入 cls_meta 表，key值为 __index。</li>
+</ul>
+</li>
+<li>设置 __newindex 方法：
+<ul>
+<li>将&rdquo;__newindex"入栈。</li>
+<li>将 cls_setter 表入栈。</li>
+<li>将当前type的基类入栈（translator.Push）。</li>
+<li>将 LuaClassNewIndexs 表入栈。</li>
+<li>调用lua侧的 gen_cls_newindexer 方法，将nil入栈，然后创建一个包括4个值的闭包，方法为 cls_newindexer，将对应值出栈，闭包压入栈上。</li>
+<li>将闭包存入 LuaClassNewIndexs 表，key值为type的userdata。</li>
+<li>将闭包存入 cls_meta 表，key值为 __newindex。</li>
+</ul>
+</li>
+<li>将type的构造函数存入cls_meta表中，key值为 __call。</li>
+</ul>
+</li>
+<li>将 cls_meta 表设置为 cls_field 表的metatable。</li>
+<li>遍历嵌套在type中的类型（GetNestedTypes），如果为需要传入类型构建的泛型类型（如 List&lt;>），则不处理，其余则进行类型注册。</li>
 </ul>
 </li>
 </ul>
