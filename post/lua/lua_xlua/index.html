@@ -425,27 +425,21 @@ post-container">
 
         LuaIndexs ：
             table = {},
-            metatable = {
+            metatable = meta表 {
                 __index = StaticLuaCallbacks.MetaFuncIndex
             }
 
         LuaNewIndexs ：
             table = {},
-            metatable = {
-                __index = StaticLuaCallbacks.MetaFuncIndex
-            }
+            metatable = meta表 
 
         LuaClassIndexs ：
             table = {},
-            metatable = {
-                __index = StaticLuaCallbacks.MetaFuncIndex
-            }
+            metatable = meta表 
         
         LuaClassNewIndexs ：
             table = {},
-            metatable = {
-                __index = StaticLuaCallbacks.MetaFuncIndex
-            }
+            metatable = meta表 
 
         xlua_csharp_namespace = _G.CS 表
     }
@@ -509,7 +503,7 @@ post-container">
 <li>Utils.BeginObjectRegister：注册类实例对象相关信息。
 <ul>
 <li>将type的对应metatable压入栈上。</li>
-<li>如果传入type为空，或者type是ObjectTranslator.custom_push_funcs（[LuaCallCSharp]的Enum、[GCOptimize]）且不为decimal，则设置 __gc 方法为CSharp侧的 StaticLuaCallbacks.LuaGC。</li>
+<li>如果传入type为空，或者type不为ObjectTranslator.custom_push_funcs（即[LuaCallCSharp]的Enum、[GCOptimize]），且不为decimal，则设置 __gc 方法为CSharp侧的 StaticLuaCallbacks.LuaGC。</li>
 <li>设置 __tostring 方法为CSharp侧的 StaticLuaCallbacks.ToString。</li>
 <li>如果方法数量（method_count）不为0，则创建method_count大小的table到栈上，否则压入nil。</li>
 <li>如果get属性数量（getter_count）不为0，则创建getter_count大小的table到栈上，否则压入nil。</li>
@@ -560,7 +554,7 @@ post-container">
 </ul>
 </li>
 <li>将闭包存入 LuaIndexs 表，key为type的userdata。</li>
-<li>设置type的metatable方法，key值为__index，value为 LuaIndexs 表。</li>
+<li>设置type的metatable方法，key值为__index，value为闭包。</li>
 </ul>
 </li>
 <li>设置metatable的__newindex：
@@ -578,7 +572,7 @@ post-container">
 </ul>
 </li>
 <li>将闭包存入 LuaNewIndexs 表，key为type的userdata。</li>
-<li>设置type的metatable方法，key值为__newindex，value为 LuaNewIndexs 表。</li>
+<li>设置type的metatable方法，key值为__newindex，value为闭包。</li>
 </ul>
 </li>
 <li>将set、get、method的table和type的metatable出栈，恢复栈顶信息。</li>
@@ -621,7 +615,7 @@ post-container">
 </ul>
 </li>
 <li>将闭包存入 LuaClassIndexs 表，key值为type的userdata。</li>
-<li>设置cls_table的metatable方法，key值为__index，value为 LuaClassIndexs 表。</li>
+<li>设置cls_table的metatable方法，key值为__index，value为闭包。</li>
 </ul>
 </li>
 <li>设置cls的newindex：
@@ -637,7 +631,7 @@ post-container">
 </ul>
 </li>
 <li>将闭包存入 LuaClassNewIndexs 表，key值为type的userdata。</li>
-<li>设置cls_table的metatable方法，key值为__newindex，value为 LuaClassNewIndexs 表。</li>
+<li>设置cls_table的metatable方法，key值为__newindex，value为闭包。</li>
 </ul>
 </li>
 </ul>
@@ -647,6 +641,12 @@ post-container">
 </ul>
 <h6 id=反射注册>反射注册</h6>
 <ul>
+<li>反射注册的主要方法有：
+<ul>
+<li>ObjectTranslator.PushFixCSFunction</li>
+<li>MethodWarpsCache.GetMethodWrap</li>
+</ul>
+</li>
 <li>反射注册的流程和Wrap流程基本一致，只是没有预先生成代码，主要流程为：
 <ul>
 <li>创建type的metatable，为obj_meta，存到 LUA_REGISTRYINDEX 表，key值为type.FullName。</li>
@@ -805,7 +805,188 @@ post-container">
 </ul>
 </li>
 </ul>
-<h5 id=绑定csharp对象>绑定CSharp对象</h5>
+<h6 id=结构-1>结构</h6>
+<ul>
+<li>注册后，lua侧的结构大致如下（以 GameObject 为例）：</li>
+</ul>
+<pre tabindex=0><code>    _G = {
+        ...
+
+        CS（所有CSharp的对应表）:
+            table = {
+                UnityEngine = {
+                  GameObject = cls_table 表
+                      table = {
+                          UnderlyingSystemType = ref_GameObject（GameObject的userdata）
+
+                          FindWithTag = CSharp侧的 GameObject.FindWithTag（Wrap为 UnityEngineGameObjectWrap._m_FindWithTag_xlua_st_，反射为 MethodWrap.Call）
+                          Find = CSharp侧的 GameObject.Find（Wrap为 UnityEngineGameObjectWrap._m_Find_xlua_st_，反射为 MethodWrap.Call）
+                          ...
+                      }
+                      metatable = {
+                          __call = GameObject的实例化（Wrap为 UnityEngineGameObjectWrap.__CreateInstance，反射为构造函数）
+                          __index = cls的index闭包（参数为 [1]: obj, [2]: key ）
+                              {
+                                  [1]:getters
+                                      {
+                                          get的table
+                                      }
+                                  [2]:feilds
+                                      {
+                                          CS.UnityEngine.GameObject，即 cls_table 表
+                                      }
+                                  [3]:base
+                                      {
+                                          type的基类
+                                      }
+                                  [4]:indexfuncs
+                                      {
+                                          LUA_REGISTRYINDEX 表中的 LuaClassIndexs 表
+                                      }
+                                  [5]:baseindex
+                                      {
+                                          nil
+                                      }
+                              }
+                          __newindex = cls的newindex闭包（参数为 [1]: obj, [2]: key, [3]: value ）
+                              {
+                                  [1]:setters
+                                      {
+                                          set的table
+                                      }
+                                  [2]:base
+                                      {
+                                          type的基类
+                                      }
+                                  [3]:indexfuncs
+                                      {
+                                          LUA_REGISTRYINDEX 表中的 LuaClassNewIndexs 表
+                                      }
+                                  [4]:baseindex
+                                      {
+                                          nil
+                                      }
+                              }
+                      }
+                }
+            },
+            metatable = {
+                __index = CSharp侧 LuaEnv.init_xlua 中的 __index(key),
+                __newindex = CSharp侧 LuaEnv.init_xlua 中的 __newindex(),
+                __call = CSharp侧 LuaEnv.init_xlua 中的 __call(...),
+            }
+
+            ref_GameObject =  cls_table 表
+    }
+
+    -10000（即 LUA_REGISTRYINDEX） = {
+        ...
+
+        LuaIndexs ：
+            table = {
+                ref_GameObject = UnityEngine.GameObject的obj的index闭包
+            },
+            metatable = {
+                __index = StaticLuaCallbacks.MetaFuncIndex
+            }
+
+        LuaNewIndexs ：
+            table = {
+                ref_GameObject = UnityEngine.GameObject的obj的newindex闭包
+            },
+            metatable = meta表 
+
+        LuaClassIndexs ：
+            table = {
+                ref_GameObject = UnityEngine.GameObject的cls的index闭包
+            },
+            metatable = meta表 
+        
+        LuaClassNewIndexs ：
+            table = {
+                ref_GameObject = UnityEngine.GameObject的cls的newindex闭包
+            },
+            metatable = meta表 
+
+        xlua_csharp_namespace = _G.CS 表
+
+        UnityEngine.GameObject ：
+          table = {},
+          metatable = {
+              &amp;tag = 1,
+              
+              __name = &quot;UnityEngine.GameObject&quot;,
+              __gc = CSharp侧的 StaticLuaCallbacks.LuaGC,
+              __tostring = CSharp侧的 StaticLuaCallbacks.ToString,
+              __index = obj的index闭包（参数为 [1]: obj, [2]: key ）
+                  {
+                      [1]: methods
+                          {
+                              GetComponent = CSharp侧的 GameObject.GetComponent（Wrap为 UnityEngineGameObjectWrap._m_GetComponent，反射为 MethodWrap.Call）
+                              SetActive = CSharp侧的 GameObject.SetActive（Wrap为 UnityEngineGameObjectWrap._m_SetActive，反射为 MethodWrap.Call）
+                              ...
+                          }
+                      [2]: getters
+                          {
+                              transform = CSharp侧的 GameObject.transform（Wrap为 UnityEngineGameObjectWrap._g_get_transform，反射为 MethodWrap.Call）
+                              layer = CSharp侧的 GameObject.layer（Wrap为 UnityEngineGameObjectWrap._g_get_layer，反射为 MethodWrap.Call）
+                              ...
+                          }
+                      [3]: csindexer
+                          {
+                              CSharp侧的csIndexer方法
+                          }
+                      [4]: base
+                          {
+                              type的基类base_type
+                          }
+                      [5]: indexfuncs
+                          {
+                              LUA_REGISTRYINDEX 表中的 LuaIndexs 表
+                          }
+                      [6]: arrayindexer
+                          {
+                              CSharp侧的arrayIndexer方法
+                          }
+                      [7]: baseindex
+                          {
+                              nil
+                          }
+                  }
+              __newindex = obj的newindex闭包（参数为 [1]: obj, [2]: key, [3]: value ）
+                  {
+                      [1]:setters
+                          {
+                              transform = CSharp侧的 GameObject.transform（Wrap为 UnityEngineGameObjectWrap._g_set_transform，反射为 MethodWrap.Call）
+                              layer = CSharp侧的 GameObject.layer（Wrap为 UnityEngineGameObjectWrap._g_set_layer，反射为 MethodWrap.Call）
+                              ...
+                          }
+                      [2]:csnewindexer
+                          {
+                              CSharp侧的csNewIndexer方法
+                          }
+                      [3]:base
+                          {
+                              type的基类base_type
+                          }
+                      [4]:newindexfuncs
+                      {
+                          LUA_REGISTRYINDEX 表中的 LuaNewIndexs 表
+                      }
+                      [5]:arrayindexer
+                      {
+                          CSharp侧的arrayNewIndexer方法
+                      }
+                      [6]:basenewindex
+                      {
+                          nil
+                      }
+                  }
+          }
+
+        ref_GameObject = UnityEngine.GameObject 表
+    }
+</code></pre><h5 id=绑定csharp对象>绑定CSharp对象</h5>
 <h4 id=csharp访问lua对象>CSharp访问Lua对象</h4>
 <h4 id=时序图>时序图</h4>
 <h3 id=调用方法>调用方法</h3>
