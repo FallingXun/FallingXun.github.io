@@ -407,6 +407,7 @@ post-container">
             __gc = CSharp侧的 StaticLuaCallbacks.LuaGC
             __tostring = CSharp侧的 StaticLuaCallbacks.ToString
             __call = CSharp侧的 StaticLuaCallbacks.DelegateCall
+
             __add = CSharp侧的 StaticLuaCallbacks.DelegateCombine
             __sub = CSharp侧的 StaticLuaCallbacks.DelegateRemove
             __index = CSharp侧的 StaticLuaCallbacks.ArrayIndexer
@@ -641,12 +642,6 @@ post-container">
 </ul>
 <h6 id=反射注册>反射注册</h6>
 <ul>
-<li>反射注册的主要方法有：
-<ul>
-<li>ObjectTranslator.PushFixCSFunction</li>
-<li>MethodWarpsCache.GetMethodWrap</li>
-</ul>
-</li>
 <li>反射注册（Utils.ReflectionWrap）的流程和Wrap流程基本一致，只是没有预先生成代码，主要流程为：
 <ul>
 <li>创建type的metatable，为obj_meta，存到 LUA_REGISTRYINDEX 表，key值为type.FullName。</li>
@@ -914,6 +909,8 @@ post-container">
             }
         }
 
+        ref_GameObject（分配的id，对应CSharp侧的UnityEngine.GameObject） = UnityEngine.GameObject 表
+
         UnityEngine.GameObject （CSharp侧UnityEngine.GameObject的type.FullName，由 luaL_newmetatable 创建）：
             table = {},
             metatable = {
@@ -987,10 +984,414 @@ post-container">
                         }
                     }
             }
-        
-
     }
 </code></pre><h5 id=绑定csharp对象>绑定CSharp对象</h5>
+<ul>
+<li>CSharp侧的对象，传到Lua侧主要方法为 ObjectTranslator.Push ，主要流程为：
+<ul>
+<li>非值类型对象和枚举对象，从字典中获取对象对应的id，调用lua侧的 xlua_tryget_cachedud 方法，检查 LUA_REGISTRYINDEX 表中的 ref_cacheRef 表中是否有此id，如果有则不再处理。
+<ul>
+<li>非值类型对象：ObjectTranslator.reverseMap 字典。</li>
+<li>枚举对象：ObjectTranslator.enumMap 字典。</li>
+</ul>
+</li>
+<li>调用 ObjectTranslator.getTypeId 方法，获取type对应的type_id。</li>
+<li>如果一个type的定义含本身静态readonly实例时，getTypeId会push一个实例，检查 LUA_REGISTRYINDEX 表中的 ref_cacheRef 表中是否有此id，如果有则不再处理。</li>
+<li>调用 ObjectTranslator.addObject 方法，将对象存入 ObjectTranslator.objects 中，返回对应的 index，并根据类型存入字典：
+<ul>
+<li>非值类型对象：存入 ObjectTranslator.reverseMap 字典记录。</li>
+<li>枚举对象：存入 ObjectTranslator.enumMap 字典记录。</li>
+</ul>
+</li>
+<li>调用lua侧的 xlua_pushcsobj 方法，在lua侧创建对应的userdata，存入 LUA_REGISTRYINDEX 表中的 ref_cacheRef 表中，设置userdata的metatable为 LUA_REGISTRYINDEX 表中的 type_id 对应的表（如 ref_GameObject）。</li>
+</ul>
+</li>
+<li>示例代码大致如下：</li>
+</ul>
+<pre tabindex=0><code>    -- Test.lua
+
+    local go = CS.UnityEngine.GameObject.Find(&quot;TestGameObject&quot;);
+</code></pre><pre tabindex=0><code>    // UnityEngineGameObjectWrap.cs
+    ...
+    [MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]
+    static int _m_Find_xlua_st_(RealStatePtr L)
+    {
+        try {
+        
+            ObjectTranslator translator = ObjectTranslatorPool.Instance.Find(L);
+
+            {
+                string _name = LuaAPI.lua_tostring(L, 1);
+                
+                    var gen_ret = UnityEngine.GameObject.Find( _name );
+                    translator.Push(L, gen_ret);
+                
+                
+                
+                return 1;
+            }
+            
+        } 
+        catch(System.Exception gen_e) {
+            return LuaAPI.luaL_error(L, &quot;c# exception:&quot; + gen_e);
+        }
+        
+    }
+</code></pre><pre tabindex=0><code>    // ObjectTranslator.cs
+
+    ...
+    public void Push(RealStatePtr L, object o)
+    {
+        if (o == null)
+        {
+            LuaAPI.lua_pushnil(L);
+            return;
+        }
+        int index = -1;
+        Type type = o.GetType();
+#if !UNITY_WSA || UNITY_EDITOR
+        bool is_enum = type.IsEnum;
+        bool is_valuetype = type.IsValueType;
+#else
+        bool is_enum = type.GetTypeInfo().IsEnum;
+        bool is_valuetype = type.GetTypeInfo().IsValueType;
+#endif
+        bool needcache = !is_valuetype || is_enum;
+        if (needcache &amp;&amp; (is_enum ? enumMap.TryGetValue(o, out index) : reverseMap.TryGetValue(o, out index)))
+        {
+            if (LuaAPI.xlua_tryget_cachedud(L, index, cacheRef) == 1)
+            {
+                return;
+            }
+            //这里实在太经典了，weaktable先删除，然后GC会延迟调用，当index会循环利用的时候，不注释这行将会导致重复释放
+            //collectObject(index);
+        }
+        bool is_first;
+        int type_id = getTypeId(L, type, out is_first);
+        //如果一个type的定义含本身静态readonly实例时，getTypeId会push一个实例，这时候应该用这个实例
+        if (is_first &amp;&amp; needcache &amp;&amp; (is_enum ? enumMap.TryGetValue(o, out index) : reverseMap.TryGetValue(o, out index))) 
+        {
+            if (LuaAPI.xlua_tryget_cachedud(L, index, cacheRef) == 1)
+            {
+                return;
+            }
+        }
+        index = addObject(o, is_valuetype, is_enum);
+        LuaAPI.xlua_pushcsobj(L, index, type_id, needcache, cacheRef);
+    }
+</code></pre><ul>
+<li>可以看到，如果需要缓存的对象，会调用lua侧的 xlua_tryget_cachedud 方法，检查 LUA_REGISTRYINDEX 表中的 ref_cacheRef 表中是是否有此对象，如果返回值为1，表示表中有此对象，则不需要再次进行绑定。</li>
+<li>Lua侧此时结构大致如下所示：</li>
+</ul>
+<pre tabindex=0><code>    _G = {
+        ...
+
+        CS（所有CSharp的对应表）: LUA_REGISTRYINDEX 表中的 xlua_csharp_namespace 表
+
+
+        Test = {
+            go = userdata_GameObject（从 LUA_REGISTRYINDEX 表中的 ref_cacheRef 表中获取）
+        }            
+    }
+
+    -10000（即 LUA_REGISTRYINDEX） = {
+        ...
+
+        ref_cacheRef（分配的id，在CSharp侧为 ObjectTranslator.cacheRef）
+            table = {
+                index_GameObject（CSharp侧的一个UnityEngine.GameObject，index为ObjectTranslator分配）= userdata_GameObject {
+					
+                    （头部 Udata*）{
+                      ...
+                      tt = LUA_TUSERDATA
+                      metatable = LUA_REGISTRYINDEX.ref_GameObject
+                    }
+                    （用户自定义数据 user domain*）{
+                      index_GameObject
+                    }
+                  }
+                
+                ...
+            },
+            metatable = {
+                __mode = v（值弱表）
+            }
+
+        LuaIndexs ：
+            table = {
+                ref_GameObject = UnityEngine.GameObject的obj的index闭包
+            },
+            metatable = {
+                __index = StaticLuaCallbacks.MetaFuncIndex
+            }
+
+        LuaNewIndexs ：
+            table = {
+                ref_GameObject = UnityEngine.GameObject的obj的newindex闭包
+            },
+            metatable = meta表 
+
+        LuaClassIndexs ：
+            table = {
+                ref_GameObject = UnityEngine.GameObject的cls的index闭包
+            },
+            metatable = meta表 
+        
+        LuaClassNewIndexs ：
+            table = {
+                ref_GameObject = UnityEngine.GameObject的cls的newindex闭包
+            },
+            metatable = meta表 
+
+        xlua_csharp_namespace 表（即 _G.CS 表） = {
+            table = {
+                UnityEngine = {
+                      GameObject = ref_GameObject 表
+                        
+                  }
+            },
+            metatable = {
+                __index = CSharp侧 LuaEnv.init_xlua 中的 __index(key),
+                __newindex = CSharp侧 LuaEnv.init_xlua 中的 __newindex(),
+                __call = CSharp侧 LuaEnv.init_xlua 中的 __call(...),
+            }
+
+            ref_GameObject（分配的id，即 GameObject 的 userdata） = {
+                table = {
+                            UnderlyingSystemType = ref_GameObject（GameObject的userdata）
+
+                            FindWithTag = CSharp侧的 GameObject.FindWithTag（Wrap为 UnityEngineGameObjectWrap._m_FindWithTag_xlua_st_，反射为 MethodWrap.Call）
+                            Find = CSharp侧的 GameObject.Find（Wrap为 UnityEngineGameObjectWrap._m_Find_xlua_st_，反射为 MethodWrap.Call）
+                            ...
+                        }
+                metatable = {
+                    __call = GameObject的实例化（Wrap为 UnityEngineGameObjectWrap.__CreateInstance，反射为构造函数）
+                    __index = cls的index闭包（参数为 [1]: obj, [2]: key ）
+                        {
+                            [1]:getters
+                                {
+                                    get的table
+                                }
+                            [2]:feilds
+                                {
+                                    CS.UnityEngine.GameObject 表
+                                }
+                            [3]:base
+                                {
+                                    type的基类
+                                }
+                            [4]:indexfuncs
+                                {
+                                    LUA_REGISTRYINDEX 表中的 LuaClassIndexs 表
+                                }
+                            [5]:baseindex
+                                {
+                                    nil
+                                }
+                        }
+                    __newindex = cls的newindex闭包（参数为 [1]: obj, [2]: key, [3]: value ）
+                        {
+                            [1]:setters
+                                {
+                                    set的table
+                                }
+                            [2]:base
+                                {
+                                    type的基类
+                                }
+                            [3]:indexfuncs
+                                {
+                                    LUA_REGISTRYINDEX 表中的 LuaClassNewIndexs 表
+                                }
+                            [4]:baseindex
+                                {
+                                    nil
+                                }
+                        }
+                }
+            }
+        }
+
+        ref_GameObject（分配的id，对应CSharp侧的UnityEngine.GameObject） = UnityEngine.GameObject 表
+
+        UnityEngine.GameObject （CSharp侧UnityEngine.GameObject的type.FullName，由 luaL_newmetatable 创建）：
+            table = {},
+            metatable = {
+                &amp;tag = 1,
+                
+                __name = &quot;UnityEngine.GameObject&quot;,
+                __gc = CSharp侧的 StaticLuaCallbacks.LuaGC,
+                __tostring = CSharp侧的 StaticLuaCallbacks.ToString,
+                __index = obj的index闭包（参数为 [1]: obj, [2]: key ）
+                    {
+                        [1]: methods
+                            {
+                                GetComponent = CSharp侧的 GameObject.GetComponent（Wrap为 UnityEngineGameObjectWrap._m_GetComponent，反射为 MethodWrap.Call）
+                                SetActive = CSharp侧的 GameObject.SetActive（Wrap为 UnityEngineGameObjectWrap._m_SetActive，反射为 MethodWrap.Call）
+                                ...
+                            }
+                        [2]: getters
+                            {
+                                transform = CSharp侧的 GameObject.transform（Wrap为 UnityEngineGameObjectWrap._g_get_transform，反射为 MethodWrap.Call）
+                                layer = CSharp侧的 GameObject.layer（Wrap为 UnityEngineGameObjectWrap._g_get_layer，反射为 MethodWrap.Call）
+                                ...
+                            }
+                        [3]: csindexer
+                            {
+                                CSharp侧的csIndexer方法
+                            }
+                        [4]: base
+                            {
+                                type的基类base_type
+                            }
+                        [5]: indexfuncs
+                            {
+                                LUA_REGISTRYINDEX 表中的 LuaIndexs 表
+                            }
+                        [6]: arrayindexer
+                            {
+                                CSharp侧的arrayIndexer方法
+                            }
+                        [7]: baseindex
+                            {
+                                nil
+                            }
+                    }
+                __newindex = obj的newindex闭包（参数为 [1]: obj, [2]: key, [3]: value ）
+                    {
+                        [1]: setters
+                            {
+                                transform = CSharp侧的 GameObject.transform（Wrap为 UnityEngineGameObjectWrap._g_set_transform，反射为 MethodWrap.Call）
+                                layer = CSharp侧的 GameObject.layer（Wrap为 UnityEngineGameObjectWrap._g_set_layer，反射为 MethodWrap.Call）
+                                ...
+                            }
+                        [2]: csnewindexer
+                            {
+                                CSharp侧的csNewIndexer方法
+                            }
+                        [3]: base
+                            {
+                                type的基类base_type
+                            }
+                        [4]: newindexfuncs
+                        {
+                            LUA_REGISTRYINDEX 表中的 LuaNewIndexs 表
+                        }
+                        [5]: arrayindexer
+                        {
+                            CSharp侧的arrayNewIndexer方法
+                        }
+                        [6]: basenewindex
+                        {
+                            nil
+                        }
+                    }
+            }
+    }
+</code></pre><ul>
+<li>当我们的Test不再使用时，Test表会删除（TestPanel = nil)，此时整个table会变成可回收，而表里的变量也同样会标记成可回收，即userdata_GameObject也触发了luaL_unref方法，移除了userdata_GameObject引用，此时userdata_GameObject只有在 ref_cacheRef 中有引用，此时的结构如下：</li>
+</ul>
+<pre tabindex=0><code>    _G = {
+        ...
+
+        CS（所有CSharp的对应表）: LUA_REGISTRYINDEX 表中的 xlua_csharp_namespace 表
+        
+    }
+
+    -10000（即 LUA_REGISTRYINDEX） = {
+        ...
+
+        ref_cacheRef（分配的id，在CSharp侧为 ObjectTranslator.cacheRef）
+            table = {
+                index_GameObject（CSharp侧的一个UnityEngine.GameObject，index为ObjectTranslator分配）= userdata_GameObject {
+					
+                    （头部 Udata*）{
+                      ...
+                      tt = LUA_TUSERDATA
+                      metatable = LUA_REGISTRYINDEX.ref_GameObject
+                    }
+                    （用户自定义数据 user domain*）{
+                      index_GameObject
+                    }
+                  }
+                
+                ...
+            },
+            metatable = {
+                __mode = v
+            }
+
+        ...
+    }
+</code></pre><ul>
+<li>由于 ref_cacheRef 表为值弱表，所以当lua gc触发时，userdata_GameObject由于没有其他引用，所以会被回收，并调起 userdata_GameObject.metatable的 __gc （即 LUA_REGISTRYINDEX.ref_GameObject.__gc） 方法，从而调起CSharp侧的 StaticLuaCallbacks.LuaGC 方法，删除 ObjectTranslator.objects 和 ObjectTranslator.reverseMap（或 ObjectTranslator.enumMap） 的引用。</li>
+<li>CSharp侧的GC方法如下：</li>
+</ul>
+<pre tabindex=0><code>    // StaticLuaCallbacks.cs
+    ...
+    [MonoPInvokeCallback(typeof(LuaCSFunction))]
+    public static int LuaGC(RealStatePtr L)
+    {
+        try
+        {
+            int udata = LuaAPI.xlua_tocsobj_safe(L, 1);
+            if (udata != -1)
+            {
+                ObjectTranslator translator = ObjectTranslatorPool.Instance.Find(L);
+                if ( translator != null )
+                {
+                    translator.collectObject(udata);
+                }
+            }
+            return 0;
+        }
+        catch (Exception e)
+        {
+            return LuaAPI.luaL_error(L, &quot;c# exception in LuaGC:&quot; + e);
+        }
+    }
+</code></pre><pre tabindex=0><code>    // ObjectTranslator.cs
+    ...
+		internal void collectObject(int obj_index_to_collect)
+		{
+        object o;
+        
+        if (objects.TryGetValue(obj_index_to_collect, out o))
+        {
+            objects.Remove(obj_index_to_collect);
+                  
+            if (o != null)
+            {
+                int obj_index;
+                //lua gc是先把weak table移除后再调用__gc，这期间同一个对象可能再次push到lua，关联到新的index
+                bool is_enum = o.GetType().IsEnum();
+                if ((is_enum ? enumMap.TryGetValue(o, out obj_index) : reverseMap.TryGetValue(o, out obj_index))
+                    &amp;&amp; obj_index == obj_index_to_collect)
+                {
+                    if (is_enum)
+                    {
+                        enumMap.Remove(o);
+                    }
+                    else
+                    {
+                        reverseMap.Remove(o);
+                    }
+                }
+            }
+        }
+		}
+</code></pre><ul>
+<li>可以看到，CSharp侧的GC流程为
+<ul>
+<li>调用lua侧的 xlua_tocsobj_safe 方法，获取对象对应的userdata的index。</li>
+<li>移除CSharp侧的 ObjectTranslator.objects 中的 index。</li>
+<li>检查对应字典中是否有存在此对象，并且对象对应的index和从lua侧获得的index一致，则移除字典中此对象。</li>
+</ul>
+</li>
+<li>前面提到，CSharp侧的 ObjectTranslator.Push 方法绑定CSharp侧对象到Lua侧时，会调用lua侧的 xlua_tryget_cachedud 方法，先检查 ref_cacheRef 表中是否有此对象。因为lua侧gc触发时，LUA_REGISTRYINDEX表中的 ref_cacheRef 表先移除了弱值引用，而__gc方法并不是马上触发，所以这中间可能出现此对象又再关联上lua，并且关联到一个新的index，而原来旧的index将会随lua的gc移除。</li>
+<li>同样，CSharp侧移除字典的对象前，还进行了一次index的比对，如果字典中此对象对应的index和gc要移除的index不一致，则表示此对象已经再次绑定到lua侧，关联到新的index，则不需要移除字典的引用。</li>
+<li>总的来说，lua侧对CSharp侧对象的引用，只有lua gc触发的时候，才能在CSharp侧对应释放掉引用。</li>
+</ul>
 <h4 id=csharp访问lua对象>CSharp访问Lua对象</h4>
 <h4 id=时序图>时序图</h4>
 <h3 id=调用方法>调用方法</h3>
