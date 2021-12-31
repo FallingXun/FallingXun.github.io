@@ -1291,7 +1291,8 @@ post-container">
 </code></pre><ul>
 <li>当我们的Test不再使用时，Test表会删除（TestPanel = nil)，此时整个table会变成可回收，而表里的变量也同样会标记成可回收，即userdata_GameObject也触发了luaL_unref方法，移除了userdata_GameObject引用，此时userdata_GameObject只有在 ref_cacheRef 中有引用，此时的结构如下：</li>
 </ul>
-<pre tabindex=0><code>    _G = {
+<pre tabindex=0><code>Lua侧
+    _G = {
         ...
 
         CS（所有CSharp的对应表）: LUA_REGISTRYINDEX 表中的 xlua_csharp_namespace 表
@@ -1323,6 +1324,14 @@ post-container">
 
         ...
     }
+
+CSharp侧
+    ObjectTranslator.reverseMap = {
+      { go , index_GameObject },
+      ...
+    }
+
+    ObjectTranslator.objects[index_GameObject] = go
 </code></pre><ul>
 <li>由于 ref_cacheRef 表为值弱表，所以当lua gc触发时，userdata_GameObject由于没有其他引用，所以会被回收，并调起 userdata_GameObject.metatable的 __gc （即 LUA_REGISTRYINDEX.ref_GameObject.__gc） 方法，从而调起CSharp侧的 StaticLuaCallbacks.LuaGC 方法，删除 ObjectTranslator.objects 和 ObjectTranslator.reverseMap（或 ObjectTranslator.enumMap） 的引用。</li>
 <li>CSharp侧的GC方法如下：</li>
@@ -1393,7 +1402,28 @@ post-container">
 <li>总的来说，lua侧对CSharp侧对象的引用，只有lua gc触发的时候，才能在CSharp侧对应释放掉引用。</li>
 </ul>
 <h4 id=csharp访问lua对象>CSharp访问Lua对象</h4>
-<h4 id=时序图>时序图</h4>
+<ul>
+<li>项目中往往需要将部分逻辑放到CSharp侧编写，因此不可避免有时候会需要读取Lua侧的对象，以LuaTable表示，当我们要获取一个Lua侧的table时，主要方法为</li>
+</ul>
+<pre tabindex=0><code>    // ObjectTranslator.cs
+    
+    private object getLuaTable(RealStatePtr L, int idx, object target)
+    {
+        if (LuaAPI.lua_type(L, idx) == LuaTypes.LUA_TUSERDATA)
+        {
+            object obj = translator.SafeGetCSObj(L, idx);
+            return (obj != null &amp;&amp; obj is LuaTable) ? obj : null;
+        }
+        if (!LuaAPI.lua_istable(L, idx))
+        {
+            return null;
+        }
+        LuaAPI.lua_pushvalue(L, idx);
+        return new LuaTable(LuaAPI.luaL_ref(L), translator.luaEnv);
+    }
+
+    ...
+</code></pre><h4 id=时序图>时序图</h4>
 <h3 id=调用方法>调用方法</h3>
 <h4 id=lua调用csharp方法>Lua调用CSharp方法</h4>
 <h4 id=csharp调用lua方法>CSharp调用Lua方法</h4>
