@@ -1359,8 +1359,8 @@ CSharp侧
             return LuaAPI.luaL_error(L, &quot;c# exception in LuaGC:&quot; + e);
         }
     }
-</code></pre><pre tabindex=0><code>    // ObjectTranslator.cs
-    ...
+</code></pre><pre tabindex=0><code>        // ObjectTranslator.cs
+        ...
 		internal void collectObject(int obj_index_to_collect)
 		{
         object o;
@@ -1423,7 +1423,144 @@ CSharp侧
     }
 
     ...
-</code></pre><h4 id=时序图>时序图</h4>
+</code></pre><ul>
+<li>可见，获取table时，先将table压到栈上，然后使用lua侧的 luaL_ref 方法，获取lua侧的table的引用，并增加lua侧对此table的引用数，然后创建一个CSharp侧的LuaTable对象。</li>
+<li>当CSharp侧不再使用此LuaTable，则可以调用LuaTable.Dispose方法，释放对应的LuaTable。</li>
+</ul>
+<pre tabindex=0><code>        // LuaBase.cs
+        ...
+        public void Dispose()
+        {
+            Dispose(true);
+            // 主动调起Dispose方法时，释放非托管资源，析构时不再触发
+            GC.SuppressFinalize(this);
+        }
+
+        public virtual void Dispose(bool disposeManagedResources)
+        {
+            if (!disposed)
+            {
+                if (luaReference != 0)
+                {
+#if THREAD_SAFE || HOTFIX_ENABLE
+                    lock (luaEnv.luaEnvLock)
+                    {
+#endif
+                        bool is_delegate = this is DelegateBridgeBase;
+                        if (disposeManagedResources)
+                        {
+                            luaEnv.translator.ReleaseLuaBase(luaEnv.L, luaReference, is_delegate);
+                        }
+                        else //will dispse by LuaEnv.GC
+                        {
+                            luaEnv.equeueGCAction(new LuaEnv.GCAction { Reference = luaReference, IsDelegate = is_delegate });
+                        }
+#if THREAD_SAFE || HOTFIX_ENABLE
+                    }
+#endif
+                }
+                disposed = true;
+            }
+        }
+</code></pre><pre tabindex=0><code>        // ObjectTranslator.cs
+        ...
+        public void ReleaseLuaBase(RealStatePtr L, int reference, bool is_delegate)
+        {
+            if(is_delegate)
+            {
+                LuaAPI.xlua_rawgeti(L, LuaIndexes.LUA_REGISTRYINDEX, reference);
+                if (LuaAPI.lua_isnil(L, -1))
+                {
+                    LuaAPI.lua_pop(L, 1);
+                }
+                else
+                {
+                    LuaAPI.lua_pushvalue(L, -1);
+                    LuaAPI.lua_rawget(L, LuaIndexes.LUA_REGISTRYINDEX);
+                    if (LuaAPI.lua_type(L, -1) == LuaTypes.LUA_TNUMBER &amp;&amp; LuaAPI.xlua_tointeger(L, -1) == reference) //
+                    {
+                        //UnityEngine.Debug.LogWarning(&quot;release delegate ref = &quot; + luaReference);
+                        LuaAPI.lua_pop(L, 1);// pop LUA_REGISTRYINDEX[func]
+                        LuaAPI.lua_pushnil(L);
+                        LuaAPI.lua_rawset(L, LuaIndexes.LUA_REGISTRYINDEX); // LUA_REGISTRYINDEX[func] = nil
+                    }
+                    else //another Delegate ref the function before the GC tick
+                    {
+                        LuaAPI.lua_pop(L, 2); // pop LUA_REGISTRYINDEX[func] &amp; func
+                    }
+                }
+
+                LuaAPI.lua_unref(L, reference);
+                delegate_bridges.Remove(reference);
+            }
+            else
+            {
+                LuaAPI.lua_unref(L, reference);
+            }
+        }
+</code></pre><ul>
+<li>当主动调用Dispose方法时，会通过执行 ObjectTranslator.ReleaseLuaBase 方法，直接释放table，主要流程为：
+<ul>
+<li>委托对象
+<ul>
+<li>（待补充）</li>
+</ul>
+</li>
+<li>非委托对象
+<ul>
+<li>调用lua侧的 lua_unref 方法，移除对lua侧对象的引用。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>当没有主动调起Dispose方法进行释放时，为了避免没有释放，在析构函数里做了处理。</li>
+</ul>
+<pre tabindex=0><code>        // LuaBase.cs
+        ...
+        ~LuaBase()
+        {
+            Dispose(false);
+        }
+</code></pre><ul>
+<li>当通过析构函数触发释放时，不会马上触发释放，而是创建 GCAction 对象，保存要卸载的引用 reference，存入LuaEnv.refQueue中，当CSharp侧调用 LuaEnv.Tick 方法时，才进行释放。</li>
+</ul>
+<pre tabindex=0><code>        // LuaEnv.cs
+        ...
+        public void Tick()
+        {
+#if THREAD_SAFE || HOTFIX_ENABLE
+            lock (luaEnvLock)
+            {
+#endif
+                var _L = L;
+                lock (refQueue)
+                {
+                    while (refQueue.Count &gt; 0)
+                    {
+                        GCAction gca = refQueue.Dequeue();
+                        translator.ReleaseLuaBase(_L, gca.Reference, gca.IsDelegate);
+                    }
+                }
+#if !XLUA_GENERAL
+                last_check_point = translator.objects.Check(last_check_point, max_check_per_tick, object_valid_checker, translator.reverseMap);
+#endif
+#if THREAD_SAFE || HOTFIX_ENABLE
+            }
+#endif
+        }
+</code></pre><ul>
+<li>LuaEnv.Tick 方法，可以定时执行，如放在Update中，进行定期释放，可根据项目需求进行设计。</li>
+<li>总的来说，LuaTable能释放的情况有以下情况
+<ul>
+<li>LuaTable为局部变量，方法执行完成后就触发析构函数（Unity中才会触发局部变量的析构函数）释放（立即释放）。</li>
+<li>LuaTable为成员变量，手动执行了LuaTable.Dispose方法，进行释放（立即释放）。</li>
+<li>LuaTable为MonoBehavior的成员变量，对应的GameObject销毁后，Mono对象没有其他引用，触发LuaTable析构函数释放（延迟释放）。</li>
+<li>LuaTable为普通Class的成员变量，引用class的对象置为null后，触发LuaTable析构函数释放（延迟释放）。</li>
+<li>LuaTable没有直接引用时，触发CSharp的GC，触发析构函数释放（立即释放）。</li>
+</ul>
+</li>
+</ul>
+<h4 id=时序图>时序图</h4>
 <h3 id=调用方法>调用方法</h3>
 <h4 id=lua调用csharp方法>Lua调用CSharp方法</h4>
 <h4 id=csharp调用lua方法>CSharp调用Lua方法</h4>
