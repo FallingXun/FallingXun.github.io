@@ -659,7 +659,7 @@ post-container">
 <li>静态变量，如果变量名以 &ldquo;__Hotfix&rdquo; 或 &ldquo;_c__Hotfix&rdquo; 开头，且为委托，则不处理。</li>
 <li>如果 all_events 中有这个变量名，则在 fieldName 前加 &ldquo;&"。</li>
 <li>如果变量为静态，且有默认值并不能被修改，则存入 cls_field 中，key为 fieldName，value为变量的值。</li>
-<li>如果没有默认值或者能被修改，则使用 translator.PushFixCSFunction 方法，将get和set的方法存入 StaticLuaCallback.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包，key值为 fieldName，存入表中。
+<li>如果没有默认值或者能被修改，则使用 translator.PushFixCSFunction 方法，将get和set的方法存入 ObjectTranslator.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包，key值为 fieldName，存入表中。
 <ul>
 <li>静态变量：存入cls_getter、cls_setter。</li>
 <li>成员变量：存入obj_getter、obj_setter。</li>
@@ -687,14 +687,14 @@ post-container">
 <li>获取当前type符合flag类型的所有有参属性。</li>
 <li>设置out的item_getter、item_setter为有参属性的get、set。</li>
 <li>获取当前type符合flag类型的所有方法methods。</li>
-<li>创建方法的容器 Dictionary&lt;MethodKey, List<memberinfo>> pending_methods。</li>
+<li>创建方法的容器 Dictionary&lt;MethodKey, List&lt;MemberInfo&#187; pending_methods。</li>
 <li>遍历methods对方法进行处理：
 <ul>
 <li>创建方法的MethodKey：new MethodKey { Name = method_name, IsStatic = method.IsStatic }。</li>
-<li>如果 pending_methods 中是否存在此key，则将方法加入 List<memberinfo> 中。</li>
+<li>如果 pending_methods 中是否存在此key，则将方法加入 List&lt;MemberInfo> 中。</li>
 <li>如果方法为有参属性（get为一个参数，set为两个参数），第一个参数类型不是继承string，则不处理此方法。</li>
 <li>如果方法为特殊名字方法（MethodBase.IsSpecialName），且以"add_"、&ldquo;remove_&ldquo;开头的，则不处理此方法。</li>
-<li>如果方法为特殊名字方法（MethodBase.IsSpecialName），且以"op_&ldquo;开头的，如果 InternalGlobals.supportOp 中包含此方法，则加入 List<memberinfo> 中，否则不处理。InternalGlobals.supportOp 包括：
+<li>如果方法为特殊名字方法（MethodBase.IsSpecialName），且以"op_&ldquo;开头的，如果 InternalGlobals.supportOp 中包含此方法，则加入 List&lt;MemberInfo> 中，否则不处理。InternalGlobals.supportOp 包括：
 <ul>
 <li>{ &ldquo;op_Addition&rdquo;, &ldquo;__add&rdquo; }</li>
 <li>{ &ldquo;op_Subtraction&rdquo;, &ldquo;__sub&rdquo; }</li>
@@ -713,20 +713,20 @@ post-container">
 <li>{ &ldquo;op_RightShift&rdquo;, &ldquo;__shr&rdquo; }</li>
 </ul>
 </li>
-<li>如果方法为特殊名字方法（MethodBase.IsSpecialName），且以"get_"、&ldquo;set__&ldquo;开头，则使用 translator.PushFixCSFunction 方法，将get、set方法存入 StaticLuaCallback.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包，key值为 methodName，静态方法存入cls_getter、cls_setter，其他存入obj_getter、obj_setter。</li>
+<li>如果方法为特殊名字方法（MethodBase.IsSpecialName），且以"get_"、&ldquo;set__&ldquo;开头，则使用 translator.PushFixCSFunction 方法，将get、set方法存入 ObjectTranslator.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包，key值为 methodName，静态方法存入cls_getter、cls_setter，其他存入obj_getter、obj_setter。</li>
 <li>如果方法为构造函数，则不处理。</li>
-<li>其他情况，则将方法加入 List<memberinfo> 中。</li>
+<li>其他情况，则将方法加入 List&lt;MemberInfo> 中。</li>
 </ul>
 </li>
 <li>遍历extension_methods对扩展方法进行处理：
 <ul>
 <li>创建方法的MethodKey：new MethodKey { Name = method_name, IsStatic = method.IsStatic }。</li>
-<li>如果 pending_methods 中是否存在此key，则将方法加入 List<memberinfo> 中。</li>
+<li>如果 pending_methods 中是否存在此key，则将方法加入 List&lt;MemberInfo> 中。</li>
 </ul>
 </li>
-<li>遍历pending_methods中的所有对象：
+<li>遍历pending_methods（Dictionary&lt;MethodKey, List&lt;MemberInfo&#187;）中的所有对象：
 <ul>
-<li>如果 MethodKey.Name 以&rdquo;__op"开头，则使用 translator.PushFixCSFunction 方法，将 List<memberinfo> 的方法存入 StaticLuaCallback.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包，key值为 MethodKey.Name，存入obj_meta中。</li>
+<li>如果 MethodKey.Name 以&rdquo;__op"开头，则使用 translator.PushFixCSFunction 方法，将 List&lt;MemberInfo> 的方法存入 ObjectTranslator.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包，key值为 MethodKey.Name，存入obj_meta中。</li>
 <li>其他对象，同样使用 translator.PushFixCSFunction 方法，如果 MethodKey.IsStatic 为静态，则存入cls_field表，否则存入obj_field表。</li>
 </ul>
 </li>
@@ -741,7 +741,7 @@ post-container">
 <li>将&rdquo;__index"入栈。</li>
 <li>将 obj_field 表入栈。</li>
 <li>将 obj_getter 表入栈。</li>
-<li>使用 translator.PushFixCSFunction 方法，将 makeReflectionWrap 返回的 item_getter 方法存入 StaticLuaCallback.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包并入栈。</li>
+<li>使用 translator.PushFixCSFunction 方法，将 makeReflectionWrap 返回的 item_getter 方法存入 ObjectTranslator.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包并入栈。</li>
 <li>将当前type的基类入栈（translator.PushAny）。</li>
 <li>将 LuaIndexs 表入栈。</li>
 <li>将 nil 入栈。</li>
@@ -754,7 +754,7 @@ post-container">
 <ul>
 <li>将&rdquo;__newindex"入栈。</li>
 <li>将 obj_setter 表入栈。</li>
-<li>使用 translator.PushFixCSFunction 方法，将 makeReflectionWrap 返回的 item_setter 方法存入 StaticLuaCallback.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包并入栈。</li>
+<li>使用 translator.PushFixCSFunction 方法，将 makeReflectionWrap 返回的 item_setter 方法存入 ObjectTranslator.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包并入栈。</li>
 <li>将当前type的基类入栈（translator.Push）。</li>
 <li>将 LuaNewIndexs 表入栈。</li>
 <li>将 nil 入栈。</li>
@@ -861,46 +861,46 @@ post-container">
                             Find = CSharp侧的 GameObject.Find（Wrap为 UnityEngineGameObjectWrap._m_Find_xlua_st_，反射为 MethodWrap.Call）
                             ...
                         }
-                metatable = {
+                metatable（即 cls_meta 表） = {
                     __call = GameObject的实例化（Wrap为 UnityEngineGameObjectWrap.__CreateInstance，反射为构造函数）
                     __index = cls的index闭包（参数为 [1]: obj, [2]: key ）
                         {
-                            [1]:getters
+                            [1]: getters（即 cls_getter 表）
                                 {
                                     get的table
                                 }
-                            [2]:feilds
+                            [2]: feilds（即 cls_field 表）
                                 {
                                     CS.UnityEngine.GameObject 表
                                 }
-                            [3]:base
+                            [3]: base
                                 {
                                     type的基类
                                 }
-                            [4]:indexfuncs
+                            [4]: indexfuncs
                                 {
                                     LUA_REGISTRYINDEX 表中的 LuaClassIndexs 表
                                 }
-                            [5]:baseindex
+                            [5]: baseindex
                                 {
                                     nil
                                 }
                         }
                     __newindex = cls的newindex闭包（参数为 [1]: obj, [2]: key, [3]: value ）
                         {
-                            [1]:setters
+                            [1]: setters（即 cls_setter 表）
                                 {
                                     set的table
                                 }
-                            [2]:base
+                            [2]: base
                                 {
                                     type的基类
                                 }
-                            [3]:indexfuncs
+                            [3]: indexfuncs
                                 {
                                     LUA_REGISTRYINDEX 表中的 LuaClassNewIndexs 表
                                 }
-                            [4]:baseindex
+                            [4]: baseindex
                                 {
                                     nil
                                 }
@@ -913,7 +913,7 @@ post-container">
 
         UnityEngine.GameObject （CSharp侧UnityEngine.GameObject的type.FullName，由 luaL_newmetatable 创建）：
             table = {},
-            metatable = {
+            metatable（即 obj_meta 表） = {
                 &amp;tag = 1,
                 
                 __name = &quot;UnityEngine.GameObject&quot;,
@@ -921,13 +921,13 @@ post-container">
                 __tostring = CSharp侧的 StaticLuaCallbacks.ToString,
                 __index = obj的index闭包（参数为 [1]: obj, [2]: key ）
                     {
-                        [1]: methods
+                        [1]: methods（即 obj_field 表）
                             {
                                 GetComponent = CSharp侧的 GameObject.GetComponent（Wrap为 UnityEngineGameObjectWrap._m_GetComponent，反射为 MethodWrap.Call）
                                 SetActive = CSharp侧的 GameObject.SetActive（Wrap为 UnityEngineGameObjectWrap._m_SetActive，反射为 MethodWrap.Call）
                                 ...
                             }
-                        [2]: getters
+                        [2]: getters（即 obj_getter 表）
                             {
                                 transform = CSharp侧的 GameObject.transform（Wrap为 UnityEngineGameObjectWrap._g_get_transform，反射为 MethodWrap.Call）
                                 layer = CSharp侧的 GameObject.layer（Wrap为 UnityEngineGameObjectWrap._g_get_layer，反射为 MethodWrap.Call）
@@ -956,7 +956,7 @@ post-container">
                     }
                 __newindex = obj的newindex闭包（参数为 [1]: obj, [2]: key, [3]: value ）
                     {
-                        [1]: setters
+                        [1]: setters（即 obj_setter 表）
                             {
                                 transform = CSharp侧的 GameObject.transform（Wrap为 UnityEngineGameObjectWrap._g_set_transform，反射为 MethodWrap.Call）
                                 layer = CSharp侧的 GameObject.layer（Wrap为 UnityEngineGameObjectWrap._g_set_layer，反射为 MethodWrap.Call）
@@ -1571,6 +1571,215 @@ CSharp侧
 </ul>
 <h3 id=调用方法>调用方法</h3>
 <h4 id=lua调用csharp方法>Lua调用CSharp方法</h4>
+<ul>
+<li>前面提到，CSharp侧的类，当我们在lua侧访问时才通过 StaticLuaCallbacks.ImportType 进行注册。</li>
+<li>当我们在lua侧调用 GameObject.Find 时，在lua侧需要执行 CS.UnityEngine.GameObject.Find(&ldquo;test&rdquo;)，由于是首次调用GameObject类，注册完成后，此时lua侧大致为：</li>
+</ul>
+<pre tabindex=0><code>    _G = {
+        ...
+
+        CS（所有CSharp的对应表）: LUA_REGISTRYINDEX 表中的 xlua_csharp_namespace 表
+            
+    }
+
+    -10000（即 LUA_REGISTRYINDEX） = {
+        ...
+
+        xlua_csharp_namespace 表（即 _G.CS 表） = {
+            table = {
+                UnityEngine = {
+                      GameObject = ref_GameObject 表
+                        
+                  }
+            },
+            metatable = {
+                __index = CSharp侧 LuaEnv.init_xlua 中的 __index(key),
+                __newindex = CSharp侧 LuaEnv.init_xlua 中的 __newindex(),
+                __call = CSharp侧 LuaEnv.init_xlua 中的 __call(...),
+            }
+
+            ref_GameObject（分配的id，即 GameObject 的 userdata） = {
+                table = {
+                            UnderlyingSystemType = ref_GameObject（GameObject的userdata）
+
+                            Find = CSharp侧的 GameObject.Find（Wrap为 UnityEngineGameObjectWrap._m_Find_xlua_st_，反射为 MethodWrap.Call）
+                            ...
+                        }
+                metatable = {
+                    __call = GameObject的实例化（Wrap为 UnityEngineGameObjectWrap.__CreateInstance，反射为构造函数）
+                    __index = cls的index闭包（参数为 [1]: obj, [2]: key ）
+                        {
+                            ...
+                        }
+                    __newindex = cls的newindex闭包（参数为 [1]: obj, [2]: key, [3]: value ）
+                        {
+                            ...
+                        }
+                }
+            }
+        }
+
+        ref_GameObject（分配的id，对应CSharp侧的UnityEngine.GameObject） = UnityEngine.GameObject 表
+
+        UnityEngine.GameObject （CSharp侧UnityEngine.GameObject的type.FullName，由 luaL_newmetatable 创建）：
+            table = {},
+            metatable = {
+                &amp;tag = 1,
+                
+                __name = &quot;UnityEngine.GameObject&quot;,
+                __gc = CSharp侧的 StaticLuaCallbacks.LuaGC,
+                __tostring = CSharp侧的 StaticLuaCallbacks.ToString,
+                __index = obj的index闭包（参数为 [1]: obj, [2]: key ）
+                    {
+                        ...
+                    }
+                __newindex = obj的newindex闭包（参数为 [1]: obj, [2]: key, [3]: value ）
+                    {
+                        ...
+                    }
+            }
+    }
+</code></pre><ul>
+<li>最终调用时，有两种方式：
+<ul>
+<li>Wrap注册：调用CSharp侧的 UnityEngineGameObjectWrap.<em>m_Find_xlua_st</em>，读取栈上的参数string，并调起UnityEngine.GameObject.Find，最后再把GameObject传回lua。
+<pre tabindex=0><code>        // UnityEngineGameObjectWrap.cs
+        ...
+        [MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]
+        static int _m_Find_xlua_st_(RealStatePtr L)
+        {
+            try {
+
+                ObjectTranslator translator = ObjectTranslatorPool.Instance.Find(L);
+
+
+
+
+                {
+                    string _name = LuaAPI.lua_tostring(L, 1);
+
+                        var gen_ret = UnityEngine.GameObject.Find( _name );
+                        translator.Push(L, gen_ret);
+
+
+
+                    return 1;
+                }
+
+            } catch(System.Exception gen_e) {
+                return LuaAPI.luaL_error(L, &quot;c# exception:&quot; + gen_e);
+            }
+
+        }
+</code></pre></li>
+<li>反射注册：调用CSharp侧的 MethodWrap.Call，即 MethodWrap.overloads[0].Call，根据参数个数从栈上读取，反射调用 GameObject.Find 的 MethodBase，最后把对象传回lua。
+<pre tabindex=0><code>        // MethodWrapsCache.cs
+        ...
+        public int Call(RealStatePtr L)
+        {
+            try
+            {
+#if UNITY_EDITOR &amp;&amp; !DISABLE_OBSOLETE_WARNING
+                if (method.IsDefined(typeof(ObsoleteAttribute), true))
+                {
+                    ObsoleteAttribute info = Attribute.GetCustomAttribute(method, typeof(ObsoleteAttribute)) as ObsoleteAttribute;
+                    UnityEngine.Debug.LogWarning(&quot;Obsolete Method [&quot; + method.DeclaringType.ToString() + &quot;.&quot; + method.Name + &quot;]: &quot; + info.Message);
+                } 
+#endif
+                object target = null;
+                MethodBase toInvoke = method;
+
+                if (luaStackPosStart &gt; 1)
+                {
+                    target = translator.FastGetCSObj(L, 1);
+                    if (target is Delegate)
+                    {
+                        Delegate delegateInvoke = (Delegate)target;
+#if UNITY_WSA &amp;&amp; !UNITY_EDITOR
+                        toInvoke = delegateInvoke.GetMethodInfo();
+#else
+                        toInvoke = delegateInvoke.Method;
+#endif
+                    }
+                }
+
+
+                int luaTop = LuaAPI.lua_gettop(L);
+                int luaStackPos = luaStackPosStart;
+
+                for (int i = 0; i &lt; castArray.Length; i++)
+                {
+                    //UnityEngine.Debug.Log(&quot;inPos:&quot; + inPosArray[i]);
+                    if (luaStackPos &gt; luaTop) //after check
+                    {
+                        if (paramsType != null &amp;&amp; i == castArray.Length - 1)
+                        {
+                            args[inPosArray[i]] = Array.CreateInstance(paramsType, 0);
+                        }
+                        else
+                        {
+                            args[inPosArray[i]] = defaultValueArray[i];
+                        }
+                    }
+                    else
+                    {
+                        if (paramsType != null &amp;&amp; i == castArray.Length - 1)
+                        {
+                            args[inPosArray[i]] = translator.GetParams(L, luaStackPos, paramsType);
+                        }
+                        else
+                        {
+                            args[inPosArray[i]] = castArray[i](L, luaStackPos, null);
+                        }
+                        luaStackPos++;
+                    }
+                    //UnityEngine.Debug.Log(&quot;value:&quot; + args[inPosArray[i]]);
+                }
+
+                object ret = null;
+
+
+                ret = toInvoke.IsConstructor ? ((ConstructorInfo)method).Invoke(args) : method.Invoke(targetNeeded ? target : null, args);
+
+                if (targetNeeded &amp;&amp; targetType.IsValueType())
+                {
+                    translator.Update(L, 1, target);
+                }
+
+                int nRet = 0;
+
+                if (!isVoid)
+                {
+                    //UnityEngine.Debug.Log(toInvoke.ToString() + &quot; ret:&quot; + ret);
+                    translator.PushAny(L, ret);
+                    nRet++;
+                }
+
+                for (int i = 0; i &lt; outPosArray.Length; i++)
+                {
+                    if (refPos[outPosArray[i]] != -1)
+                    {
+                        translator.Update(L, luaStackPosStart + refPos[outPosArray[i]], args[outPosArray[i]]);
+                    }
+                    translator.PushAny(L, args[outPosArray[i]]);
+                    nRet++;
+                }
+
+                return nRet;
+            }
+            finally
+            {
+                for(int i = 0; i &lt; args.Length; i++)
+                {
+                    args[i] = null;
+                }
+            }
+        }
+    }
+</code></pre></li>
+</ul>
+</li>
+</ul>
 <h4 id=csharp调用lua方法>CSharp调用Lua方法</h4>
 <h3 id=委托>委托</h3>
 <h3 id=重载>重载</h3>
