@@ -485,7 +485,8 @@ post-container">
             {
                 return;
             }
-
+			// 如果lua侧已经没有这个userdata，则移除CSharp侧的 ObjectTranslator.objects[index].obj，但此index还保持，等lua侧gc触发才能真正移除。
+			// 因为lua侧gc是延迟触发的，移除LUA_RIDX_UBOX表中的userdata后，在lua侧gc触发前可能同一个对象又重新关联到lua侧，需要分配一个新的index，避免旧的index触发CSharp侧GC方法错误移除正在使用的对象。
             translator.Destroyudata(index);
         }
 		// CSharp侧为object创建索引index_GameObject
@@ -642,6 +643,62 @@ CSharp侧
 	ObjectTranslator.objects[index_GameObject] = go
 </code></pre><ul>
 <li>由于 LUA_RIDX_UBOX 表为值弱表，所以当lua gc触发时，userdata_GameObject由于没有其他引用，所以会被回收，并调起 userdata_GameObject.metatable的.__gc （即 LUA_REGISTRYINDEX.ref_GameObject.__gc） 方法，从而调起CSharp的LuaState.Collect方法，删除 ObjectTranslator.objects 和 ObjectTranslator.objectsBackMap 的引用。</li>
+<li>CSharp侧的GC方法为：</li>
+</ul>
+<pre tabindex=0><code>		// LuaState.cs
+		...
+        [MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]
+        public static int Collect(IntPtr L)
+        {
+            int udata = LuaDLL.tolua_rawnetobj(L, 1);
+
+            if (udata != -1)
+            {
+                ObjectTranslator translator = GetTranslator(L);
+                translator.RemoveObject(udata);
+            }
+
+            return 0;
+        }
+</code></pre><pre tabindex=0><code>		// ObjectTranslator.cs
+		...
+
+        public void RemoveObject(int udata)
+        {            
+            //只有lua gc才能移除
+            object o = objects.Remove(udata);
+            Debug.LogFormat(&quot;lua gc RemoveObject, udata = {0}&quot; , udata);
+            if (o != null)
+            {
+                if (!TypeChecker.IsValueType(o.GetType()))
+                {
+                    RemoveObject(o, udata);
+                }
+
+                if (LogGC)
+                {
+                    Debugger.Log(&quot;gc object {0}, id {1}&quot;, o, udata);
+                }
+            }
+        }
+
+        void RemoveObject(object o, int udata)
+        {
+            int index = -1;
+            
+            if (objectsBackMap.TryGetValue(o, out index) &amp;&amp; index == udata)
+            {
+                objectsBackMap.Remove(o);
+            }
+        }
+</code></pre><ul>
+<li>可以看到，CSharp侧的GC流程为
+<ul>
+<li>调用lua侧的 tolua_rawnetobj 方法，获取对象对应的userdata对应的index。</li>
+<li>移除CSharp侧 ObjectTranslator.objects 中的index。</li>
+<li>如果 ObjectTranslator.objectsBackMap 中的index和要GC的index不一致，说明此对象已经绑定到新的index，不需要移除引用。</li>
+</ul>
+</li>
 <li>为了释放已经销毁的UnityEngine.Object的引用关系，CSharp侧提供了一个 LuaState.StepCollect() 方法，放在Update中触发，可以检查已经销毁的对象，移除 ObjectTranslator.objectsBackMap 的已销毁对象，避免字典频繁扩容。</li>
 <li>总的来说，lua侧对CSharp侧对象的引用，只有lua gc触发的时候，才能在CSharp侧对应释放掉引用。</li>
 </ul>
@@ -763,7 +820,7 @@ CSharp侧
 <li>由于LuaTable在CSharp侧，是以弱引用存在于LuaState.funcRefMap中，所以当CSharp侧触发GC（Unity切换场景或主动执行System.GC.Collect方法等）时，由于CSharp侧对LuaTable没有直接引用持有，所以无论当前的引用count是多少，LuaTable都会被回收，进而触发LuaBaseRef的析构函数，实现了释放。</li>
 <li>总的来说，LuaTable能释放的情况有以下情况
 <ul>
-<li>LuaTable为局部变量，方法执行完成后就触发析构函数（Unity中才会触发局部变量的析构函数）释放（立即释放）</li>
+<li>LuaTable为局部变量，方法执行完成后就触发析构函数（Unity中才会触发局部变量的析构函数）释放（立即释放）。</li>
 <li>LuaTable为成员变量，手动执行了LuaTable.Dispose方法，LuaTable.count为0，luaState.CollectRef执行进行释放（立即释放）。</li>
 <li>LuaTable为MonoBehavior的成员变量，对应的GameObject销毁后，Mono对象没有其他引用，无论LuaTable.count为多少，都会触发LuaTable析构函数释放（延迟释放）。</li>
 <li>LuaTable为普通Class的成员变量，引用class的对象置为null后，无论LuaTable.count为多少，都会触发LuaTable析构函数释放（延迟释放）。</li>
@@ -1222,7 +1279,7 @@ sidebar-container">
 <ul class="list-inline text-center">
 </ul>
 <p class="copyright text-muted">
-Copyright &copy; Xun's Blog 2021
+Copyright &copy; Xun's Blog 2022
 <br>
 <a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
 <iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
