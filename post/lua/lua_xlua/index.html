@@ -1781,6 +1781,36 @@ CSharp侧
 </li>
 </ul>
 <h4 id=csharp调用lua方法>CSharp调用Lua方法</h4>
+<ul>
+<li>和Lua对象一样，有时候也需要调用Lua侧的方法，主要是通过table获取，以LuaFunction表示，如：
+<ul>
+<li>直接通过方法名，找到对应表中的方法。</li>
+<li>找到某个LuaTable，查找表中的方法。</li>
+<li>&mldr;</li>
+</ul>
+</li>
+<li>当我们要获取一个Lua侧的function时，通常为</li>
+</ul>
+<pre tabindex=0><code>        // ObjectCasters.cs
+        ...
+        private object getLuaFunction(RealStatePtr L, int idx, object target)
+        {
+            if (LuaAPI.lua_type(L, idx) == LuaTypes.LUA_TUSERDATA)
+            {
+                object obj = translator.SafeGetCSObj(L, idx);
+                return (obj != null &amp;&amp; obj is LuaFunction) ? obj : null;
+            }
+            if (!LuaAPI.lua_isfunction(L, idx))
+            {
+                return null;
+            }
+            LuaAPI.lua_pushvalue(L, idx);
+            return new LuaFunction(LuaAPI.luaL_ref(L), translator.luaEnv);
+        }
+</code></pre><ul>
+<li>LuaFunction的创建流程，也是先将function压到栈上，然后使用lua侧的 luaL_ref 方法，获取lua侧的function的引用，并增加lua侧对此function的引用数，然后创建一个CSharp侧的LuaFunction对象。</li>
+<li>和LuaTable一样，LuaFunction也是继承LuaBase，因此释放机制也相同。</li>
+</ul>
 <h3 id=委托>委托</h3>
 <h3 id=重载>重载</h3>
 <h3 id=无gc传值>无GC传值</h3>
