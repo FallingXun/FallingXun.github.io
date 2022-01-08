@@ -499,7 +499,7 @@ post-container">
 </ul>
 <p><strong>1.1 Wrap注册</strong></p>
 <ul>
-<li>Wrap方式主要是预先生成Wrap文件，然后通过 __Register 方法初始化，主要有以下方法：
+<li>Wrap方式主要是预先对使用 [LuaCallCSharp] 特性的类型生成Wrap文件，然后通过 __Register 方法初始化，主要有以下方法：
 <ul>
 <li>Utils.BeginObjectRegister：注册类实例对象相关信息。
 <ul>
@@ -1503,7 +1503,7 @@ CSharp侧
 <ul>
 <li>委托对象
 <ul>
-<li>（待补充）</li>
+<li>后面进行说明。</li>
 </ul>
 </li>
 <li>非委托对象
@@ -1812,6 +1812,195 @@ CSharp侧
 <li>和LuaTable一样，LuaFunction也是继承LuaBase，因此释放机制也相同。</li>
 </ul>
 <h3 id=委托>委托</h3>
+<ul>
+<li>当我们需要把Lua方法注入CSharp侧的回调，通过CSharp调起时，需要使用委托的方式。即CSharp侧会调起对应的委托，而委托方法里会根据从栈上读取参数和方法并调起对应的lua方法，实现lua方法的回调。</li>
+<li>获取对应类型的委托方法为：</li>
+</ul>
+<pre tabindex=0><code>        // ObjectTranslator.cs
+        ...
+        public T GetDelegate&lt;T&gt;(RealStatePtr L, int index) where T :class
+        {
+            
+            if (LuaAPI.lua_isfunction(L, index))
+            {
+                return CreateDelegateBridge(L, typeof(T), index) as T;
+            }
+            else if (LuaAPI.lua_type(L, index) == LuaTypes.LUA_TUSERDATA)
+            {
+                return (T)SafeGetCSObj(L, index);
+            }
+            else
+            {
+                return null;
+            }
+        }
+</code></pre><ul>
+<li>可以看到，当检测到栈上为lua的function时，会调用 CreateDelegateBridge 方法创建CSharp侧的委托方法。</li>
+</ul>
+<pre tabindex=0><code>        // ObjectTranslator.cs
+        ...
+        Dictionary&lt;int, WeakReference&gt; delegate_bridges = new Dictionary&lt;int, WeakReference&gt;();
+        public object CreateDelegateBridge(RealStatePtr L, Type delegateType, int idx)
+        {
+            LuaAPI.lua_pushvalue(L, idx);
+            LuaAPI.lua_rawget(L, LuaIndexes.LUA_REGISTRYINDEX);
+            if (!LuaAPI.lua_isnil(L, -1))
+            {
+                int referenced = LuaAPI.xlua_tointeger(L, -1);
+                LuaAPI.lua_pop(L, 1);
+
+                if (delegate_bridges[referenced].IsAlive)
+                {
+                    if (delegateType == null)
+                    {
+                        return delegate_bridges[referenced].Target;
+                    }
+                    DelegateBridgeBase exist_bridge = delegate_bridges[referenced].Target as DelegateBridgeBase;
+                    Delegate exist_delegate;
+                    if (exist_bridge.TryGetDelegate(delegateType, out exist_delegate))
+                    {
+                        return exist_delegate;
+                    }
+                    else
+                    {
+                        exist_delegate = getDelegate(exist_bridge, delegateType);
+                        exist_bridge.AddDelegate(delegateType, exist_delegate);
+                        return exist_delegate;
+                    }
+                }
+            }
+            else
+            {
+                LuaAPI.lua_pop(L, 1);
+            }
+
+            LuaAPI.lua_pushvalue(L, idx);
+            int reference = LuaAPI.luaL_ref(L);
+            LuaAPI.lua_pushvalue(L, idx);
+            LuaAPI.lua_pushnumber(L, reference);
+            LuaAPI.lua_rawset(L, LuaIndexes.LUA_REGISTRYINDEX);
+            DelegateBridgeBase bridge;
+            try
+            {
+#if (UNITY_EDITOR || XLUA_GENERAL) &amp;&amp; !NET_STANDARD_2_0
+                if (!DelegateBridge.Gen_Flag)
+                {
+                    bridge = Activator.CreateInstance(delegate_birdge_type, new object[] { reference, luaEnv }) as DelegateBridgeBase;
+                }
+                else
+#endif
+                {
+                    bridge = new DelegateBridge(reference, luaEnv);
+                }
+            }
+            catch(Exception e)
+            {
+                LuaAPI.lua_pushvalue(L, idx);
+                LuaAPI.lua_pushnil(L);
+                LuaAPI.lua_rawset(L, LuaIndexes.LUA_REGISTRYINDEX);
+                LuaAPI.lua_pushnil(L);
+                LuaAPI.xlua_rawseti(L, LuaIndexes.LUA_REGISTRYINDEX, reference);
+                throw e;
+            }
+            if (delegateType == null)
+            {
+                delegate_bridges[reference] = new WeakReference(bridge);
+                return bridge;
+            }
+            try {
+                var ret = getDelegate(bridge, delegateType);
+                bridge.AddDelegate(delegateType, ret);
+                delegate_bridges[reference] = new WeakReference(bridge);
+                return ret;
+            }
+            catch(Exception e)
+            {
+                bridge.Dispose();
+                throw e;
+            }
+        }
+
+</code></pre><ul>
+<li>ObjectTranslator.CreateDelegateBridge 方法创建委托的流程主要为：
+<ul>
+<li>LUA_REGISTRYINDEX 表中没有对应lua方法的引用，即没有建立对应委托关系，进行创建。
+<ul>
+<li>将lua方法压入栈上。</li>
+<li>调用lua侧的 luaL_ref 方法，对lua方法创建并返回一个在 LUA_REGISTRYINDEX 表中的引用 reference，将lua方法出栈。</li>
+<li>将 reference 存入 LUA_REGISTRYINDEX 表，key值为当前的lua方法。</li>
+<li>使用 reference 创建 DelegateBridge 对象 bridge，即一个lua方法对应一个CSharp侧的 DelegateBridge 。
+<ul>
+<li>DelegateBridge 继承 DelegateBridgeBase，当一个lua方法只对应多种type的委托时，内部才会创建字典 Dictionary&lt;Type, Delegate> ，用字典进行管理，如果只有一种type，则不使用字典，避免创建太多字典。</li>
+</ul>
+</li>
+<li>如果CSharp的委托类型 delegateType 为null，则将 bridge 以弱引用（WeakReference）形式，存入 delegate_bridges（Dictionary&lt;int, WeakReference>） 中，key值为 reference，直接返回 bridge。</li>
+<li>使用 ObjectTranslator.getDelegate 方法，从当前 bridge 中创建对应 delegateType 的委托。</li>
+<li>使用 ObjectTranslator.AddDelegate 方法，将获得的委托存入 bridge 中。</li>
+<li>将 bridge 以弱引用（WeakReference）形式，存入 delegate_bridges 中。</li>
+<li>返回委托方法。</li>
+</ul>
+</li>
+<li>LUA_REGISTRYINDEX 表中已经有对应lua方法的引用，即已经有对应的委托，直接查找使用。
+<ul>
+<li>获取lua方法对应的引用 reference。</li>
+<li>如果 delegate_bridges[reference].IsAlive 不为true，表示当前委托以销毁，需要重新建立委托关系。</li>
+<li>如果委托类型 delegateType 为null，则直接返回对应对象，即返回 bridge。</li>
+<li>如果当前 bridge 中已经有此委托类型的委托缓存，则直接返回，如果没有则重新创建，并存入 bridge 中。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>假设我们当前lua侧的方法为 lua_func_test，创建委托后大致为：</li>
+</ul>
+<pre tabindex=0><code>Lua侧
+    -10000（即 LUA_REGISTRYINDEX） = {
+        ...
+
+                
+        lua_func_test（lua侧的方法）： ref_lua_func_test（LUA_REGISTRYINDEX 申请的id，即 reference）
+
+        ref_lua_func_test ： lua_func_test （由lua侧的 luaL_Ref 方法创建的映射）
+    }
+
+
+CSharp侧
+    ObjectTranslator.delegate_bridges = {
+        { ref_lua_func_test , new WeakReference( new DelegateBridge(reference, luaEnv)) },
+        ...
+    }
+
+</code></pre><ul>
+<li>当我们建立好lua方法和CSharp的联系后，我们得到的是 DelegateBridge 对象，而最终的委托是通过 ObjectTranslator.getDelegate 方法获取的，具体流程为：
+<ul>
+<li>根据传入的bridge，使用 DelegateBridgeBase.GetDelegateByType 方法获取。由于传入的bridge为 DelegateBridge ，即使用 DelegateBridge.GetDelegateByType 方法获取。DelegateBridge 声明为 partial 类型，具体有三个部分：
+<ul>
+<li>基本部分：DelegateBridge.cs ，主逻辑放在这里。</li>
+<li>工具生成部分：DelegatesGensBridge.cs ，为使用 [CSharpCallLua] 特性声明的委托，由工具生成的注册委托。这里重写了 GetDelegateByType 方法，根据传入的委托类型，使用生成的委托方法，创建对应类型的委托。</li>
+<li>泛型兼容部分：GenericDelegateBridge.cs ，为0 ~ 4个参数的 Action 和 Func 泛型方法。</li>
+</ul>
+</li>
+<li>如果委托类型为 Delegate 或 MulticastDelegate ，则返回null。</li>
+<li>获取委托类型的 Invoke 方法，如果 DelegatesGensBridge.cs 中生成的 __Gen_Delegate_ImpXXX 方法 或 GenericDelegateBridge.cs 中的 Action() 方法的参数和 Invoke 方法一致，则使用此方法和bridge创建对应委托，并存入 DelegatesGensBridge.delegateCreatorCache 中进行缓存，减少反射查找的次数。</li>
+<li>如果找不到参数匹配的方法，则使用 DelegatesGensBridge.getCreatorUsingGeneric 方法进行动态创建：
+<ul>
+<li>获取 GenericDelegateBridge.cs 中的所有 Action 和 Func 方法，如果某种方法数量不为5，则不进行创建（只支持0~4个参数，总计各5个方法）。</li>
+<li>不使用 XLUA_GENERAL 宏时，如果委托的 Invoke 方法返回值为值类型，或者参数超过4个，则创建空委托。</li>
+<li>如果委托的 Invoke 方法的参数类型有值类型，或者为out、ref类型，则创建空委托。<strong>（需要后续研究原因）</strong></li>
+<li>根据参数个数，选择对应的 Action 或 Func 泛型方法，根据参数类型，构造对应类型的方法 methodInfo，以委托类型和bridge对象创建委托。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>了解委托创建的流程后，再来看销毁的情况。前面提到，当主动调用Dispose方法时，会通过执行 ObjectTranslator.ReleaseLuaBase 方法，直接释放 LuaBase 对象，此时委托释放的流程为：
+<ul>
+<li>从 LUA_REGISTRYINDEX 表中，查找 reference 对应的lua方法。</li>
+<li>从 LUA_REGISTRYINDEX 表中，查找lua方法对应的引用id，如果和reference一样，则将lua方法对应的值设为nil，即 LUA_REGISTRYINDEX[func] = nil。</li>
+<li>调用lua侧的 lua_unref 方法，移除 reference 对应的lua方法的引用。</li>
+<li>移除 ObjectTranslator.delegate_bridges 中的 reference 对应的委托。</li>
+</ul>
+</li>
+<li>注意，如果委托方法中引用了自身table（self），即产生了闭包，则table释放的时候，需要将CSharp侧对此方法的引用置为null，table才能被lua gc回收。否则即便table已经在CSharp侧Dispose了，但由于委托方法还引用了table，而CSharp还引用着方法，导致table还是不能释放。</li>
+</ul>
 <h3 id=重载>重载</h3>
 <h3 id=无gc传值>无GC传值</h3>
 <h3 id=泛型>泛型</h3>
