@@ -155,7 +155,7 @@ post-container">
 <ul>
 <li>打开指定的标准库，注册方法到全局表，包括package、preload、loadlib、seeall、module、require等。</li>
 <li>创建int64和uint64的table，注册到registry表中的LUA_RIDX_INT64和LUA_RIDX_UINT64中。</li>
-<li>注册其他到全局表，如：Mathf、tolua、gettag、settag等。</li>
+<li>注册其他到全局表，如：Mathf、tolua等。</li>
 </ul>
 </li>
 <li>ToLua.OpenLibs(L)
@@ -173,8 +173,50 @@ post-container">
 <li>注册CSharp反射相关Wrap的初始化方法，key值为tolua.reflection。</li>
 </ul>
 </li>
+<li>创建完成后，lua侧大致为：</li>
 </ul>
-<h4 id=初始化相关库>初始化相关库</h4>
+<pre tabindex=0><code>	_G(即 -10002) = {
+		Mathf = {
+			NextPowerOfTwo = tolua.c 中的 mathf_nextpoweroftwo 方法,
+    		ClosestPowerOfTwo = tolua.c 中的 mathf_closestpoweroftwo 方法,
+    		IsPowerOfTwo = tolua.c 中的 mathf_ispoweroftwo 方法,
+    		GammaToLinearSpace = tolua.c 中的 mathf_gammatolinearspace 方法,
+    		LinearToGammaSpace = tolua.c 中的 mathf_lineartogammaspace 方法,
+    		Normalize = tolua.c 中的 mathf_normalize 方法,
+    		NULL = NULL 
+		}
+		
+		tolua = {
+			gettime = tolua.c 中的 tolua_gettime 方法,
+    		typename = tolua.c 中的 tolua_bnd_type 方法,
+    		setpeer = tolua.c 中的 tolua_bnd_setpeer 方法,
+    		getpeer = tolua.c 中的 tolua_bnd_getpeer 方法,
+    		getfunction = tolua.c 中的 tolua_bnd_getfunction 方法,
+    		initset = tolua.c 中的 tolua_initsettable 方法,
+    		initget = tolua.c 中的 tolua_initgettable 方法,
+    		int64 = tolua.c 中的 tolua_newint64 方法,
+    		uint64 = tolua.c 中的 tolua_newuint64 方法,
+    		initset = tolua.c 中的 tolua_initsettable 方法,
+
+			gettag = &amp;gettag ,
+			settag = &amp;settag ,
+			
+			version = 版本号信息（如：1.0.7）,
+
+			isnull = CSharp侧的 ToLua.IsNull 方法（用于lua侧判断CSharp对象是否为空）,
+			typeof = CSharp侧的 ToLua.GetClassType 方法,
+			tolstring = CSharp侧的 ToLua.BufferToString 方法,
+			toarray = CSharp侧的 ToLua.TableToArray 方法,
+
+    		NULL = NULL 
+		}
+
+		print = CSharp侧的 ToLua.Print 方法,
+		dofile = CSharp侧的 ToLua.DoFile 方法,
+		loadfile = CSharp侧的 ToLua.LoadFile 方法,
+		...
+	}
+</code></pre><h4 id=初始化相关库>初始化相关库</h4>
 <ul>
 <li>lua侧需要使用的相关库函数，要进行初始化
 <ul>
@@ -1231,6 +1273,10 @@ CSharp侧
 <h3 id=热修复>热修复</h3>
 <ul>
 <li>支持一定程度的热修复，需要提前生成</li>
+</ul>
+<h3 id=生成工具>生成工具</h3>
+<ul>
+<li>（待补充）</li>
 </ul>
 <h2 id=总结>总结</h2>
 <ul>
