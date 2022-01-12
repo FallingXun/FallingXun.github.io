@@ -1076,7 +1076,7 @@ CSharp侧
         return null;
     }
 </code></pre><ul>
-<li>可以看到，检查类型的方法只检查了userdata类型和nil，也就是说，System.Action类型的参数，必须是userdata类型才能匹配，即必须是Lua侧持有的CSharp侧对象。如果传入的参数为lua侧的方法时，则由于类型检查不匹配而无法调起。同样，ToLua.ToObject 方法也是直接通过 udata 获取 ObjectTranslator.objects 的对应对象，所以当出现这种情况时，lua侧的方法是不能正常调起的，这也是目前重载会遇到的问题。</li>
+<li>可以看到，检查类型的方法只检查了userdata类型和nil，也就是说，System.Action类型的参数，必须是userdata类型才能匹配，即必须是Lua侧持有的CSharp侧对象。如果传入的参数为lua侧的方法时，则由于类型检查不匹配（LuaTypes.LUA_TFUNCTION）而无法调起。同样，ToLua.ToObject 方法也是直接通过 udata 获取 ObjectTranslator.objects 的对应对象，所以当出现这种情况时，lua侧的方法是不能正常调起的，这也是目前重载会遇到的问题。</li>
 <li>总的来说，为了避免出现重载引起CSharp侧不能调起lua方法的问题，可以有以下方法：
 <ul>
 <li>避免使用重载函数。</li>
