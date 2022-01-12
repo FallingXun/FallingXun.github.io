@@ -456,7 +456,7 @@ post-container">
 <li>调用CSharp侧的GameObject.Find来获取对象，这里有几个步骤：
 <ul>
 <li>获取 _G.CS 表，查找 CS.UnityEngine 对象。</li>
-<li>CS 表中不存在 UnityEngine，则触发CSharp侧的 StaticLuaCallbacks.ImportType方法，查找对应类。</li>
+<li>CS 表中不存在 UnityEngine，则触发CSharp侧的 StaticLuaCallbacks.ImportType 方法，查找对应类。</li>
 <li>由于UnityEngine不为class，所以设置 CS.UnityEngine 的 table 为 { &ldquo;.fqn&rdquo; = &ldquo;UnityEngine&rdquo; }，metatable为CS表的metatable。</li>
 <li>查找GameObject对象，同样触发CSharp侧的 StaticLuaCallbacks.ImportType方法，查找UnityEngine.GameObject，并注册到lua侧中。</li>
 <li>查找Find方法，传入参数并执行，触发CSharp侧的 GameObject.Find 方法，找到对应的GameObject。</li>
@@ -726,8 +726,35 @@ post-container">
 </li>
 <li>遍历pending_methods（Dictionary&lt;MethodKey, List&lt;MemberInfo&#187;）中的所有对象：
 <ul>
-<li>如果 MethodKey.Name 以&rdquo;__op"开头，则使用 translator.PushFixCSFunction 方法，将 List&lt;MemberInfo> 的方法存入 ObjectTranslator.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包，key值为 MethodKey.Name，存入obj_meta中。</li>
-<li>其他对象，同样使用 translator.PushFixCSFunction 方法，如果 MethodKey.IsStatic 为静态，则存入cls_field表，否则存入obj_field表。</li>
+<li>使用 MethodWrapsCache._GenMethodWrap 方法，创建 MethodWrap 对象。
+<ul>
+<li>遍历 List&lt;MemberInfo> 的方法，将方法包装成 OverloadMethodWrap 对象。
+<ul>
+<li>方法为null，不处理。</li>
+<li>方法为泛型方法，且为 IL2CPP（即 ENABLE_IL2CPP 宏） 模式，不处理（带有泛型参数的方法一定为泛型方法）。</li>
+<li>方法为泛型方法，不为 IL2CPP 模式（即 Mono 模式），使用 tryMakeGenericMethod 方法检查是否需要处理：
+<ul>
+<li>方法不为 MethodInfo 类型，不处理。</li>
+<li>方法包含泛型参数，但是没有泛型约束，不处理。</li>
+<li>方法包含泛型参数，但是约束类型不为 class 或者约束类型为值类型，不处理。</li>
+<li>方法返回值为泛型类型，且没有对应的有效泛型参数（即具有非值类型的class约束），不处理。</li>
+<li>其他方法，则根据泛型约束类型，创建对应的泛型类型方法。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<h2 id=对-overloadmethodwrap-对象进行初始化加入-overloadslistoverloadmethodwrap-列表初始化流程为>对 OverloadMethodWrap 对象进行初始化，加入 overloads（List&lt;OverloadMethodWrap>） 列表，初始化流程为：</h2>
+</li>
+<li>将 overloads 列表包装成 MethodWrap 对象，即一个 methodName 对应一个 MethodWrap 对象。</li>
+</ul>
+</li>
+<li>使用 translator.PushFixCSFunction 方法，将方法名的 MethodWrap 对象存入 ObjectTranslator.fix_cs_functions中，将索引id作为 StaticLuaCallbacks.FixCSFunction 的参数，创建闭包，key值为 MethodKey.Name，存入对应表中。即同一个方法名中会有各个参数数量的对应方法，具体调用哪个方法根据栈上压入的参数个数决定。
+<ul>
+<li>如果 MethodKey.Name 以&rdquo;__op"开头，则存入 obj_meta 表中。</li>
+<li>其他对象，如果 MethodKey.IsStatic 为静态，则存入 cls_field 表，否则存入 obj_field 表。</li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -1673,109 +1700,34 @@ CSharp侧
         }
 </code></pre></li>
 <li>反射注册：调用CSharp侧的 MethodWrap.Call，即 MethodWrap.overloads[0].Call，根据参数个数从栈上读取，反射调用 GameObject.Find 的 MethodBase，最后把对象传回lua。
-<pre tabindex=0><code>        // MethodWrapsCache.cs
+<pre tabindex=0><code>        // MethodWrapsCache.cs 
+        // class MethodWrap
         ...
         public int Call(RealStatePtr L)
         {
             try
             {
-#if UNITY_EDITOR &amp;&amp; !DISABLE_OBSOLETE_WARNING
-                if (method.IsDefined(typeof(ObsoleteAttribute), true))
-                {
-                    ObsoleteAttribute info = Attribute.GetCustomAttribute(method, typeof(ObsoleteAttribute)) as ObsoleteAttribute;
-                    UnityEngine.Debug.LogWarning(&quot;Obsolete Method [&quot; + method.DeclaringType.ToString() + &quot;.&quot; + method.Name + &quot;]: &quot; + info.Message);
-                } 
-#endif
-                object target = null;
-                MethodBase toInvoke = method;
+                if (overloads.Count == 1 &amp;&amp; !overloads[0].HasDefalutValue &amp;&amp; !forceCheck) return overloads[0].Call(L);
 
-                if (luaStackPosStart &gt; 1)
+                for (int i = 0; i &lt; overloads.Count; ++i)
                 {
-                    target = translator.FastGetCSObj(L, 1);
-                    if (target is Delegate)
+                    var overload = overloads[i];
+                    if (overload.Check(L))
                     {
-                        Delegate delegateInvoke = (Delegate)target;
-#if UNITY_WSA &amp;&amp; !UNITY_EDITOR
-                        toInvoke = delegateInvoke.GetMethodInfo();
-#else
-                        toInvoke = delegateInvoke.Method;
-#endif
+                        return overload.Call(L);
                     }
                 }
-
-
-                int luaTop = LuaAPI.lua_gettop(L);
-                int luaStackPos = luaStackPosStart;
-
-                for (int i = 0; i &lt; castArray.Length; i++)
-                {
-                    //UnityEngine.Debug.Log(&quot;inPos:&quot; + inPosArray[i]);
-                    if (luaStackPos &gt; luaTop) //after check
-                    {
-                        if (paramsType != null &amp;&amp; i == castArray.Length - 1)
-                        {
-                            args[inPosArray[i]] = Array.CreateInstance(paramsType, 0);
-                        }
-                        else
-                        {
-                            args[inPosArray[i]] = defaultValueArray[i];
-                        }
-                    }
-                    else
-                    {
-                        if (paramsType != null &amp;&amp; i == castArray.Length - 1)
-                        {
-                            args[inPosArray[i]] = translator.GetParams(L, luaStackPos, paramsType);
-                        }
-                        else
-                        {
-                            args[inPosArray[i]] = castArray[i](L, luaStackPos, null);
-                        }
-                        luaStackPos++;
-                    }
-                    //UnityEngine.Debug.Log(&quot;value:&quot; + args[inPosArray[i]]);
-                }
-
-                object ret = null;
-
-
-                ret = toInvoke.IsConstructor ? ((ConstructorInfo)method).Invoke(args) : method.Invoke(targetNeeded ? target : null, args);
-
-                if (targetNeeded &amp;&amp; targetType.IsValueType())
-                {
-                    translator.Update(L, 1, target);
-                }
-
-                int nRet = 0;
-
-                if (!isVoid)
-                {
-                    //UnityEngine.Debug.Log(toInvoke.ToString() + &quot; ret:&quot; + ret);
-                    translator.PushAny(L, ret);
-                    nRet++;
-                }
-
-                for (int i = 0; i &lt; outPosArray.Length; i++)
-                {
-                    if (refPos[outPosArray[i]] != -1)
-                    {
-                        translator.Update(L, luaStackPosStart + refPos[outPosArray[i]], args[outPosArray[i]]);
-                    }
-                    translator.PushAny(L, args[outPosArray[i]]);
-                    nRet++;
-                }
-
-                return nRet;
+                return LuaAPI.luaL_error(L, &quot;invalid arguments to &quot; + methodName);
             }
-            finally
+            catch (System.Reflection.TargetInvocationException e)
             {
-                for(int i = 0; i &lt; args.Length; i++)
-                {
-                    args[i] = null;
-                }
+                return LuaAPI.luaL_error(L, &quot;c# exception:&quot; + e.InnerException.Message + &quot;,stack:&quot; + e.InnerException.StackTrace);
+            }
+            catch (System.Exception e)
+            {
+                return LuaAPI.luaL_error(L, &quot;c# exception:&quot; + e.Message + &quot;,stack:&quot; + e.StackTrace);
             }
         }
-    }
 </code></pre></li>
 </ul>
 </li>
@@ -1985,7 +1937,7 @@ CSharp侧
 <ul>
 <li>获取 GenericDelegateBridge.cs 中的所有 Action 和 Func 方法，如果某种方法数量不为5，则不进行创建（只支持0~4个参数，总计各5个方法）。</li>
 <li>不使用 XLUA_GENERAL 宏时，如果委托的 Invoke 方法返回值为值类型，或者参数超过4个，则创建空委托。</li>
-<li>如果委托的 Invoke 方法的参数类型有值类型，或者为out、ref类型，则创建空委托。<strong>（需要后续研究原因）</strong></li>
+<li>如果委托的 Invoke 方法的参数类型有<strong>值类型</strong>，或者<strong>为out、ref类型</strong>，则创建空委托。<strong>（需要后续研究原因）</strong></li>
 <li>根据参数个数，选择对应的 Action 或 Func 泛型方法，根据参数类型，构造对应类型的方法 methodInfo，以委托类型和bridge对象创建委托。</li>
 </ul>
 </li>
@@ -2039,7 +1991,11 @@ CSharp侧
 </code></pre><h3 id=协程>协程</h3>
 <h3 id=接口interface>接口（Interface）</h3>
 <h3 id=热修复>热修复</h3>
-<h2 id=总结>总结</h2>
+<h3 id=生成工具>生成工具</h3>
+<ul>
+<li>（待补充）</li>
+<li></li>
+</ul>
 <hr>
 <ul class=pager>
 <li class=previous>
