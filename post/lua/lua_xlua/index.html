@@ -487,6 +487,7 @@ post-container">
 </li>
 <li>如果是 IEnumerable 类型，则设置 __pairs 为 ref_enumerable_pairs_func的方法。</li>
 <li>将此metatable存到 LUA_REGISTRYINDEX 表中，id为lua侧创建的引用 type_id。</li>
+<li>如果为值类型，将 type 存入 typeMap中，key值为 type_id。</li>
 <li>将 type_id 存入 typeIdMap 中。</li>
 </ul>
 </li>
@@ -728,24 +729,8 @@ post-container">
 <ul>
 <li>使用 MethodWrapsCache._GenMethodWrap 方法，创建 MethodWrap 对象。
 <ul>
-<li>遍历 List&lt;MemberInfo> 的方法，将方法包装成 OverloadMethodWrap 对象。
-<ul>
-<li>方法为null，不处理。</li>
-<li>方法为泛型方法，且为 IL2CPP（即 ENABLE_IL2CPP 宏） 模式，不处理（带有泛型参数的方法一定为泛型方法）。</li>
-<li>方法为泛型方法，不为 IL2CPP 模式（即 Mono 模式），使用 tryMakeGenericMethod 方法检查是否需要处理：
-<ul>
-<li>方法不为 MethodInfo 类型，不处理。</li>
-<li>方法包含泛型参数，但是没有泛型约束，不处理。</li>
-<li>方法包含泛型参数，但是约束类型不为 class 或者约束类型为值类型，不处理。</li>
-<li>方法返回值为泛型类型，且没有对应的有效泛型参数（即具有非值类型的class约束），不处理。</li>
-<li>其他方法，则根据泛型约束类型，创建对应的泛型类型方法。</li>
-</ul>
-</li>
-</ul>
-</li>
-<li>
-<h2 id=对-overloadmethodwrap-对象进行初始化加入-overloadslistoverloadmethodwrap-列表初始化流程为>对 OverloadMethodWrap 对象进行初始化，加入 overloads（List&lt;OverloadMethodWrap>） 列表，初始化流程为：</h2>
-</li>
+<li>遍历 List&lt;MemberInfo> 的方法，将方法包装成 OverloadMethodWrap 对象。</li>
+<li>对 OverloadMethodWrap 对象进行初始化，加入 overloads（List&lt;OverloadMethodWrap>） 列表。</li>
 <li>将 overloads 列表包装成 MethodWrap 对象，即一个 methodName 对应一个 MethodWrap 对象。</li>
 </ul>
 </li>
@@ -1731,6 +1716,244 @@ CSharp侧
 </code></pre></li>
 </ul>
 </li>
+<li>Wrap注册由于是预先生成代码，所以比较具象。而反射注册则相对比较抽象，表面上看是对 MethodWrap 对象进行操作，具体如何映射，需要对 MethodWrap 进行剖析。</li>
+<li>前面提到，MethodWrap 对象的大致构成为：
+<ul>
+<li>每个 methodName 方法名对应一个 MethodWrap 对象。</li>
+<li>每个 MethodWrap 对象由多个 OverloadMethodWrap 对象组成。</li>
+<li>每个 OverloadMethodWrap 对象对应一个符合条件的 MemberInfo 方法。</li>
+</ul>
+</li>
+<li>主要有两个CSharp类，OverloadMethodWrap 和 MethodWrap。
+<ul>
+<li><strong>OverloadMethodWrap</strong>
+<ul>
+<li>对反射查询到的 MemberInfo 方法，检查是否需要进行创建 OverloadMethodWrap 对象。
+<ul>
+<li>方法为null，不处理。</li>
+<li>方法为泛型方法，且为 IL2CPP（即 ENABLE_IL2CPP 宏） 模式，不处理（带有泛型参数的方法一定为泛型方法）。</li>
+<li>方法为泛型方法，不为 IL2CPP 模式（即 Mono 模式），使用 tryMakeGenericMethod 方法检查是否需要处理：
+<ul>
+<li>方法不为 MethodInfo 类型，不处理。</li>
+<li>方法包含泛型参数，但是没有泛型约束，不处理。</li>
+<li>方法包含泛型参数，但是约束类型不为 class 或者约束类型为值类型，不处理。</li>
+<li>方法返回值为泛型类型，且没有对应的有效泛型参数（即具有非值类型的class约束），不处理。</li>
+<li>其他方法，则根据泛型约束类型，创建对应的泛型类型方法。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>对 OverloadMethodWrap 对象进行初始化，加入 overloads（List&lt;OverloadMethodWrap>） 列表，提供给 MethodWrap 对象。OverloadMethodWrap 初始化的对象有：
+<ul>
+<li>targetType：当前对应的类型。</li>
+<li>method：当前对应的方法。</li>
+<li>luaStackPosStart：记录栈上开始读取的位置，默认为1，部分情况为2：
+<ul>
+<li>当前类型不为 Delegate，且是 Delegate 的父类（IsAssignableFrom）。</li>
+<li>当前方法不为静态方法。</li>
+<li>当前方法为构造函数。</li>
+</ul>
+</li>
+<li>targetNeeded：当前方法不为构造函数时，为true。</li>
+<li>outPosArray（int[]）：记录执行完方法后需要更新值内容的参数对应的索引。有以下情况：
+<ul>
+<li>参数为 IsOut 类型，即使用 out 关键字的参数。</li>
+<li>参数为 IsRef 类型，即使用 ref 关键字的参数。</li>
+</ul>
+</li>
+<li>inPosArray（int[]）：记录需要传入到方法中的参数（即非 out 关键字类型的参数）对应的索引。</li>
+<li>refPos（int[]）：记录需要传入到方法中，且执行完方法后需要更新值内容的参数在 inPosArray 中的索引，-1 表示不需要记录。
+<ul>
+<li>参数为 IsRef 类型，即使用 ref 关键字的参数，且为非枚举、非基本类型（int、bool等Primitive）、非decimal类型的值类型参数（object类型的参数会直接操作堆上的对象）。</li>
+</ul>
+</li>
+<li>checkArray（ObjectCheck[]）：记录需要传入到方法中的参数，所包含或引用的对象的类型的检查方法。
+<ul>
+<li>如果是 Nullable 类型，则当栈上数据为nil时，返回true，不为nil时，选择 Nullable.GetUnderlyingType 返回的类型对应的checker。</li>
+<li>如果是 ObjectCheckers.checkersMap 中有的类型，使用对应的方法，预定义的有：
+<ul>
+<li>sbyte ： ObjectCheckers.numberCheck 方法。</li>
+<li>byte ： ObjectCheckers.numberCheck 方法。</li>
+<li>short ： ObjectCheckers.numberCheck 方法。</li>
+<li>ushort ： ObjectCheckers.numberCheck 方法。</li>
+<li>int ： ObjectCheckers.numberCheck 方法。</li>
+<li>uint ： ObjectCheckers.numberCheck 方法。</li>
+<li>long ： ObjectCheckers.int64Check 方法。</li>
+<li>ulong ： ObjectCheckers.uint64Check 方法。</li>
+<li>double ： ObjectCheckers.numberCheck 方法。</li>
+<li>char ： ObjectCheckers.numberCheck 方法。</li>
+<li>float ： ObjectCheckers.numberCheck 方法。</li>
+<li>decimal ： ObjectCheckers.decimalCheck 方法。</li>
+<li>bool ： ObjectCheckers.boolCheck 方法。</li>
+<li>string ： ObjectCheckers.strCheck 方法。</li>
+<li>object ： ObjectCheckers.objectCheck 方法。</li>
+<li>byte[] ： ObjectCheckers.bytesCheck 方法。</li>
+<li>IntPtr ： ObjectCheckers.intptrCheck 方法。</li>
+<li>LuaTable ： ObjectCheckers.luaTableCheck 方法。</li>
+<li>LuaFunction ： ObjectCheckers.luaFunctionCheck 方法。</li>
+</ul>
+</li>
+<li>如果 ObjectCheckers.checkersMap 中没有对应类型，则需要动态生成。
+<ul>
+<li>类型type不是抽象类，且是 Delegate 的父类或相同类型（IsAssignableFrom），则检查方法为：
+<ul>
+<li>栈上对象为 nil，返回true。</li>
+<li>栈上对象为 function，返回true。</li>
+<li>调用 fixTypeCheck 的检查方法：
+<ul>
+<li>栈上对象为 userdata，当对应CSharp侧的对象不为null，且对象的类型为当前type的父类或相同类型（IsAssignableFrom），返回true。</li>
+<li>栈上对象为 userdata，当对应CSharp侧的对象为null，栈上的类型已经注册到typeMap中（即已经调用过 ObjectTranslator.getTypeId 注册类型，且为值类型），且栈上的类型为当前type的父类或相同类型（IsAssignableFrom），返回true。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>类型type为枚举，则检查方法为：
+<ul>
+<li>调用 fixTypeCheck 的检查方法。</li>
+</ul>
+</li>
+<li>类型type为接口，则检查方法为：
+<ul>
+<li>栈上对象为 nil，返回true。</li>
+<li>栈上对象为 table，返回true。</li>
+<li>调用 fixTypeCheck 的检查方法。</li>
+</ul>
+</li>
+<li>类型type为默认构造函数的class，检查方法为：
+<ul>
+<li>栈上对象为 nil，返回true。</li>
+<li>栈上对象为 table，返回true。</li>
+<li>调用 fixTypeCheck 的检查方法。</li>
+</ul>
+</li>
+<li>类型type为值类型，检查方法为：
+<ul>
+<li>栈上对象为 table，返回true。</li>
+<li>调用 fixTypeCheck 的检查方法。</li>
+</ul>
+</li>
+<li>类型type为数组，检查方法为：
+<ul>
+<li>栈上对象为 nil，返回true。</li>
+<li>栈上对象为 table，返回true。</li>
+<li>调用 fixTypeCheck 的检查方法。</li>
+</ul>
+</li>
+<li>其他类型，检查方法为：
+<ul>
+<li>栈上对象为 nil，返回true。</li>
+<li>调用 fixTypeCheck 的检查方法。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>castArray（ObjectCast[]）：记录需要传入到方法中的参数，所包含或引用的对象的类型的转换方法。
+<ul>
+<li>如果是 Nullable 类型，则当栈上数据为nil时，返回null，不为nil时，选择 Nullable.GetUnderlyingType 返回的类型对应的caster。</li>
+<li>如果是 ObjectCasters.castersMap 中有的类型，使用对应的方法，预定义的有：
+<ul>
+<li>char ： ObjectCasters.charCaster 方法。</li>
+<li>sbyte ： ObjectCasters.sbyteCaster 方法。</li>
+<li>byte ： ObjectCasters.byteCaster 方法。</li>
+<li>short ： ObjectCasters.shortCaster 方法。</li>
+<li>ushort ： ObjectCasters.ushortCaster 方法。</li>
+<li>int ： ObjectCasters.intCaster 方法。</li>
+<li>uint ： ObjectCasters.uintCaster 方法。</li>
+<li>long ： ObjectCasters.longCaster 方法。</li>
+<li>ulong ： ObjectCasters.ulongCaster 方法。</li>
+<li>double ： ObjectCasters.getDouble 方法。</li>
+<li>float ： ObjectCasters.floatCaster 方法。</li>
+<li>decimal ： ObjectCasters.decimalCaster 方法。</li>
+<li>bool ： ObjectCasters.getBoolean 方法。</li>
+<li>string ： ObjectCasters.getString 方法。</li>
+<li>object ： ObjectCasters.getObject 方法。</li>
+<li>byte[] ： ObjectCasters.getBytes 方法。</li>
+<li>IntPtr ： ObjectCasters.getIntptr 方法。</li>
+<li>LuaTable ： ObjectCasters.getLuaTable 方法。</li>
+<li>LuaFunction ： ObjectCasters.getLuaFunction 方法。</li>
+</ul>
+</li>
+<li>如果 ObjectCasters.castersMap 中没有对应类型，则需要动态生成。
+<ul>
+<li>类型type为 Delegate 的父类或相同类型（IsAssignableFrom），转换方法为：
+<ul>
+<li>使用 fixTypeGetter 转换，如果转换对象不为null，则返回对象。
+<ul>
+<li>如果栈上对象为CSharp侧对象，且当前type的父类或相同类型（IsAssignableFrom），则返回</li>
+</ul>
+</li>
+<li>如果栈上对象不是 function，则返回null。</li>
+<li>使用 ObjectTranslator.CreateDelegateBridge 创建委托对象返回。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>isOptionalArray（bool[]）：记录需要传入到方法中的参数，是否为可选参数。</li>
+<li>defaultValueArray（object[]）：记录需要传入到方法中的参数的默认参数值（不为可选参数时为null）。</li>
+<li>paramsType：可变长参数的类型。</li>
+<li>args（object[]）：参数数组，预先创建，只创建一次。</li>
+<li>isVoid：不为构造函数，且返回类型为void时为true。</li>
+<li>HasDefalutValue：是否有默认参数值，如果有可选参数，则为true。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>检查方法 Check ：
+<ul>
+<li>如果栈上的参数个数超过CSharp方法的参数个数，且不为可选参数，则返回false。</li>
+<li>如果栈上的参数不能通过 checkArray 的检查，则返回false。</li>
+<li>如果有可变长参数，使用 checkArray 检查并返回结果。</li>
+<li>如果没有可变长参数，栈上的参数个数和CSharp侧的参数一致，则返回true，否则返回false。</li>
+</ul>
+</li>
+<li>调用方法 Call ：
+<ul>
+<li>检查 luaStackPosStart ，如果大于1，则从栈上的位置1读取目标对象target。</li>
+<li>使用 castArray 中的方法，创建参数存入 arg[] 中。</li>
+<li>使用参数执行当前方法，获得返回值 ret。</li>
+<li>如果当前类型为值类型，且targetNeeded为true（即不为构造函数），则调用 ObjectTranslator.Update 方法，将当前对象target更新到栈上对应位置。ObjectTranslator.Update 方法的流程为：
+<ul>
+<li>如果 obj 为userdata类型，更新 ObjectTranslator.objects 中的对象为新的 obj。</li>
+<li>如果 obj 不为userdata类型，则使用 ObjectTranslator.custom_update_funcs 中的update方法进行更新。
+<ul>
+<li>工具生成的脚本WrapPusher，初始化注册了常用的结构体、枚举从Lua侧传到CSharp侧和从CSharp侧传到Lua侧的方法，对应存到ObjectTranslator中的custom_push_funcs、custom_get_funcs、custom_update_funcs ，避免传递过程中的GC产生。工具流程见后续介绍。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>如果返回值不为void（即 isVoid 为false），则将返回值压到栈上。（<strong>使用PushAny方法，参数为object对象，会有装拆箱的问题</strong>）</li>
+<li>处理 outPosArray ：
+<ul>
+<li>如果对应的 refPos 不为 -1，即栈上对应的参数值需要更新，则使用 ObjectTranslator.Update 方法更新对应位置参数。（<strong>Update方法参数为object对象，会有装拆箱问题</strong>）。</li>
+<li>将 arg 对应的参数值压入栈上（<strong>使用PushAny方法，参数为object对象，会有装拆箱的问题</strong>）。</li>
+</ul>
+</li>
+<li>遍历 arg ，将所有参数置为null，保证下一次的正常使用。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>MethodWrap</strong>
+<ul>
+<li>MethodWrap主要有几个部分：
+<ul>
+<li>methodName：方法名。</li>
+<li>overloads：OverloadMethodWrap列表，即同一个方法名的重载方法。</li>
+<li>forceCheck：是否强制检查，构造函数为true，其他默认为false。</li>
+<li>Call 方法：反射注册到lua侧调用的方法，主要流程为：
+<ul>
+<li>如果 overloads 只有一个方法，且没有默认参数值，且不需要强制检查，则直接调用 overloads[0].Call，即调用 OverloadMethodWrap.Call。</li>
+<li>遍历 overloads 中的所有方法，调用 OverloadMethodWrap.Check 进行检查，找到第一个检查通过的方法后，执行 OverloadMethodWrap.Call 方法并返回。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 <h4 id=csharp调用lua方法>CSharp调用Lua方法</h4>
 <ul>
@@ -1954,6 +2177,96 @@ CSharp侧
 <li>注意，如果委托方法中引用了自身table（self），即产生了闭包，则table释放的时候，需要将CSharp侧对此方法的引用置为null，table才能被lua gc回收。否则即便table已经在CSharp侧Dispose了，但由于委托方法还引用了table，而CSharp还引用着方法，导致table还是不能释放。</li>
 </ul>
 <h3 id=重载>重载</h3>
+<ul>
+<li>Wrap注册
+<ul>
+<li>以 GameObject.GetComponentInChildren 方法为例，lua侧最终调用的CSharp侧代码为：</li>
+</ul>
+<pre tabindex=0><code>      // UnityEngine_GameObjectWrap.cs
+      ...
+      [MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]
+      static int _m_GetComponentInChildren(RealStatePtr L)
+      {
+  	    try {
+
+              ObjectTranslator translator = ObjectTranslatorPool.Instance.Find(L);
+
+
+              UnityEngine.GameObject gen_to_be_invoked = (UnityEngine.GameObject)translator.FastGetCSObj(L, 1);
+
+
+  		    int gen_param_count = LuaAPI.lua_gettop(L);
+
+              if(gen_param_count == 2&amp;&amp; translator.Assignable&lt;System.Type&gt;(L, 2)) 
+              {
+                  System.Type _type = (System.Type)translator.GetObject(L, 2, typeof(System.Type));
+
+                      var gen_ret = gen_to_be_invoked.GetComponentInChildren( _type );
+                      translator.Push(L, gen_ret);
+
+
+
+                  return 1;
+              }
+              if(gen_param_count == 3&amp;&amp; translator.Assignable&lt;System.Type&gt;(L, 2)&amp;&amp; LuaTypes.LUA_TBOOLEAN == LuaAPI.lua_type(L, 3)) 
+              {
+                  System.Type _type = (System.Type)translator.GetObject(L, 2, typeof(System.Type));
+                  bool _includeInactive = LuaAPI.lua_toboolean(L, 3);
+
+                      var gen_ret = gen_to_be_invoked.GetComponentInChildren( _type, _includeInactive );
+                      translator.Push(L, gen_ret);
+
+
+
+                  return 1;
+              }
+
+          } catch(System.Exception gen_e) {
+              return LuaAPI.luaL_error(L, &quot;c# exception:&quot; + gen_e);
+          }
+
+          return LuaAPI.luaL_error(L, &quot;invalid arguments to UnityEngine.GameObject.GetComponentInChildren!&quot;);
+
+      }
+</code></pre><ul>
+<li>从例子中可以看到，Wrap注册的重载方法，会先检查栈上的参数个数，然后再检查参数的类型是否和方法对应上，如果检查通过则会执行对应的 GameObject.GetComponentInChildren 方法。</li>
+</ul>
+</li>
+<li>反射注册
+<ul>
+<li>前面Lua侧调用CSharp侧方法中有介绍，同一个方法名的方法会包装成一个 OverloadMethodWrap 的列表，存到 MethodWrap 中，通过对参数类型进行 Check 方法检查，来调用对应的方法。</li>
+</ul>
+</li>
+<li>由于CSharp侧的多种类型（int、float等）对应Lua侧的都为number类型，所以对于此类方法，有两种解决方法：
+<ul>
+<li>定义不同的方法，避免上述情况的出现。（<strong>建议</strong>）</li>
+<li>通过 xlua.tofunction 结合反射来处理，xlua.tofunction 输入一个 MethodBase 对象，返回一个lua函数。（由于使用反射获取，<strong>需要进行cache</strong>，重复使用）</li>
+</ul>
+<pre tabindex=0><code>      // StaticLuaCallback.cs 
+      ...
+      [MonoPInvokeCallback(typeof(LuaCSFunction))]
+      public static int ToFunction(RealStatePtr L)
+      {
+          try
+          {
+              ObjectTranslator translator = ObjectTranslatorPool.Instance.Find(L);
+              MethodBase m;
+              translator.Get(L, 1, out m);
+              if (m == null)
+              {
+                  return LuaAPI.luaL_error(L, &quot;ToFunction: #1 argument must be a MethodBase&quot;);
+              }
+              translator.PushFixCSFunction(L,
+                      new LuaCSFunction(translator.methodWrapsCache._GenMethodWrap(m.DeclaringType, m.Name, new MethodBase[] { m }).Call));
+              return 1;
+          }
+          catch (Exception e)
+          {
+              return LuaAPI.luaL_error(L, &quot;c# exception in ToFunction: &quot; + e);
+          }
+      }
+</code></pre></li>
+</ul>
 <h3 id=无gc传值>无GC传值</h3>
 <h3 id=泛型>泛型</h3>
 <h3 id=反射>反射</h3>
