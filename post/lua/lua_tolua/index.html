@@ -1167,17 +1167,18 @@ CSharp侧
 <ul>
 <li>为了支持反射，CSharp侧提供了LuaReflection，通过 OpenLibs 方法注册反射相关方法。
 <ul>
-<li>tolua.findtype：查找类名获取对应类型</li>
-<li>tolua.loadassembly：加载指定名称的程序集</li>
-<li>tolua.getmethod：获取类型对应的方法，封装成LuaMethod，再转成userdata给lua侧，方便lua侧执行方法</li>
-<li>tolua.getconstructor：获取类型对应的构造函数，封装成LuaConstructor，再转成userdata给lua侧</li>
-<li>tolua.gettypemethod：获取类型对应的方法，带多参数</li>
-<li>tolua.getfield：获取成员变量，封装成LuaField，再转成userdata给lua侧，方便lua侧获取内容</li>
-<li>tolua.getproperty：获取属性，封装成LuaProperty，再转成userdata给lua侧，方便lua侧获取内容</li>
-<li>tolua.createinstance：创建类型示例</li>
-<li>tolua.reflection：初始化LuaMethod、LuaProperty、LuaField、LuaConstructor的Wrap文件注册</li>
+<li>tolua.findtype：查找类名获取对应类型。</li>
+<li>tolua.loadassembly：加载指定名称的程序集。</li>
+<li>tolua.getmethod：获取类型对应的方法，封装成 LuaMethod，再转成userdata给lua侧，方便lua侧执行方法。</li>
+<li>tolua.getconstructor：获取类型对应的构造函数，封装成LuaConstructor，再转成userdata给lua侧。</li>
+<li>tolua.gettypemethod：获取类型对应的方法，带多参数。</li>
+<li>tolua.getfield：获取成员变量，封装成 LuaField，再转成userdata给lua侧，方便lua侧获取内容。</li>
+<li>tolua.getproperty：获取属性，封装成 LuaProperty，再转成userdata给lua侧，方便lua侧获取内容。</li>
+<li>tolua.createinstance：创建类型示例。</li>
+<li>tolua.reflection：初始化LuaMethod、LuaProperty、LuaField、LuaConstructor的Wrap文件注册，需要初始化后才能正常反射。</li>
 </ul>
 </li>
+<li>Assembly-CSharp 程序集没有在 LuaReflection 的构造函数中添加到list中，避免放在插件目录无法加载，需要可从lua代码 loadassembly。</li>
 </ul>
 <h3 id=64位整型>64位整型</h3>
 <ul>
