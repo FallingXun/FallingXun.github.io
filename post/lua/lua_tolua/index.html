@@ -296,7 +296,7 @@ post-container">
 </li>
 <li>L.EndClass()
 <ul>
-<li>将当前类的table（tb_type）设置为LUA_RIDX_LOADED中table（tb_loaded）的metatable，再将LUA_RIDX_LOADED中table（tb_loaded）设置到当前module的table中，key值为类名，即module中不会直接创建当前类的table，而是持有当前类table的引用。因此获取数据时，则是通过查找LUA_RIDX_LOADED中table（tb_loaded），触发当前类table（tb_type）的__index方法获取数据的。</li>
+<li>调用lua的tolua_endclass方法，将当前类的table（tb_type）设置为LUA_RIDX_LOADED中table（tb_loaded）的metatable，再将LUA_RIDX_LOADED中table（tb_loaded）设置到当前module的table中，key值为类名，即module中不会直接创建当前类的table，而是持有当前类table的引用。因此获取数据时，则是通过查找LUA_RIDX_LOADED中table（tb_loaded），触发当前类table（tb_type）的__index方法获取数据的。</li>
 </ul>
 </li>
 <li>L.RegFunction(&mldr;)
@@ -1269,11 +1269,184 @@ CSharp侧
 </ul>
 <h3 id=接口interface>接口（Interface）</h3>
 <ul>
-<li>暂时不支持</li>
-</ul>
-<h3 id=热修复>热修复</h3>
+<li>暂时不支持
 <ul>
-<li>支持一定程度的热修复，需要提前生成</li>
+<li>ToLuaExport.Generate 工具生成方法中， 除了 System.Collections.IEnumerator ，其他 Interface 都直接返回不处理。</li>
+</ul>
+</li>
+</ul>
+<h3 id=热修复暖更新>热修复（暖更新）</h3>
+<ul>
+<li>尽管tolua的设计是为了让开发者能将绝大部分逻辑都在lua侧实现，但还是不可避免需要将部分逻辑放到CSharp侧编写，因此也就出现了需要线上修复CSharp代码的需求。</li>
+</ul>
+<h4 id=修复类型>修复类型</h4>
+<ul>
+<li>LuaInterface.InjectType 中定义了修复的各种类型：
+<ul>
+<li>After（1 &#171; 0）：CSharp侧方法执行后执行Lua侧注册的方法。</li>
+<li>Before（1 &#171; 1）：CSharp侧方法执行前执行Lua侧注册的方法。</li>
+<li>Replace（1 &#171; 2）：CSharp侧方法不执行，替换为执行Lua侧注册的方法。</li>
+<li>ReplaceWithPreInvokeBase（1 &#171; 3）：CSharp侧方法不执行，替换为执行Lua侧注册的方法，并在Lua方法执行前，执行一次CSharp侧的的Base同名函数。</li>
+<li>ReplaceWithPostInvokeBase（1 &#171; 4）：CSharp侧方法不执行，替换为执行Lua侧注册的方法，并在Lua方法执行后，执行一次CSharp侧的的Base同名函数。</li>
+</ul>
+</li>
+</ul>
+<h4 id=宏定义>宏定义</h4>
+<ul>
+<li>热修复的相关代码，主要通过宏 ENABLE_LUA_INJECTION 来控制开关。</li>
+</ul>
+<h4 id=代码注入>代码注入</h4>
+<ul>
+<li>ToLuaInjection.Inject 方法，加载 &ldquo;./Library/ScriptAssemblies/Assembly-CSharp.dll&rdquo; 程序集，根据修复类型注入IL代码。</li>
+<li>以某个类为参考，注入前代码如下：</li>
+</ul>
+<pre tabindex=0><code>public class TestInject : MonoBehaviour
+{
+    private int m_Id = 1;
+
+    private void Log()
+    {
+        Debug.Log(m_Id);
+    }
+
+    private int GetId()
+    {
+        return m_Id;
+    }
+}
+
+</code></pre><ul>
+<li>通过查看 Assembly-CSharp.dll ，注入完成后的代码如下：</li>
+</ul>
+<pre tabindex=0><code>// Token: 0x0200000C RID: 12
+public class TestInject : MonoBehaviour
+{
+	// Token: 0x0600001C RID: 28 RVA: 0x00002D2C File Offset: 0x00000F2C
+	private void Log()
+	{
+		byte injectFlag = LuaInjectionStation.GetInjectFlag(414);
+		LuaFunction injectionFunction;
+		if (injectFlag != 0)
+		{
+			injectionFunction = LuaInjectionStation.GetInjectionFunction(414);
+			if (injectFlag &gt; 1)
+			{
+				injectionFunction.Call&lt;TestInject&gt;(this);
+				if (injectFlag &gt; 2)
+				{
+					return;
+				}
+			}
+		}
+		Debug.Log(this.m_Id);
+		if (injectFlag == 1)
+		{
+			injectionFunction.Call&lt;TestInject&gt;(this);
+		}
+	}
+
+	// Token: 0x0600001D RID: 29 RVA: 0x00002D80 File Offset: 0x00000F80
+	private int GetId()
+	{
+		byte injectFlag = LuaInjectionStation.GetInjectFlag(413);
+		LuaFunction injectionFunction;
+		if (injectFlag != 0)
+		{
+			injectionFunction = LuaInjectionStation.GetInjectionFunction(413);
+			if (injectFlag &gt; 1)
+			{
+				int result = injectionFunction.Invoke&lt;TestInject, int&gt;(this);
+				if (injectFlag &gt; 2)
+				{
+					return result;
+				}
+			}
+		}
+		int id = this.m_Id;
+		int result2 = id;
+		if (injectFlag == 1)
+		{
+			injectionFunction.Call&lt;TestInject&gt;(this);
+		}
+		return result2;
+	}
+
+	// Token: 0x04000015 RID: 21
+	private int m_Id = 1;
+}
+</code></pre><ul>
+<li>可以看到，经过Inject后，会对方法的逻辑进行修改，根据index获取修复类型，根据修复类型获取对应方法，再根据修复类型确定是替换还是插入执行。</li>
+</ul>
+<h4 id=初始化-1>初始化</h4>
+<ul>
+<li>当lua代码加载完成后，会回调执行 LuaState.Start 方法，如果开启了热修复，则会进行热修复的初始化流程：
+<ul>
+<li>设置 LUA_GLOBALSINDEX 表的 tolua_tag 为 tolua.c 中的 tolua_tag 方法（lightuserdata类型）。</li>
+<li>执行 LuaState.DoFile 方法，加载并执行 &ldquo;System/Injection/LuaInjectionStation.lua&rdquo; 。</li>
+<li>设置 LuaState.bInjectionInited 为 true。</li>
+</ul>
+</li>
+</ul>
+<h4 id=相关说明>相关说明</h4>
+<ul>
+<li>LuaInjectionStation.lua
+<ul>
+<li>热修复lua侧启动入口，加载热修复需要的脚本：
+<ul>
+<li>require &ldquo;System.Injection.LuaInjectionBus&rdquo;</li>
+<li>local bridgeInfo = require &ldquo;System.Injection.InjectionBridgeInfo&rdquo;</li>
+</ul>
+</li>
+<li>提供热修复lua侧主要方法：
+<ul>
+<li>InjectByName
+<ul>
+<li>从 bridgeInfo 表中，查找是否有对应的 moduleName 表。</li>
+<li>遍历lua侧进行热修复对应的table，检查方法是否在对应的 moduleName 表中。</li>
+<li>调用CSharp侧的 LuaInjectStation.CacheInjectFunction 方法，将需要热修复的方法的index、修复类型injectFlag、修复方法func注册到CSharp侧。
+<ul>
+<li>LuaInjectionStation.injectFunctionCache[index] = func</li>
+<li>LuaInjectionStation.injectionFlagCache[index] = injectFlag</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>InjectByModule
+<ul>
+<li>获取对应module，检查 &tag 是否为1，为1表示CSharp类已经绑定到Lua侧。</li>
+<li>使用 module[".name"]，调用 InjectByName 方法进行热修复注册。</li>
+<li>如果是替换类型（Replace、ReplaceWithPostInvokeBase、ReplaceWithPreInvokeBase），修改 module 的 __index 方法。
+<ul>
+<li>如果 module 中有替换类型的方法，则返回对应方法。</li>
+<li>如果 module 中没有替换类型的方法，则调用原有的 __index 方法返回对应方法。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>LuaInjectionBus.lua
+<ul>
+<li>热修复脚本注册入口，所有需要注册热修复的脚本都需要在这里进行注册，如：
+<ul>
+<li>require &ldquo;System.Injection.ToLuaInjectionTestInjector&rdquo;</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>InjectionBridgeInfo.lua
+<ul>
+<li>记录CSharp侧能进行热修复的方法和对应的索引index。</li>
+</ul>
+</li>
+</ul>
+<h4 id=时序图-1>时序图</h4>
+<ul>
+<li>热修复的时序图为
+<img src="/img/Lua/ToLua/Inject.png?raw=true" alt=Inject.png>
+</li>
 </ul>
 <h3 id=生成工具>生成工具</h3>
 <ul>
