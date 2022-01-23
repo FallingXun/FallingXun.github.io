@@ -486,7 +486,7 @@ post-container">
 </ul>
 </li>
 <li>如果是 IEnumerable 类型，则设置 __pairs 为 ref_enumerable_pairs_func的方法。</li>
-<li>将此metatable存到 LUA_REGISTRYINDEX 表中，id为lua侧创建的引用 type_id。</li>
+<li>将此metatable存到 LUA_REGISTRYINDEX 表中，id为lua侧创建的引用 type_id（<strong>此table会存到多个地方</strong>）。</li>
 <li>如果为值类型，将 type 存入 typeMap中，key值为 type_id。</li>
 <li>将 type_id 存入 typeIdMap 中。</li>
 </ul>
@@ -2278,6 +2278,123 @@ CSharp侧
 </ul>
 </li>
 <li>通过这些方法，将数据压到栈上，或从栈上读取，则实现了数据交互，而不会产生gc。而无gc传值也是基于这种方法，通过规定struct的数据类型和顺序，则可实现入栈和出栈的配套方法。尤其是对频繁调用的类型，如UnityEngine.Vector3，效率上会有很大的提升。</li>
+<li>以 UnityEngine.Vector3 为例，CSharp侧传Vector3到Lua侧的代码为：</li>
+</ul>
+<pre tabindex=0><code>        // WrapPusher.cs
+        ...
+        int UnityEngineVector3_TypeID = -1;
+        public void PushUnityEngineVector3(RealStatePtr L, UnityEngine.Vector3 val)
+        {
+            if (UnityEngineVector3_TypeID == -1)
+            {
+			    bool is_first;
+                UnityEngineVector3_TypeID = getTypeId(L, typeof(UnityEngine.Vector3), out is_first);
+				
+            }
+			
+            IntPtr buff = LuaAPI.xlua_pushstruct(L, 12, UnityEngineVector3_TypeID);
+            if (!CopyByValue.Pack(buff, 0, val))
+            {
+                throw new Exception(&quot;pack fail fail for UnityEngine.Vector3 ,value=&quot;+val);
+            }
+			
+        }
+</code></pre><ul>
+<li>可以看到，Vector3传到Lua侧的流程为：
+<ul>
+<li>获取Vector3的type_id。</li>
+<li>根据type_id，调用lua侧的 xlua_pushstruct 方法，创建 userdata（xlua.c 中是 CSharpStruct * 类型，css）。
+<ul>
+<li>设置 css->fake_id = -1 。</li>
+<li>设置 css->len = size 。</li>
+<li>设置metatable为 LUA_REGISTRYINDEX 表中对应type_id的table。</li>
+</ul>
+</li>
+<li>调用 CopyByValue.Pack 方法，执行lua侧的 xlua_pack_float3 方法。
+<ul>
+<li>检查 css->fake_id 是否为-1，css->len 是否为 12（即 sizeof(float) * 3 + offset，3个float加上0偏移）。</li>
+<li>获取 css->data[0] 的地址，加上offset偏移，得到 float * 的起始地址指针 pos，将Vector3的x、y、z赋值到 pos[0]、pos[1]、pos[2]中，实现CSharp侧通过c层的api，直接操作栈上数据。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>其中，CSharpStruct 类型在xlua.c中的定义为：</li>
+</ul>
+<pre tabindex=0><code>typedef struct {
+	int fake_id;
+    unsigned int len;
+	char data[1];
+} CSharpStruct;
+
+</code></pre><ul>
+<li>Lua侧传Vector3到CSharp侧的代码为：</li>
+</ul>
+<pre tabindex=0><code>        // WrapPusher.cs
+        ...
+        public void Get(RealStatePtr L, int index, out UnityEngine.Vector3 val)
+        {
+		    LuaTypes type = LuaAPI.lua_type(L, index);
+            if (type == LuaTypes.LUA_TUSERDATA )
+            {
+			    if (LuaAPI.xlua_gettypeid(L, index) != UnityEngineVector3_TypeID)
+				{
+				    throw new Exception(&quot;invalid userdata for UnityEngine.Vector3&quot;);
+				}
+				
+                IntPtr buff = LuaAPI.lua_touserdata(L, index);if (!CopyByValue.UnPack(buff, 0, out val))
+                {
+                    throw new Exception(&quot;unpack fail for UnityEngine.Vector3&quot;);
+                }
+            }
+			else if (type ==LuaTypes.LUA_TTABLE)
+			{
+			    CopyByValue.UnPack(this, L, index, out val);
+			}
+            else
+            {
+                val = (UnityEngine.Vector3)objectCasters.GetCaster(typeof(UnityEngine.Vector3))(L, index, null);
+            }
+        }
+</code></pre><ul>
+<li>可以看到，Vector3传到CSharp侧的流程为：
+<ul>
+<li>如果栈上的对象类型为userdata，则
+<ul>
+<li>调用lua侧的 xlua_gettypeid 方法，检查 userdata 中的 metatable[1]（即设置的key值 type_id）是否为Vector3的type_id。</li>
+<li>调用lua侧的 lua_touserdata 方法， 获得 userdata 的地址。</li>
+<li>调用CSharp侧的 CopyByValue.UnPack 方法，执行lua侧的 xlua_unpack_float3 方法。
+<ul>
+<li>检查 css->fake_id 是否为-1，css->len 是否为 12（即 sizeof(float) * 3 + offset，3个float加上0偏移）。</li>
+<li>获取 css->data[0] 的地址，加上offset偏移，得到 float * 的起始地址指针 pos，将pos[0]、pos[1]、pos[2]的值设置到3个 float * 指向的地址，传到CSharp侧作为x、y、z，实现c层直接赋值。</li>
+<li>CSharp侧创建 Vector3 对象，并将x、y、z设置。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>如果栈上的对象类型为table，则
+<ul>
+<li>调用CSharp侧的 Utils.LoadField 方法，获取table的 &ldquo;x&rdquo; 对应的值，压入栈上。</li>
+<li>调用CSharp侧的 ObjectTranslator.Get<t> 方法，读取栈上的值，作为Vector3的x。</li>
+<li>将栈顶数据弹出。</li>
+<li>按照x坐标的获取步骤，依次进行y、z坐标的获取，最后得到 Vector3 对象。</li>
+</ul>
+</li>
+<li>其他类型，使用 ObjectCaster.GetCaster 方法进行获取。</li>
+</ul>
+</li>
+<li>至此，Vector3的无GC传值已实现，其实本质上是通过c层定义一个struct，设置好struct的大小和类型，对应创建一个userdata，而CSharp侧通过c层的api，直接对栈上数据进行读写，避免了对象的装拆箱。</li>
+<li>前面提到的方法，是将Vector3映射到userdata，方案的优缺点为：
+<ul>
+<li>优点：userdata比table更省内存。</li>
+<li>缺点：userdata操作字段比table性能稍低。</li>
+</ul>
+</li>
+<li>如果为了要提高访问性能，可以将Vector3改到lua侧实现，有两种方式：
+<ul>
+<li>把Vector3的方法实现改为lua实现，通过xlua.genaccessor实现不经过C#直接操作内存。</li>
+<li>struct映射到table改造。</li>
+</ul>
+</li>
 </ul>
 <h3 id=泛型>泛型</h3>
 <h3 id=反射>反射</h3>
