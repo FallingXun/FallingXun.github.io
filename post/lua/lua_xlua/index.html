@@ -1793,7 +1793,7 @@ CSharp侧
 <li>LuaFunction ： ObjectCheckers.luaFunctionCheck 方法。</li>
 </ul>
 </li>
-<li>如果 ObjectCheckers.checkersMap 中没有对应类型，则需要动态生成。
+<li>如果 ObjectCheckers.checkersMap 中没有对应类型，则需要使用 ObjectCheckers.genChecker 方法动态生成。
 <ul>
 <li>类型type不是抽象类，且是 Delegate 的父类或相同类型（IsAssignableFrom），则检查方法为：
 <ul>
@@ -1875,7 +1875,7 @@ CSharp侧
 <li>LuaFunction ： ObjectCasters.getLuaFunction 方法。</li>
 </ul>
 </li>
-<li>如果 ObjectCasters.castersMap 中没有对应类型，则需要动态生成。
+<li>如果 ObjectCasters.castersMap 中没有对应类型，则需要使用 ObjectCasters.genCaster 方法动态生成。
 <ul>
 <li>类型type为 Delegate 的父类或相同类型（IsAssignableFrom），转换方法为：
 <ul>
@@ -1886,6 +1886,56 @@ CSharp侧
 </li>
 <li>如果栈上对象不是 function，则返回null。</li>
 <li>使用 ObjectTranslator.CreateDelegateBridge 创建委托对象返回。</li>
+</ul>
+</li>
+<li>类型type为 DelegateBridgeBase 的父类或相同类型（IsAssignableFrom），转换方法为：
+<ul>
+<li>使用 fixTypeGetter 转换，如果转换对象不为null，则返回对象。</li>
+<li>如果栈上对象不是 function，则返回null。</li>
+<li>使用 ObjectTranslator.CreateDelegateBridge 创建委托对象返回。</li>
+</ul>
+</li>
+<li>类型type为接口，转换方法为：
+<ul>
+<li>使用 fixTypeGetter 转换，如果转换对象不为null，则返回对象。</li>
+<li>如果栈上对象不是 table，则返回null。</li>
+<li>使用 ObjectTranslator.CreateInterfaceBridge 创建委托对象返回。</li>
+</ul>
+</li>
+<li>类型type为枚举，转换方法为：
+<ul>
+<li>使用 fixTypeGetter 转换，如果转换对象不为null，则返回对象。</li>
+<li>如果栈上类型为string，则使用 Enum.Parse 方法转换枚举返回。</li>
+<li>如果栈上类型为number，则将number转成int，使用 Enum.ToObject 方法转换枚举返回。</li>
+<li>如果为其他类型，则抛出异常。</li>
+</ul>
+</li>
+<li>类型type为数组，转换方法为：
+<ul>
+<li>使用 fixTypeGetter 转换，如果转换对象不为null，则返回对象。</li>
+<li>如果栈上对象不是 table，则返回null。</li>
+<li>创建对应的数组Array，并将值设置到Array中，返回Array对象。</li>
+</ul>
+</li>
+<li>类型type为List<t>，转换方法为：
+<ul>
+<li>使用 fixTypeGetter 转换，如果转换对象不为null，则返回对象。</li>
+<li>如果栈上对象不是 table，则返回null。</li>
+<li>创建对应类型的List，并将值设置到List中，返回List对象。</li>
+</ul>
+</li>
+<li>类型type为Dictionary&lt;TKey,TValue>，转换类型为：
+<ul>
+<li>使用 fixTypeGetter 转换，如果转换对象不为null，则返回对象。</li>
+<li>如果栈上对象不是 table，则返回null。</li>
+<li>创建对应类型的Dictionary，并将值设置到Dictionary中，返回Dictionary对象。</li>
+</ul>
+</li>
+<li>类型type为默认构造函数的class，或非枚举的值类型，转换方法为：
+<ul>
+<li>使用 fixTypeGetter 转换，如果转换对象不为null，则返回对象。</li>
+<li>如果栈上对象不是 table，则返回null。</li>
+<li>反射创建对应类型的对象，并根据target设置变量值，返回对象。</li>
 </ul>
 </li>
 </ul>
@@ -2397,8 +2447,25 @@ CSharp侧
 </li>
 </ul>
 <h3 id=泛型>泛型</h3>
+<ul>
+<li>CSharp侧调用Lua侧方法时，LuaFunction提供了两种方法，可简化CSharp侧的调用方式，且不会产生GC。
+<ul>
+<li>无返回值：Action，支持2个参数以内的泛型调用。</li>
+<li>一个返回值（泛型TResult）：Func，支持2个参数以内的泛型调用。</li>
+</ul>
+</li>
+<li>LuaFunction声明为partial，如果需要其他参数个数类型的方法，可以自行添加。</li>
+<li>Lua侧调用CSharp的泛型方法，此方法需要带泛型类型的参数，并且泛型类型需要限定为class。</li>
+</ul>
 <h3 id=反射>反射</h3>
+<ul>
+<li>前面提到，CSharp侧的类注册的时候，如果没有提前生成wrap脚本，则都会通过反射进行创建。</li>
+<li>反射占据了xlua框架的很大一部分，为了降低反射带来的性能问题，反射后的对象都会进行缓存，避免多次反射。</li>
+</ul>
 <h3 id=64位整型>64位整型</h3>
+<ul>
+<li>初始化流程中，调用了lua侧的 luaopen_i64lib 方法，进行64位整型库的加载，初始化完成后如下：</li>
+</ul>
 <pre tabindex=0><code>    _G = {
         uint64 = {
             tostring = i64lib.c的 uint64_tostring 方法
@@ -2412,7 +2479,7 @@ CSharp侧
     -10000（即 LUA_REGISTRYINDEX） = {
         ...
 
-        -- 5.1.5版本才有
+        -- 5.1 版本才有
         8（即 INT64_META_REF） = {
             __add = i64lib.c的 int64_add 方法
             __sub = i64lib.c的 int64_sub 方法
@@ -2429,9 +2496,187 @@ CSharp侧
         }
 
     }
-</code></pre><h3 id=协程>协程</h3>
+</code></pre><ul>
+<li>可以看到，如果是lua 5.1版本，会在 LUA_REGISTRYINDEX 表中创建一个 INT64_META_REF 表，并添加各种计算方法。由于xlua支持多个lua版本，可根据需要选择不同的lua版本库。而对于不同的lua版本，对64位整型的支持方法不一样。</li>
+<li>lua 5.1 版本，lua侧的所有数字都使用double类型，即int、float都用number（double类型）表示。因此，对于int64、uint64，则不能正常使用number表示，在lua侧使用 Integer64* 的userdata表示。Integer64* 的结构如下：</li>
+</ul>
+<pre tabindex=0><code>enum IntegerType {
+	Int,    // 64位整型
+	UInt,   // 64位无符号整型
+	Num     // 其他number
+};
+
+typedef struct {
+	int fake_id;    // 标识，如果有使用则设为-1
+	int8_t type;    // 类型，使用 IntegerType 枚举
+    union {
+		int64_t i64;    // int64的数据
+		uint64_t u64;   // uint64的数据
+	} data;
+} Integer64;
+</code></pre><ul>
+<li>创建userdata后，会将userdata的metatable设置为 LUA_REGISTRYINDEX 表中的 INT64_META_REF 表，对64位整型进行计算的时候，则调用metatable中的元方法进行计算。</li>
+<li>lua 5.3版本后，lua增加了int64的支持，则不需要使用userdata进行处理，因此lua 5.3版本不再需要创建 INT64_META_REF 表。</li>
+</ul>
+<h3 id=协程>协程</h3>
+<ul>
+<li>由于xlua存在热修复功能，所以协程需要兼容CSharp侧的协程，不能直接使用lua侧的原生协程，需要进行封装。</li>
+<li>当我们在lua侧开启一个Unity协程时，大致代码为：</li>
+</ul>
+<pre tabindex=0><code>-- coroutine_test.lua
+...
+
+local cs_coroutine = (require 'cs_coroutine')
+
+cs_coroutine.start(function()
+    print('stop coroutine a after 5 seconds')
+	coroutine.yield(CS.UnityEngine.WaitForSeconds(5))
+	cs_coroutine.stop(a)
+    print('coroutine a stoped')
+end)
+</code></pre><ul>
+<li>可以看到，开启协程的方法为调用 cs_coroutine.start 方法，传入协程执行的方法。cs_coroutine 的代码如下：</li>
+</ul>
+<pre tabindex=0><code>-- cs_coroutine.lua
+
+local util = require 'xlua.util'
+
+local gameobject = CS.UnityEngine.GameObject('Coroutine_Runner')
+CS.UnityEngine.Object.DontDestroyOnLoad(gameobject)
+local cs_coroutine_runner = gameobject:AddComponent(typeof(CS.XLuaTest.Coroutine_Runner))
+
+return {
+    start = function(...)
+	    return cs_coroutine_runner:StartCoroutine(util.cs_generator(...))
+	end;
+
+	stop = function(coroutine)
+	    cs_coroutine_runner:StopCoroutine(coroutine)
+	end
+}
+</code></pre><ul>
+<li>cs_coroutine.start 方法，获取了一个CSharp侧的Monobehaviour对象，并调起 StartCoroutine 方法开启协程。传入的方法由 util.cs_generator 创建，即将 cs_coroutine_test 中传入的方法传入 util.cs_generator 进行构建。util.cs_generator 的代码如下：</li>
+</ul>
+<pre tabindex=0><code>-- util.lua
+...
+
+local unpack = unpack or table.unpack
+
+...
+
+local move_end = {}
+
+local generator_mt = {
+    __index = {
+        MoveNext = function(self)
+            self.Current = self.co()
+            if self.Current == move_end then
+                self.Current = nil
+                return false
+            else
+                return true
+            end
+        end;
+        Reset = function(self)
+            self.co = coroutine.wrap(self.w_func)
+        end
+    }
+}
+
+local function cs_generator(func, ...)
+    local params = {...}
+    local generator = setmetatable({
+        w_func = function()
+            func(unpack(params))
+            return move_end
+        end
+    }, generator_mt)
+    generator:Reset()
+    return generator
+end
+
+</code></pre><ul>
+<li>cs_generator 方法，创建了一个table，对table进行设置：
+<ul>
+<li>设置 w_func 的值为一个function，对传入的func进行了包装，即执行 coroutine_test 传入的方法，并最后返回 move_end。</li>
+<li>设置table的metatable为 generator_mt 表，generator_mt 表实现了 MoveNext 、Reset方法。</li>
+<li>执行table的Reset方法，即将 w_func 使用 coroutine.wrap 创建协程。</li>
+</ul>
+</li>
+<li>创建完成后，要将创建完成的对象传到CSharp侧开启协程，StartCoroutine 方法的实现为：</li>
+</ul>
+<pre tabindex=0><code>        // UnityEngine_MonoBehaviourWrap.cs
+        ...
+        [MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]
+        static int _m_StartCoroutine(RealStatePtr L)
+        {
+		    try {
+            
+                ObjectTranslator translator = ObjectTranslatorPool.Instance.Find(L);
+            
+            
+                UnityEngine.MonoBehaviour gen_to_be_invoked = (UnityEngine.MonoBehaviour)translator.FastGetCSObj(L, 1);
+            
+            
+			    int gen_param_count = LuaAPI.lua_gettop(L);
+            
+                if(gen_param_count == 2&amp;&amp; (LuaAPI.lua_isnil(L, 2) || LuaAPI.lua_type(L, 2) == LuaTypes.LUA_TSTRING)) 
+                {
+                    string _methodName = LuaAPI.lua_tostring(L, 2);
+                    
+                        var gen_ret = gen_to_be_invoked.StartCoroutine( _methodName );
+                        translator.Push(L, gen_ret);
+                    
+                    
+                    
+                    return 1;
+                }
+                if(gen_param_count == 2&amp;&amp; translator.Assignable&lt;System.Collections.IEnumerator&gt;(L, 2)) 
+                {
+                    System.Collections.IEnumerator _routine = (System.Collections.IEnumerator)translator.GetObject(L, 2, typeof(System.Collections.IEnumerator));
+                    
+                        var gen_ret = gen_to_be_invoked.StartCoroutine( _routine );
+                        translator.Push(L, gen_ret);
+                    
+                    
+                    
+                    return 1;
+                }
+                if(gen_param_count == 3&amp;&amp; (LuaAPI.lua_isnil(L, 2) || LuaAPI.lua_type(L, 2) == LuaTypes.LUA_TSTRING)&amp;&amp; translator.Assignable&lt;object&gt;(L, 3)) 
+                {
+                    string _methodName = LuaAPI.lua_tostring(L, 2);
+                    object _value = translator.GetObject(L, 3, typeof(object));
+                    
+                        var gen_ret = gen_to_be_invoked.StartCoroutine( _methodName, _value );
+                        translator.Push(L, gen_ret);
+                    
+                    
+                    
+                    return 1;
+                }
+                
+            } catch(System.Exception gen_e) {
+                return LuaAPI.luaL_error(L, &quot;c# exception:&quot; + gen_e);
+            }
+            
+            return LuaAPI.luaL_error(L, &quot;invalid arguments to UnityEngine.MonoBehaviour.StartCoroutine!&quot;);
+            
+        }
+</code></pre><ul>
+<li>可以看出，CSharp侧需要使用 translator.Assignable&lt;System.Collections.IEnumerator> 方法进行类型检查，即最终会通过 ObjectCasters.genChecker 方法创建检查器。根据前面提到的，由于类型为接口类型，所以检查的条件为：
+<ul>
+<li>栈上对象为 nil，返回true。</li>
+<li>栈上对象为 table，返回true。</li>
+<li>调用 fixTypeCheck 的检查方法。</li>
+</ul>
+</li>
+<li>而我们通过 cs_generator 方法创建的是一个table对象，所以会通过 ObjectCasters.genChecker 方法的检查，并通过 ObjectCasters.genCaster 方法创建对象，即最后会创建 SystemCollectionsIEnumeratorBridge 对象，继承 System.Collections.IEnumerator 接口，提供给 StartCoroutine 方法执行。</li>
+<li>协程执行的时候，遇到yield会挂起，等到条件满足后，执行CSharp侧的 MoveNext 方法。此时会调用lua侧的 MoveNext 方法，调用 self.co() （由于协程是以 coroutine.wrap 创建的，直接执行协程方法相当于 coroutine.resume 方法）赋值给 Current 启动协程，继续执行后续逻辑，直到 Current 为 move_end，即协程结束。</li>
+</ul>
 <h3 id=接口interface>接口（Interface）</h3>
-<h3 id=热修复>热修复</h3>
+<ul>
+<li></li>
+</ul>
 <h3 id=生成工具>生成工具</h3>
 <ul>
 <li>（待补充）</li>
