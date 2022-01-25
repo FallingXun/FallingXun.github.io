@@ -1376,6 +1376,7 @@ public class TestInject : MonoBehaviour
 }
 </code></pre><ul>
 <li>可以看到，经过Inject后，会对方法的逻辑进行修改，根据index获取修复类型，根据修复类型获取对应方法，再根据修复类型确定是替换还是插入执行。</li>
+<li>对于一些私有的变量、方法等，如果没有提前生成Wrap文件，就需要使用反射获取。</li>
 </ul>
 <h4 id=初始化-1>初始化</h4>
 <ul>
