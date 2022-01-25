@@ -277,7 +277,7 @@ post-container">
 </ul>
 <h4 id=初始化lua环境>初始化lua环境</h4>
 <ul>
-<li>执行 init_xlua 脚本，对lua环境进行初始化：
+<li>执行 Lua.Env.init_xlua 脚本，对lua环境进行初始化：
 <ul>
 <li>创建 CS 表，设置metatable方法：
 <ul>
@@ -2732,10 +2732,196 @@ end
 </li>
 </ul>
 <h3 id=热修复>热修复</h3>
+<ul>
+<li>热修复是xlua最初设计的目的，为了解决用CSharp开发的项目线上无法修复bug，只能换包的问题。前面提到，LuaEnv.init_xlua 中，初始化了热更功能代码。</li>
+</ul>
+<pre tabindex=0><code>-- CSharp中的LuaEnv.init_xlua
+...
+xlua.hotfix = function(cs, field, func)
+    if func == nil then func = false end
+    local tbl = (type(field) == 'table') and field or {[field] = func}
+    for k, v in pairs(tbl) do
+        local cflag = ''
+        if k == '.ctor' then
+            cflag = '_c'
+            k = 'ctor'
+        end
+        xlua.access(cs, cflag .. '__Hotfix0_'..k, f) -- at least one
+        local f = type(v) == 'function' and v or nil
+        pcall(function()
+            for i = 1, 99 do
+                xlua.access(cs, cflag .. '__Hotfix'..i..'_'..k, f)
+            end
+        end)
+    end
+    xlua.private_accessible(cs)
+end
+</code></pre><ul>
+<li>xlua.hotfix 方法，即热修复的入口，参数含义为：
+<ul>
+<li>cs
+<ul>
+<li>CSharp类，两种表示方法，CS.Namespace.TypeName或者字符串方式"Namespace.TypeName&rdquo;，字符串格式和CSharp的Type.GetType要求一致，如果是内嵌类型（Nested Type）是非Public类型的话，只能用字符串方式表示"Namespace.TypeName+NestedTypeName"。</li>
+</ul>
+</li>
+<li>field
+<ul>
+<li>如果传的是table，则表示对应CSharp类的一组方法的替换。</li>
+<li>如果传的是string，则表示对CSharp类的某个方法的替换。</li>
+</ul>
+</li>
+<li>func
+<ul>
+<li>如果field传的是string，func为对应要替换的方法。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>热修复启动的流程为：
+<ul>
+<li>获取需要修复的table。</li>
+<li>遍历整个table，调用 xlua.access 方法，将对应的方法设置到对应变量名上（方法类型为 BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static）。
+<ul>
+<li>如果方法名为 .ctor ，即构造函数，变量名为 _c__Hotfix0_ctor 。</li>
+<li>其他方法名，变量名为 __Hotfix + 同名函数索引（从0开始）_方法名，如 __Hotfix1_Start 。（这里会尝试检查索引1~99的同名方法，如果同名方法超过100个，则无法进行修复）</li>
+</ul>
+</li>
+<li>调用 xlua.private_accessible 方法，将CSharp类及其父类的私有对象变成可访问的（即调用 makeReflectionWrap 方法，使用 BindingFlags.NonPublic 类型进行反射注册）。</li>
+</ul>
+</li>
+<li>而对应的CSharp侧变量，则是通过修改 &ldquo;./Library/ScriptAssemblies/Assembly-CSharp.dll&rdquo; 程序集，注入IL代码。</li>
+<li>注入前代码示例为：</li>
+</ul>
+<pre tabindex=0><code>public class TestHotfix 
+{
+    public TestHotfix()
+    {
+
+    }
+
+    private int index = 0;
+
+    void Call()
+    {
+        Debug.Log(&quot;Call&quot;);
+    }
+
+    void Call(int i)
+    {
+        Debug.Log(&quot;Call &quot; + i);
+    }
+
+    int Get()
+    {
+        return index;
+    }
+}
+</code></pre><ul>
+<li>注入后大致如下：</li>
+</ul>
+<pre tabindex=0><code>// Token: 0x02000004 RID: 4
+[Hotfix(HotfixFlag.Stateless)]
+public class TestHotfix
+{
+	// Token: 0x0600000E RID: 14 RVA: 0x00002350 File Offset: 0x00000550
+	public TestHotfix()
+	{
+		DelegateBridge c__Hotfix0_ctor = TestHotfix._c__Hotfix0_ctor;
+		if (c__Hotfix0_ctor != null)
+		{
+			c__Hotfix0_ctor.__Gen_Delegate_Imp14(this);
+		}
+	}
+
+	// Token: 0x0600000F RID: 15 RVA: 0x00002388 File Offset: 0x00000588
+	private void Call()
+	{
+		DelegateBridge _Hotfix0_Call = TestHotfix.__Hotfix0_Call;
+		if (_Hotfix0_Call != null)
+		{
+			_Hotfix0_Call.__Gen_Delegate_Imp14(this);
+			return;
+		}
+		Debug.Log(&quot;Call&quot;);
+	}
+
+	// Token: 0x06000010 RID: 16 RVA: 0x000023C0 File Offset: 0x000005C0
+	private void Call(int i)
+	{
+		DelegateBridge _Hotfix1_Call = TestHotfix.__Hotfix1_Call;
+		if (_Hotfix1_Call != null)
+		{
+			_Hotfix1_Call.__Gen_Delegate_Imp19(this, i);
+			return;
+		}
+		Debug.Log(&quot;Call &quot; + i.ToString());
+	}
+
+	// Token: 0x06000011 RID: 17 RVA: 0x00002404 File Offset: 0x00000604
+	private int Get()
+	{
+		DelegateBridge _Hotfix0_Get = TestHotfix.__Hotfix0_Get;
+		if (_Hotfix0_Get != null)
+		{
+			return _Hotfix0_Get.__Gen_Delegate_Imp24(this);
+		}
+		return this.index;
+	}
+
+	// Token: 0x04000006 RID: 6
+	private int index = 0;
+
+	// Token: 0x04000007 RID: 7
+	private static DelegateBridge _c__Hotfix0_ctor;
+
+	// Token: 0x04000008 RID: 8
+	private static DelegateBridge __Hotfix0_Call;
+
+	// Token: 0x04000009 RID: 9
+	private static DelegateBridge __Hotfix1_Call;
+
+	// Token: 0x0400000A RID: 10
+	private static DelegateBridge __Hotfix0_Get;
+}
+</code></pre><ul>
+<li>使用IL注入代码后，会创建对应的 DelegateBridge 变量，lua侧调用 xlua.access 方法，将lua侧的方法创建 DelegateBridge 对象，赋值到CSharp侧对应的 DelegateBridge 变量上。执行方法前会先检查 DelegateBridge 对象是否为空，不为空则执行 DelegateBridge 的委托方法，即实现热修复功能。如果为空，表示不需要进行修复，继续执行CSharp侧原有的逻辑。</li>
+<li>由于 xlua.hotfix 方法只能替换原有CSharp侧的方法，有时候我们只需要增加一些执行逻辑，就不得不把CSharp侧的方法整个重新在lua侧重新实现，所以xlua又提供了另一个方法 util.hotfix_ex 方法，可以在修复方法中调用原有方法。util.hotfix_ex 的代码为：</li>
+</ul>
+<pre tabindex=0><code>-- util.lua
+...
+local function hotfix_ex(cs, field, func)
+    assert(type(field) == 'string' and type(func) == 'function', 'invalid argument: #2 string needed, #3 function needed!')
+    local function func_after(...)
+        xlua.hotfix(cs, field, nil)
+        local ret = {func(...)}
+        xlua.hotfix(cs, field, func_after)
+        return unpack(ret)
+    end
+    xlua.hotfix(cs, field, func_after)
+end
+</code></pre><ul>
+<li>当使用 util.hotfix_ex 方法时，实现流程为：
+<ul>
+<li>将CSharp类对应的方法，替换为 func_after 方法。</li>
+<li>当执行 func_after 方法时，会将CSharp类对应的方法先替换为nil，即取消CSharp侧的方法修改。</li>
+<li>执行 hotfix_ex 传入的需要替代的lua侧方法，将结果存到table中。</li>
+<li>再将CSharp类对应的方法，重新替换为 func_after 方法。</li>
+</ul>
+</li>
+<li>因此，当执行我们替换的lua侧方法时，如果我们在其中调用CSharp侧的原有方法，由于在执行lua方法前已经移除CSharp侧的替换方法，因此会按原有方法的逻辑执行，即不需要在lua侧重写CSharp方法。</li>
+<li>注意：由于每次执行 xlua.hotfix 方法，对需要替换的每个方法都要进行100次 xlua.access 方法，尝试使用反射修改CSharp侧重载函数。而使用 util.hotfix_ex 方法替换的lua侧方法，每次执行都要进行两次 xlua.hotfix ，所以效率会比较低。</li>
+</ul>
 <h3 id=生成工具>生成工具</h3>
 <ul>
 <li>（待补充）</li>
-<li></li>
+</ul>
+<h2 id=总结>总结</h2>
+<ul>
+<li>xLua使用起来相对比较简单，相关的文档也比较齐全，对初次使用的用户相对比较友好，容易上手。</li>
+<li>通过反射机制，提供了一套运行时动态注册CSharp侧类的方式，为使用者提供了很大的便利。对于CSharp代码占比较多的项目，也可以不用全都预生成Wrap文件，减小IL2CPP模式时的包体大小。</li>
+<li>由于所有的CSharp类都使用懒加载的模式，即使用的时候才进行注册，也避免了需要一开始注册大量CSharp类而引起的问题。</li>
+<li>委托和接口类型，还是需要提前生成，CSharp代码比较多的项目，容易出现遗漏，等到线上才发现，所以需要重点关注。</li>
+<li>由于大量使用反射，带来便利的同时，有些地方不可避免会出现装拆箱的问题，对于性能要求较高的可选择预生成代码方式解决。</li>
 </ul>
 <hr>
 <ul class=pager>
