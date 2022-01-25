@@ -1899,7 +1899,7 @@ CSharp侧
 <ul>
 <li>使用 fixTypeGetter 转换，如果转换对象不为null，则返回对象。</li>
 <li>如果栈上对象不是 table，则返回null。</li>
-<li>使用 ObjectTranslator.CreateInterfaceBridge 创建委托对象返回。</li>
+<li>使用 ObjectTranslator.CreateInterfaceBridge 创建对象返回。</li>
 </ul>
 </li>
 <li>类型type为枚举，转换方法为：
@@ -2675,8 +2675,63 @@ end
 </ul>
 <h3 id=接口interface>接口（Interface）</h3>
 <ul>
-<li></li>
+<li>通过 ObjectCasters.genCaster 方法创建对象时，如果对象为接口，使用 fixTypeGetter 转换为null，且栈上对象是 table，则使用 ObjectTranslator.CreateInterfaceBridge 创建对象返回。 ObjectTranslator.CreateInterfaceBridge 的方法如下：</li>
 </ul>
+<pre tabindex=0><code>        // ObjectTranslator.cs
+        ...
+		public object CreateInterfaceBridge(RealStatePtr L, Type interfaceType, int idx)
+        {
+            Func&lt;int, LuaEnv, LuaBase&gt; creator;
+            
+            if (!interfaceBridgeCreators.TryGetValue(interfaceType, out creator))
+            {
+#if (UNITY_EDITOR || XLUA_GENERAL) &amp;&amp; !NET_STANDARD_2_0
+                var bridgeType = ce.EmitInterfaceImpl(interfaceType);
+                creator = (int reference, LuaEnv luaenv) =&gt;
+                {
+                    return Activator.CreateInstance(bridgeType, new object[] { reference, luaEnv }) as LuaBase;
+                };
+                interfaceBridgeCreators.Add(interfaceType, creator);
+#else
+                throw new InvalidCastException(&quot;This type must add to CSharpCallLua: &quot; + interfaceType);
+#endif
+            }
+            LuaAPI.lua_pushvalue(L, idx);
+            return creator(LuaAPI.luaL_ref(L), luaEnv);
+        }
+</code></pre><ul>
+<li>ObjectTranslator.interfaceBridgeCreators 为接口对象的创建方法字典，注册的方式有两种：
+<ul>
+<li>使用 [CSharpCallLua] 配置接口，使用工具生成 Bridge 脚本。在 XLua_Gen_Initer_Register__.Init 方法中，使用 ObjectTranslator.AddInterfaceBridgeCreator 注册。
+<ul>
+<li>reference 为栈上对象在 LUA_REGISTRYINDEX 表中的引用。</li>
+</ul>
+</li>
+<li>使用 System.Reflection.Emit 动态生成。（<strong>Unity使用的.NET Standard 2.0不支持，因此如果使用.NET Standard 2.0的，接口需要预生成代码</strong>）</li>
+</ul>
+</li>
+<li>工具生成的接口对象类的相关信息为：
+<ul>
+<li>命名为 XXXBridge，即接口名+Bridge，继承 LuaBase 和对应接口。</li>
+<li>__Create：静态方法，创建一个 XXXBridge 对象，以 LuaBase 类型返回。</li>
+<li>接口的各个方法转Lua侧实现，具体流程为：
+<ul>
+<li>获取 LUA_REGISTRYINDEX 表中的 luaEnv.errorFuncRef 对应的对象，入栈。</li>
+<li>获取 LUA_REGISTRYINDEX 表中的 reference 对应的对象，入栈。</li>
+<li>将接口名字符串入栈。</li>
+<li>调用lua侧的 xlua_pgettable 方法，尝试获取接口名对应的方法，成功则入栈。</li>
+<li>检查栈顶的对象是否为function，不是则抛异常。</li>
+<li>将 reference 对应的对象入栈，将原有的栈的对象移除。</li>
+<li>将接口需要的参数入栈。</li>
+<li>调用lua侧的 lua_pcall 方法，安全调用接口方法。</li>
+<li>还原栈顶数据。</li>
+</ul>
+</li>
+<li>XXXBridge 对象，创建时调用lua侧的 luaL_ref 方法，对栈上的table增加一次引用。由于XXXBridge 对象继承 LuaBase，因此释放的时候对应会执行一次lua侧的 lua_unref 方法，减少一次引用，保证table引用次数正确，能够正常移除。</li>
+</ul>
+</li>
+</ul>
+<h3 id=热修复>热修复</h3>
 <h3 id=生成工具>生成工具</h3>
 <ul>
 <li>（待补充）</li>
