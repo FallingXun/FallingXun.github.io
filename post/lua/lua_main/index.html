@@ -91,6 +91,360 @@ col-md-10 col-md-offset-1
 post-container">
 <p>随着游戏行业的发展，热更已经成为游戏开发不可或缺的功能。热更有很多方案，lua热更是使用较广泛，也相对稳定的方案。因此，需要对lua有一定程度的了解，对于lua热更框架才能理解得更加透彻。</p>
 <h3 id=简介>简介</h3>
+<ul>
+<li>lua是一种弱语言类型，可在运行时加载执行，不需要提前编译，所以在游戏开发中，常用来实现线上修复更新，下面会介绍一些lua中常用的概念。（参考 <a href=http://cloudwu.github.io/lua53doc/manual.html#lua_call>http://cloudwu.github.io/lua53doc/manual.html#lua_call</a>）</li>
+</ul>
+<h3 id=值与类型>值与类型</h3>
+<ul>
+<li>Lua 中有八种基本类型： nil、boolean、number、string、function、userdata、 thread 和 table。
+<ul>
+<li>number：包括整数和浮点数。</li>
+<li>userdata：将 C 中的数据保存在 Lua 变量中，用户数据类型的值是一个内存块，有两种用户数据：
+<ul>
+<li>fulluserdata：完全用户数据 ，指一块由 Lua 管理的内存对应的对象。</li>
+<li>lightuserdata：轻量用户数据 ，一个简单的 C 指针，需要用户自行管理内存。</li>
+</ul>
+</li>
+<li>table：表内可以包含任何类型的值（nil 除外）。 任何键的值若为 nil 就不会被记入表结构内部。 换言之，对于表内不存在的键，都对应着值 nil 。</li>
+</ul>
+</li>
+</ul>
+<h3 id=环境与全局环境>环境与全局环境</h3>
+<ul>
+<li>每个被编译的 Lua 代码块都会有一个外部的局部变量叫 _ENV ，_ENV 这个名字永远都不会成为一个代码块中的自由名字。被 _ENV 用于值的那张表被称为 环境。</li>
+<li>Lua 保有一个被称为 全局环境 特别环境。它被保存在 C 注册表 （LUA_REGISTRYINDEX）的一个特别索引下。 在 Lua 中，全局变量 _G 被初始化为这个值。 （_G 不被内部任何地方使用。）</li>
+<li>当 Lua 加载一个代码块，_ENV 这个 upvalue 的默认值就是这个全局环境。</li>
+</ul>
+<h3 id=错误处理>错误处理</h3>
+<ul>
+<li>Lua 代码中调用 error 函数可以显式地抛出一个错误。</li>
+<li>如果你需要在 Lua 中捕获这些错误，可以使用 pcall 或 xpcall 在保护模式下调用一个函数。</li>
+</ul>
+<h3 id=元表及元方法>元表及元方法</h3>
+<ul>
+<li>
+<p>Lua 中的每个值都可以有一个元表。 这个元表就是一个普通的 Lua 表， 它用于定义原始值在特定操作下的行为。</p>
+</li>
+<li>
+<p>用 getmetatable 函数来获取任何值的元表，用 setmetatable 来设置一张表的元表。</p>
+</li>
+<li>
+<p>元方法，即元表中以"__&ldquo;作为前缀的方法，元表中常用的元方法有：</p>
+<ul>
+<li><strong>__index</strong>
+<ul>
+<li>查找 table[key] 的值，当 table 不是表或是表 table 中不存在 key 这个键时，会触发这个元方法。这个元方法可以是一个函数也可以是一张表，如果它是一个函数，则以 table 和 key 作为参数调用它。如果它是一张表，最终的结果就是以 key 取索引这张表的结果。</li>
+</ul>
+</li>
+<li><strong>__newindex</strong>
+<ul>
+<li>设置 table[key] = value，，当 table 不是表或是表 table 中不存在 key 这个键时，会触发这个元方法。这个元方法可以是一个函数也可以是一张表，如果是一个函数，则以 table、 key、以及 value 为参数传入。如果是一张表，Lua 对这张表做索引赋值操作。</li>
+</ul>
+</li>
+<li><strong>__call</strong>
+<ul>
+<li>函数调用操作 func(args)。当 Lua 尝试调用一个非函数的值的时候会触发这个事件（即 func 不是一个函数）。查找 func 的元方法，如果找得到，就调用这个元方法，func 作为第一个参数传入原来调用的参数（args）后依次排在后面。</li>
+</ul>
+</li>
+<li><strong>__gc</strong>
+<ul>
+<li>垃圾收集的元方法，被称为终结器。当一个被标记的对象成为了垃圾后，垃圾收集器并不会立刻回收它。取而代之的是，Lua 会将其置入一个链表。在收集完成后，Lua 将遍历这个链表。Lua 会检查每个链表中的对象的 __gc 元方法，如果是一个函数，那么就以对象为唯一参数调用它，否则直接忽略它。</li>
+</ul>
+</li>
+</ul>
+<h3 id=垃圾收集>垃圾收集</h3>
+<ul>
+<li>Lua 采用了自动内存管理。 Lua 运行了一个垃圾收集器来收集所有死对象（即在 Lua 中不可能再访问到的对象）来完成自动内存管理的工作。Lua 中所有用到的内存，如：字符串、表、用户数据、函数、线程、内部结构等，都服从自动管理。</li>
+<li>Lua 实现了一个增量标记-扫描收集器。它使用这两个数字来控制垃圾收集循环（使用百分数为单位，例如：值 100 在内部表示 1 ）：</li>
+<li>垃圾收集器间歇率：
+<ul>
+<li>控制着收集器需要在开启新的循环前要等待多久。增大这个值会减少收集器的积极性。当这个值比 100 小的时候，收集器在开启新的循环前不会有等待。设置这个值为 200 就会让收集器等到总内存使用量达到之前的两倍时才开始新的循环。</li>
+<li>使用 collectgarbage(&ldquo;setpause&rdquo;) 设置。</li>
+</ul>
+</li>
+<li>垃圾收集器步进倍率：
+<ul>
+<li>控制着收集器运作速度相对于内存分配速度的倍率。增大这个值不仅会让收集器更加积极，还会增加每个增量步骤的长度。不要把这个值设得小于 100 ，那样的话收集器就工作的太慢了以至于永远都干不完一个循环。默认值是 200 ，这表示收集器以内存分配的"两倍"速工作。</li>
+<li>使用 collectgarbage(&ldquo;setstepmul&rdquo;) 设置。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h3 id=弱表>弱表</h3>
+<ul>
+<li>弱表指内部元素为弱引用的表。垃圾收集器会忽略掉弱引用。换句话说，如果一个对象只被弱引用引用到，垃圾收集器就会回收这个对象。</li>
+<li>一张弱表可以有弱键或是弱值，也可以键值都是弱引用。含有弱值的表允许收集器回收它的值，但会阻止收集器回收它的键。若一张表的键值均为弱引用，那么收集器可以回收其中的任意键和值。</li>
+<li>任何情况下，只要键或值的任意一项被回收， 相关联的键值对都会从表中移除。</li>
+<li>一张表的元表中的 __mode 域控制着这张表的弱属性。
+<ul>
+<li>当 __mode = &lsquo;k&rsquo; 时，这张表的所有键皆为弱引用。</li>
+<li>当 __mode = &lsquo;v&rsquo; 时，这张表的所有值皆为弱引用。</li>
+</ul>
+</li>
+<li>属性为弱键强值的表也被称为暂时表。对于一张暂时表，它的值是否可达仅取决于其对应键是否可达。特别注意，如果表内的一个键仅仅被其值所关联引用，这个键值对将被表内移除。</li>
+</ul>
+<h3 id=协程>协程</h3>
+<ul>
+<li>coroutine.create
+<ul>
+<li>可创建一个协程。其唯一的参数是该协程的主函数。 create 函数只负责新建一个协程并返回其句柄（一个 thread 类型的对象），而不会启动该协程。</li>
+</ul>
+</li>
+<li>coroutine.resume
+<ul>
+<li>执行一个协程。第一次调用 coroutine.resume 时，第一个参数应传入 coroutine.create 返回的线程对象，然后协程从其主函数的第一行开始执行。传递给 coroutine.resume 的其他参数将作为协程主函数的参数传入。协程启动之后，将一直运行到它终止或让出。</li>
+</ul>
+</li>
+<li>coroutine.yield
+<ul>
+<li>使协程暂停执行，让出执行权。协程让出时，对应的最近 coroutine.resume 函数会立刻返回，即使该让出操作发生在内嵌函数调用中（即不在主函数，但在主函数直接或间接调用的函数内部）。在协程让出的情况下， coroutine.resume 也会返回 true，并加上传给 coroutine.yield 的参数。当下次重启同一个协程时，协程会接着从让出点继续执行。此时，此前让出点处对 coroutine.yield 的调用会返回，返回值为传给 coroutine.resume 的第一个参数之外的其他参数。</li>
+</ul>
+</li>
+<li>coroutine.wrap
+<ul>
+<li>与 coroutine.create 类似，创建一个协程。不同之处在于，它不返回协程本身，而是返回一个函数。调用这个函数将启动该协程。传递给该函数的任何参数均当作 coroutine.resume 的额外参数。 coroutine.wrap 返回 coroutine.resume 的所有返回值，除了第一个返回值（bool的错误码）。和 coroutine.resume 不同， coroutine.wrap 不会捕获错误，而是将任何错误都传播给调用者。</li>
+</ul>
+</li>
+</ul>
+<h3 id=闭包>闭包</h3>
+<ul>
+<li>当 C 函数被创建出来，我们有可能会把一些值关联在一起，也就是创建一个 C 闭包（参见 lua_pushcclosure）。 这些被关联起来的值被叫做 upvalue，它们可以在函数被调用的时候访问的到。</li>
+<li>无论何时去调用 C 函数，函数的 upvalue 都可以用伪索引定位。可以用 lua_upvalueindex 这个宏来生成这些伪索引。第一个关联到函数的值放在 lua_upvalueindex(1) 位置处，依此类推。使用 lua_upvalueindex(n) 时，若 n 大于当前函数的总 upvalue 个数（但不可以大于 256）会产生一个可接受的但无效的索引。</li>
+</ul>
+<h3 id=注册表>注册表</h3>
+<ul>
+<li>Lua 提供了一个注册表，这是一个预定义出来的表，可以用来保存任何C代码想保存的Lua值，即 LUA_REGISTRYINDEX 。</li>
+<li>注册表中的整数键用于引用机制（参见 luaL_ref），以及一些预定义的值。因此，整数键不要用于别的目的。</li>
+<li>当创建了一个新的 Lua 状态机， 其中的注册表内就预定义好了几个值。 这些预定义值可以用整数索引到，这些整数以常数形式定义在 lua.h 中。有下列常数：
+<ul>
+<li>LUA_RIDX_MAINTHREAD: 注册表中这个索引下是状态机的主线程。（主线程和状态机同时被创建出来。）</li>
+<li>LUA_RIDX_GLOBALS: 注册表的这个索引下是全局环境。</li>
+</ul>
+</li>
+</ul>
+<h3 id=栈索引>栈索引</h3>
+<ul>
+<li>Lua 的操作都是在栈上进行，一般方法都会需要传指定索引 index，有两种情况：
+<ul>
+<li>index > 0，表示从栈底数起，第几个位置。</li>
+<li>index &lt; 0，表示从栈顶数起，第几个位置。</li>
+</ul>
+</li>
+</ul>
+<h3 id=常用方法>常用方法</h3>
+<ul>
+<li>lua中的一些常用方法，对于阅读lua框架有一定帮助。</li>
+<li>lua_absindex
+<ul>
+<li>int lua_absindex (lua_State *L, int idx);</li>
+<li>将一个可接受的索引 idx 转换为绝对索引 ，即一个不依赖栈顶在哪的值。</li>
+</ul>
+</li>
+<li>lua_call
+<ul>
+<li>void lua_call (lua_State *L, int nargs, int nresults);</li>
+<li>要调用一个函数请遵循以下协议：
+<ul>
+<li>要调用的函数应该被压入栈。</li>
+<li>把需要传递给这个函数的参数按正序压栈，这是指第一个参数首先压栈。</li>
+<li>调用一下 lua_call，nargs 是你压入栈的参数个数。</li>
+<li>当函数调用完毕后，所有的参数以及函数本身都会出栈，而函数的返回值这时则被压栈。返回值的个数将被调整为 nresults 个，除非 nresults 被设置成 LUA_MULTRET。在这种情况下，所有的返回值都被压入堆栈中。</li>
+<li>Lua 会保证返回值都放入栈空间中。函数返回值将按正序压栈（第一个返回值首先压栈），因此在调用结束后，最后一个返回值将被放在栈顶。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>lua_gc
+<ul>
+<li>int lua_gc (lua_State *L, int what, int data);</li>
+<li>控制垃圾收集器，根据其参数 what 发起几种不同的任务：
+<ul>
+<li>LUA_GCSTOP: 停止垃圾收集器。</li>
+<li>LUA_GCRESTART: 重启垃圾收集器。</li>
+<li>LUA_GCCOLLECT: 发起一次完整的垃圾收集循环。</li>
+<li>LUA_GCCOUNT: 返回 Lua 使用的内存总量（以 K 字节为单位）。</li>
+<li>LUA_GCCOUNTB: 返回当前内存使用量除以 1024 的余数。</li>
+<li>LUA_GCSTEP: 发起一步增量垃圾收集。</li>
+<li>LUA_GCSETPAUSE: 把 data 设为垃圾收集器间歇率，并返回之前设置的值。</li>
+<li>LUA_GCSETSTEPMUL: 把 data 设为垃圾收集器步进倍率，并返回之前设置的值。</li>
+<li>LUA_GCISRUNNING: 返回收集器是否在运行（即没有停止）。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>lua_getglobal
+<ul>
+<li>int lua_getglobal (lua_State *L, const char *name);</li>
+<li>把全局变量 name 里的值压栈，返回该值的类型。</li>
+</ul>
+</li>
+<li>lua_gettable
+<ul>
+<li>int lua_gettable (lua_State *L, int index);</li>
+<li>把 t[k] 的值压栈，这里的 t 是指索引指向的值 而 k 则是栈顶放的值。</li>
+</ul>
+</li>
+<li>lua_gettop
+<ul>
+<li>int lua_gettop (lua_State *L);</li>
+<li>返回栈顶元素的索引。因为索引是从 1 开始编号的，所以这个结果等于栈上的元素个数，0 表示栈为空。</li>
+</ul>
+</li>
+<li>lua_newuserdata
+<ul>
+<li>void *lua_newuserdata (lua_State *L, size_t size);</li>
+<li>这个函数分配一块指定大小的内存块，把内存块地址作为一个完全用户数据压栈，并返回这个地址。宿主程序可以随意使用这块内存。</li>
+</ul>
+</li>
+<li>lua_pop
+<ul>
+<li>void lua_pop (lua_State *L, int n);</li>
+<li>从栈中弹出 n 个元素。</li>
+</ul>
+</li>
+<li>lua_pushboolean
+<ul>
+<li>void lua_pushboolean (lua_State *L, int b);</li>
+<li>把 b 作为一个布尔量压栈。</li>
+</ul>
+</li>
+<li>lua_pushcclosure
+<ul>
+<li>void lua_pushcclosure (lua_State *L, lua_CFunction fn, int n);</li>
+<li>把一个新的 C 闭包压栈。</li>
+</ul>
+</li>
+<li>lua_pushinteger
+<ul>
+<li>void lua_pushinteger (lua_State *L, lua_Integer n);</li>
+<li>把值为 n 的整数压栈。</li>
+</ul>
+</li>
+<li>lua_pushnil
+<ul>
+<li>void lua_pushnil (lua_State *L);</li>
+<li>将空值压栈。</li>
+</ul>
+</li>
+<li>lua_pushnumber
+<ul>
+<li>void lua_pushnumber (lua_State *L, lua_Number n);</li>
+<li>把一个值为 n 的浮点数压栈。</li>
+</ul>
+</li>
+<li>lua_pushstring
+<ul>
+<li>const char *lua_pushstring (lua_State *L, const char *s);</li>
+<li>将指针 s 指向的零结尾的字符串压栈。Lua 对这个字符串做一个内部副本（或是复用一个副本），因此 s 处的内存在函数返回后，可以释放掉或是立刻重用于其它用途。返回内部副本的指针。如果 s 为 NULL，将 nil 压栈并返回 NULL。</li>
+</ul>
+</li>
+<li>lua_pushvalue
+<ul>
+<li>void lua_pushvalue (lua_State *L, int index);</li>
+<li>把栈上给定索引处的元素作一个副本压栈。</li>
+</ul>
+</li>
+<li>lua_setfield
+<ul>
+<li>void lua_setfield (lua_State *L, int index, const char *k);</li>
+<li>做一个等价于 t[k] = v 的操作， 这里 t 是给出的索引处的值， 而 v 是栈顶的那个值。</li>
+<li>这个函数将把这个值弹出栈。跟在 Lua 中一样，这个函数可能触发一个 __newindex 事件的元方法。</li>
+</ul>
+</li>
+<li>lua_setglobal
+<ul>
+<li>void lua_setglobal (lua_State *L, const char *name);</li>
+<li>从堆栈上弹出一个值，并将其设为全局变量 name 的新值。</li>
+</ul>
+</li>
+<li>lua_settable
+<ul>
+<li>void lua_settable (lua_State *L, int index);</li>
+<li>做一个等价于 t[k] = v 的操作，这里 t 是给出的索引处的值， v 是栈顶的那个值， k 是栈顶之下的值。</li>
+<li>这个函数会将键和值都弹出栈。跟在 Lua 中一样，这个函数可能触发一个 __newindex 事件的元方法。</li>
+</ul>
+</li>
+<li>lua_settop
+<ul>
+<li>void lua_settop (lua_State *L, int index);</li>
+<li>参数允许传入任何索引以及 0 。它将把堆栈的栈顶设为这个索引。如果新的栈顶比原来的大，超出部分的新元素将被填为 nil 。如果 index 为 0 ，把栈上所有元素移除。</li>
+</ul>
+</li>
+<li>lua_rawget
+<ul>
+<li>int lua_rawget (lua_State *L, int index);</li>
+<li>类似于 lua_gettable ，但是作一次直接访问（不触发元方法）。</li>
+</ul>
+</li>
+<li>lua_rawgeti
+<ul>
+<li>int lua_rawgeti (lua_State *L, int index, lua_Integer n);</li>
+<li>把 t[n] 的值压栈，这里的 t 是指给定索引处的表。这是一次直接访问，就是说，它不会触发元方法。</li>
+</ul>
+</li>
+<li>lua_rawset
+<ul>
+<li>void lua_rawset (lua_State *L, int index);</li>
+<li>类似于 lua_settable ，但是是做一次直接赋值（不触发元方法）。</li>
+</ul>
+</li>
+<li>lua_rawseti
+<ul>
+<li>void lua_rawseti (lua_State *L, int index, lua_Integer i);</li>
+<li>等价于 t[i] = v ， 这里的 t 是指给定索引处的表， 而 v 是栈顶的值。</li>
+<li>这个函数会将值弹出栈。 赋值是直接的，即不会触发元方法。</li>
+</ul>
+</li>
+<li>lua_type
+<ul>
+<li>int lua_type (lua_State *L, int index);</li>
+<li>返回给定有效索引处值的类型，当索引无效（或无法访问）时则返回 LUA_TNONE。 lua_type 返回的类型被编码为一些个在 lua.h 中定义的常量：
+<ul>
+<li>LUA_TNIL</li>
+<li>LUA_TNUMBER</li>
+<li>LUA_TBOOLEAN</li>
+<li>LUA_TSTRING</li>
+<li>LUA_TTABLE</li>
+<li>LUA_TFUNCTION</li>
+<li>LUA_TUSERDATA</li>
+<li>LUA_TTHREAD</li>
+<li>LUA_TLIGHTUSERDATA</li>
+</ul>
+</li>
+<li>lua_load
+<ul>
+<li>int lua_load (lua_State *L, lua_Reader reader, void *data, const char *chunkname, const char *mode);</li>
+<li>加载一段 Lua 代码块，但不运行它。</li>
+</ul>
+</li>
+<li>luaL_dofile
+<ul>
+<li>int luaL_dofile (lua_State *L, const char *filename);</li>
+<li>加载并运行指定的文件。</li>
+</ul>
+</li>
+<li>luaL_dostring
+<ul>
+<li>int luaL_dostring (lua_State *L, const char *str);</li>
+<li>加载并运行指定的字符串。</li>
+</ul>
+</li>
+<li>luaL_ref
+<ul>
+<li>int luaL_ref (lua_State *L, int t);</li>
+<li>针对栈顶的对象，创建并返回一个在索引 t 指向的表中的引用（最后会弹出栈顶对象）。</li>
+</ul>
+</li>
+<li>luaL_unref
+<ul>
+<li>void luaL_unref (lua_State *L, int t, int ref);</li>
+<li>释放索引 t 处表的 ref 引用对象 （参见 luaL_ref ）。 此条目会从表中移除以让其引用的对象可被垃圾收集。而引用 ref 也被回收再次使用。如果 ref 为 LUA_NOREF 或 LUA_REFNIL， luaL_unref 什么也不做。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
 <hr>
 <ul class=pager>
 <li class=previous>
