@@ -2455,7 +2455,86 @@ CSharp侧
 </ul>
 </li>
 <li>LuaFunction声明为partial，如果需要其他参数个数类型的方法，可以自行添加。</li>
-<li>Lua侧调用CSharp的泛型方法，此方法需要带泛型类型的参数，并且泛型类型需要限定为class。</li>
+<li>Lua侧调用CSharp的泛型方法，根据官方文档，有两种调用方式。
+<ul>
+<li>方式一，Wrap注册。即将栈上的对象，在CSharp侧以限定类型表示，然后以限定类型调起泛型方法。此方式的条件有：
+<ul>
+<li>需要带泛型类型的参数。</li>
+<li>泛型类型需要限定为class。</li>
+</ul>
+</li>
+<li>方式二，反射泛型方法调用。即使用 Type.MakeGenericType 方法，创建对应类型的泛型方法调用。此方式的条件有：
+<ul>
+<li>mono下可以使用。</li>
+<li>il2cpp下
+<ul>
+<li>泛型参数为引用类型可以使用。</li>
+<li>泛型参数为值类型，CSharp侧有同样的泛型参数调用过，则可以使用。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id=wrap注册>Wrap注册</h4>
+<ul>
+<li>对于方式一，以Wrap注册形式为例，当我们的泛型方法为</li>
+</ul>
+<pre tabindex=0><code>    // TestGeneric.cs
+    ...
+    public void Test1&lt;T&gt;(T p) where T : Component
+    {
+        Debug.Log(&quot;TestGeneric.Test1&lt;T&gt; &quot; + typeof(T));        
+    }
+</code></pre><ul>
+<li>生成Wrap代码后，则将泛型方法绑定到Lua侧，即</li>
+</ul>
+<pre tabindex=0><code>        public static void __Register(RealStatePtr L)
+        {
+			...
+			Utils.RegisterFunc(L, Utils.METHOD_IDX, &quot;Test1&quot;, _m_Test1);
+			...
+        }
+
+
+        [MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]
+        static int _m_Test1(RealStatePtr L)
+        {
+		    try {
+            
+                ObjectTranslator translator = ObjectTranslatorPool.Instance.Find(L);
+            
+            
+                TestGeneric gen_to_be_invoked = (TestGeneric)translator.FastGetCSObj(L, 1);
+            
+            
+                
+                {
+                    UnityEngine.Component _p = (UnityEngine.Component)translator.GetObject(L, 2, typeof(UnityEngine.Component));
+                    
+                    gen_to_be_invoked.Test1( _p );
+                    
+                    
+                    
+                    return 0;
+                }
+                
+            } catch(System.Exception gen_e) {
+                return LuaAPI.luaL_error(L, &quot;c# exception:&quot; + gen_e);
+            }
+            
+        }
+</code></pre><ul>
+<li>lua侧调用方法为</li>
+</ul>
+<pre tabindex=0><code>    local test1 = TestGeneric()
+    local comp = CS.UnityEngine.GameObject.Find(&quot;go&quot;):GetComponent(typeof(CS.UnityEngine.Camera))
+    test1:Test1(comp)
+</code></pre><ul>
+<li>可以看到，lua侧调起泛型方法的流程为，先获取 Component 类型的参数对象，然后直接执行 gen_to_be_invoked.Test1(_p) 方法，即调用 TestGeneric.Test1<component>(Component p) 方法。</li>
+<li>也就是说，在生成对应的Wrap方法的时候，就已经确定此泛型方法的示例方法，</li>
+<li></li>
 </ul>
 <h3 id=反射>反射</h3>
 <ul>
