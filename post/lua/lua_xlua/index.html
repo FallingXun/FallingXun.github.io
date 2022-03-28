@@ -2533,8 +2533,74 @@ CSharp侧
     test1:Test1(comp)
 </code></pre><ul>
 <li>可以看到，lua侧调起泛型方法的流程为，先获取 Component 类型的参数对象，然后直接执行 gen_to_be_invoked.Test1(_p) 方法，即调用 TestGeneric.Test1<component>(Component p) 方法。</li>
-<li>也就是说，在生成对应的Wrap方法的时候，就已经确定此泛型方法的示例方法，</li>
-<li></li>
+<li>也就是说，在生成对应的Wrap方法的时候，就已经确定此泛型方法的实例方法的类型为限定类型。因此<strong>如果此泛型方法需要使用泛型类型 T 来执行相关逻辑，则Lua侧无法正确调起对应类型</strong>（如上述示例，Lua侧绑定只能调用 Component 类型的泛型方法）。</li>
+<li>对于此方法的条件，有以下情况：
+<ul>
+<li>泛型方法有限定类型，但没有对应类型参数。如果自己增加Wrap方法，同样以限定类型调起泛型，也可以调起。但是工具中对于这种类型不予以生成，这里可能考虑由于没有泛型参数，逻辑中较大可能会使用泛型 T 的类型进行逻辑判断，而Lua侧调起时固定为传入限定类型，则失去了泛型的作用。</li>
+</ul>
+<pre tabindex=0><code>  [LuaCallCSharp]
+  public class TestGeneric
+  {
+      ...
+      public void Test2&lt;T&gt;()
+      {
+          Debug.Log(&quot;TestGeneric.Test2&lt;T&gt; &quot; + typeof(T));
+      }
+
+      ...
+  }
+
+  public class TestGenericWrap 
+  {
+      public static void __Register(RealStatePtr L)
+      {
+  		...
+          Utils.RegisterFunc(L, Utils.METHOD_IDX, &quot;Test2&quot;, _m_Test2);
+          ...
+      }
+
+      [MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]
+      static int _m_Test2(RealStatePtr L)
+      {
+          try
+          {
+
+              ObjectTranslator translator = ObjectTranslatorPool.Instance.Find(L);
+
+
+              TestGeneric gen_to_be_invoked = (TestGeneric)translator.FastGetCSObj(L, 1);
+
+
+
+              {
+
+                  gen_to_be_invoked.Test2&lt;UnityEngine.Component&gt;();
+
+
+
+                  return 0;
+              }
+
+          }
+          catch (System.Exception gen_e)
+          {
+              return LuaAPI.luaL_error(L, &quot;c# exception:&quot; + gen_e);
+          }
+
+      }
+
+      ...
+  }
+</code></pre><ul>
+<li>泛型方法有限定类型，有对应类型参数，但是类型不为class（如 Interface）</li>
+<li>泛型方法没有限定类型，但带有泛型参数
+<ul>
+<li>则Wrap生成的时候不知道该以什么类型调起，则无法提前生成Wrap方法。</li>
+</ul>
+</li>
+<li>泛型方法没有限定类型，也没有泛型参数，则Wrap生成的时候不知道该以什么类型调起，则无法提前生成Wrap方法。</li>
+</ul>
+</li>
 </ul>
 <h3 id=反射>反射</h3>
 <ul>
