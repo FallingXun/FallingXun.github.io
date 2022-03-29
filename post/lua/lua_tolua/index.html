@@ -1154,16 +1154,32 @@ CSharp侧
 </ul>
 <h3 id=泛型>泛型</h3>
 <ul>
-<li>CSharp侧调用Lua侧方法时，LuaFunction提供了两种方法，可简化CSharp侧的调用方式，且不会产生GC
+<li>CSharp侧调用Lua侧方法时，LuaFunction提供了两种方法，可简化CSharp侧的调用方式，且不会产生GC。
 <ul>
 <li>无返回值：Call，支持9个参数以内（包括9个参数）的泛型调用。</li>
 <li>一个返回值（泛型R1）：Invoke，支持9个参数以内（包括9个参数）的泛型调用。</li>
 </ul>
 </li>
-<li>Lua侧调用CSharp的泛型方法，此方法需要带泛型类型的参数，并且泛型类型需要限定为class。</li>
+<li>Lua侧调用CSharp的泛型方法，此方法需要带泛型类型的参数，并且泛型类型需要限定为引用类型，否则工具方法不会生成Wrap代码，无法调用。</li>
 <li>前面提到，LuaState.OpenBaseLibs中，List、Dictionary注册了Wrap，即可以在Lua侧调用对应的操作，但是没有注册创建的方法，所以无法在Lua侧创建此类对象。</li>
+<li>如果没有提前生成Wrap代码，泛型方法可以通过反射方式，调用 Type.MakeGenericMethod 方法，创建泛型方法的泛型实例方法，再直接调起实例方法，即完成对泛型方法的调用。但是如果泛型类型为值类型，且CSharp侧没有调用过对应类型的泛型方法，则在 AOT 模式下，编译器不会提前编译出对应类型的方法，导致无法正常调用。可以通过增加强制编译方法，来保证对应类型代码会被编译。</li>
 </ul>
-<h3 id=反射>反射</h3>
+<pre tabindex=0><code>    private void Compile()
+    {
+        var o = new TestGeneric();
+        o.Test2&lt;int&gt;();
+        o.Test2&lt;float&gt;();
+        o.Test2&lt;bool&gt;();
+        ...
+        o.Test3&lt;object, int&gt;();
+        o.Test3&lt;object, float&gt;();
+        o.Test3&lt;object, bool&gt;();
+        ...
+        o.Test3&lt;int, object&gt;();
+        o.Test3&lt;float, object&gt;();
+        o.Test3&lt;bool, object&gt;();
+    }
+</code></pre><h3 id=反射>反射</h3>
 <ul>
 <li>为了支持反射，CSharp侧提供了LuaReflection，通过 OpenLibs 方法注册反射相关方法。
 <ul>
@@ -1265,7 +1281,7 @@ CSharp侧
 </ul>
 <h3 id=协程>协程</h3>
 <ul>
-<li>推荐使用lua的协程</li>
+<li>推荐使用lua的协程。</li>
 </ul>
 <h3 id=接口interface>接口（Interface）</h3>
 <ul>
