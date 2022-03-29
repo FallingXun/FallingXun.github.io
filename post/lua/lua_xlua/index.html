@@ -2457,13 +2457,13 @@ CSharp侧
 <li>LuaFunction声明为partial，如果需要其他参数个数类型的方法，可以自行添加。</li>
 <li>Lua侧调用CSharp的泛型方法，根据官方文档，有两种调用方式。
 <ul>
-<li>方式一，Wrap注册。即将栈上的对象，在CSharp侧以限定类型表示，然后以限定类型调起泛型方法。此方式的条件有：
+<li>方式一，Wrap生成调用。即将栈上的对象，在CSharp侧以限定类型表示，然后以限定类型调起泛型方法。此方式的条件有：
 <ul>
 <li>需要带泛型类型的参数。</li>
 <li>泛型类型需要限定为class。</li>
 </ul>
 </li>
-<li>方式二，反射泛型方法调用。即使用 Type.MakeGenericType 方法，创建对应类型的泛型方法调用。此方式的条件有：
+<li>方式二，反射调用。即使用 Type.MakeGenericType 方法，创建对应类型的泛型方法调用。此方式的条件有：
 <ul>
 <li>mono下可以使用。</li>
 <li>il2cpp下
@@ -2477,9 +2477,9 @@ CSharp侧
 </ul>
 </li>
 </ul>
-<h4 id=wrap注册>Wrap注册</h4>
+<h4 id=wrap生成调用>Wrap生成调用</h4>
 <ul>
-<li>对于方式一，以Wrap注册形式为例，当我们的泛型方法为</li>
+<li>当我们的泛型方法为</li>
 </ul>
 <pre tabindex=0><code>    // TestGeneric.cs
     ...
@@ -2536,76 +2536,165 @@ CSharp侧
 <li>也就是说，在生成对应的Wrap方法的时候，就已经确定此泛型方法的实例方法的类型为限定类型。因此<strong>如果此泛型方法需要使用泛型类型 T 来执行相关逻辑，则Lua侧无法正确调起对应类型</strong>（如上述示例，Lua侧绑定只能调用 Component 类型的泛型方法）。</li>
 <li>对于此方法的条件，有以下情况：
 <ul>
-<li>泛型方法有限定类型，但没有对应类型参数。如果自己增加Wrap方法，同样以限定类型调起泛型，也可以调起。但是工具中对于这种类型不予以生成，这里可能考虑由于没有泛型参数，逻辑中较大可能会使用泛型 T 的类型进行逻辑判断，而Lua侧调起时固定为传入限定类型，则失去了泛型的作用。</li>
-</ul>
-<pre tabindex=0><code>  [LuaCallCSharp]
-  public class TestGeneric
-  {
-      ...
-      public void Test2&lt;T&gt;()
-      {
-          Debug.Log(&quot;TestGeneric.Test2&lt;T&gt; &quot; + typeof(T));
-      }
-
-      ...
-  }
-
-  public class TestGenericWrap 
-  {
-      public static void __Register(RealStatePtr L)
-      {
-  		...
-          Utils.RegisterFunc(L, Utils.METHOD_IDX, &quot;Test2&quot;, _m_Test2);
-          ...
-      }
-
-      [MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]
-      static int _m_Test2(RealStatePtr L)
-      {
-          try
-          {
-
-              ObjectTranslator translator = ObjectTranslatorPool.Instance.Find(L);
-
-
-              TestGeneric gen_to_be_invoked = (TestGeneric)translator.FastGetCSObj(L, 1);
-
-
-
-              {
-
-                  gen_to_be_invoked.Test2&lt;UnityEngine.Component&gt;();
-
-
-
-                  return 0;
-              }
-
-          }
-          catch (System.Exception gen_e)
-          {
-              return LuaAPI.luaL_error(L, &quot;c# exception:&quot; + gen_e);
-          }
-
-      }
-
-      ...
-  }
-</code></pre><ul>
-<li>泛型方法有限定类型，有对应类型参数，但是类型不为class（如 Interface）</li>
-<li>泛型方法没有限定类型，但带有泛型参数
+<li>泛型方法有限定类型，但没有对应类型参数。
 <ul>
-<li>则Wrap生成的时候不知道该以什么类型调起，则无法提前生成Wrap方法。</li>
+<li>如果自己增加Wrap方法，同样以限定类型调起泛型，也可以调起。但是工具中对于这种类型不予以生成，这里可能考虑由于没有泛型参数，逻辑中较大可能会使用泛型 T 的类型进行逻辑判断，而Lua侧调起时固定为传入限定类型，则失去了泛型的作用。</li>
+</ul>
+<pre tabindex=0><code>    [LuaCallCSharp]
+    public class TestGeneric
+    {
+        ...
+        public void Test2&lt;T&gt;()
+        {
+            Debug.Log(&quot;TestGeneric.Test2&lt;T&gt; &quot; + typeof(T));
+        }
+
+        ...
+    }
+
+    public class TestGenericWrap 
+    {
+        public static void __Register(RealStatePtr L)
+        {
+            ...
+            Utils.RegisterFunc(L, Utils.METHOD_IDX, &quot;Test2&quot;, _m_Test2);
+            ...
+        }
+
+        [MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]
+        static int _m_Test2(RealStatePtr L)
+        {
+            try
+            {
+
+                ObjectTranslator translator = ObjectTranslatorPool.Instance.Find(L);
+
+
+                TestGeneric gen_to_be_invoked = (TestGeneric)translator.FastGetCSObj(L, 1);
+
+
+
+                {
+
+                    gen_to_be_invoked.Test2&lt;UnityEngine.Component&gt;();
+
+
+
+                    return 0;
+                }
+
+            }
+            catch (System.Exception gen_e)
+            {
+                return LuaAPI.luaL_error(L, &quot;c# exception:&quot; + gen_e);
+            }
+
+        }
+
+        ...
+    }
+</code></pre></li>
+<li>泛型方法有限定类型，有对应类型参数，但是类型不为class（如 Interface）。
+<ul>
+<li>当类型为 Interface 时，translator.GetObject 方法是通过调用 ObjectTranslator.CreateInterfaceBridge 方法来创建对象的，创建的对象是 XXXBridge 对象（见后续 Interface 说明），和原类型不匹配，所以不予以生成。</li>
 </ul>
 </li>
-<li>泛型方法没有限定类型，也没有泛型参数，则Wrap生成的时候不知道该以什么类型调起，则无法提前生成Wrap方法。</li>
+<li>泛型方法没有限定类型，包括带参数和不带参数。
+<ul>
+<li>Wrap生成的时候不知道该以什么类型调起，则无法提前生成Wrap方法。</li>
 </ul>
 </li>
+</ul>
+</li>
+</ul>
+<h4 id=反射调用>反射调用</h4>
+<ul>
+<li>Lua调用CSharp侧方法中提到，当采用反射注册的方式，最后调用的对象为 MethodWrap ，每个 methodName 方法名对应一个 MethodWrap 对象，每个 MethodWrap 对象由多个 OverloadMethodWrap 对象组成。当方法为泛型方法，且为 IL2CPP（即 ENABLE_IL2CPP 宏） 模式，不创建 OverloadMethodWrap 对象，即&&没有Wrap提前生成代码的情况下，是不能直接调起泛型方法的&&。因此xlua提供了反射调用的方法。当CSharp侧的泛型方法为</li>
+</ul>
+<pre tabindex=0><code>    [LuaCallCSharp]
+    public class TestGeneric
+    {
+        ...
+        public void Test2&lt;T&gt;()
+        {
+            Debug.Log(&quot;TestGeneric.Test2&lt;T&gt; &quot; + typeof(T));
+        }
+        ...
+    }
+</code></pre><ul>
+<li>Lua侧调用方法为</li>
+</ul>
+<pre tabindex=0><code>    local o = CS.TestGeneric()
+
+    local test2_method = xlua.get_generic_method(CS.TestGeneric,'Test2')
+    local Test2 = test2_method(CS.UnityEngine.Camera)
+    Test2(o)
+</code></pre><ul>
+<li>本质上，即使用反射方式，调用 Type.MakeGenericMethod 方法，创建泛型方法的泛型实例方法，再直接调起实例方法，即完成对泛型方法的调用。</li>
+<li>然而，此方法在 mono 下可以使用。在 il2cpp 下，如果泛型参数为引用类型可以使用。如果泛型参数为值类型，CSharp侧有同样的泛型参数调用过，才可以使用。当我们使用 il2cpp 模式生成apk包，在Lua侧调用</li>
+</ul>
+<pre tabindex=0><code>    local o = CS.TestGeneric()
+
+    local test2_method = xlua.get_generic_method(CS.TestGeneric,'Test2')
+    local Test2 = test2_method(CS.System.Int32)
+    Test2(o)
+</code></pre><ul>
+<li>会发现调用不了，报错信息为</li>
+</ul>
+<pre tabindex=0><code>E/Unity: LuaException: c# exception:Attempting to call method 'TestGeneric::Test2&lt;System.Int32&gt;' for which no ahead of time (AOT) code was generated.,stack:  at System.Reflection.MonoMethod.Invoke (System.Object obj, System.Reflection.BindingFlags invokeAttr, System.Reflection.Binder binder, System.Object[] parameters, System.Globalization.CultureInfo culture) [0x00000] in &lt;00000000000000000000000000000000&gt;:0 
+      at System.Reflection.MethodBase.Invoke (System.Object obj, System.Object[] parameters) [0x00000] in &lt;00000000000000000000000000000000&gt;:0 
+      at XLua.OverloadMethodWrap.Call (System.IntPtr L) [0x00000] in &lt;00000000000000000000000000000000&gt;:0 
+      at XLua.MethodWrap.Call (System.IntPtr L) [0x00000] in &lt;00000000000000000000000000000000&gt;:0 
+      at XLua.LuaDLL.lua_CSFunction.Invoke (System.IntPtr L) [0x00000] in &lt;00000000000000000000000000000000&gt;:0 
+      at XLua.StaticLuaCallbacks.FixCSFunction (System.IntPtr L) [0x00000] in &lt;00000000000000000000000000000000&gt;:0 
+</code></pre><ul>
+<li>当我们在CSharp侧中，新增一个没有调用的方法</li>
+</ul>
+<pre tabindex=0><code>    private void Compile()
+    {
+        var o = new TestGeneric();
+        o.Test2&lt;int&gt;();
+    }
+</code></pre><ul>
+<li>重新打包后，发现能正常调用</li>
+</ul>
+<pre tabindex=0><code>I/Unity: TestGeneric.Test2&lt;T&gt; System.Int32
+    UnityEngine.Logger:Log(LogType, Object)
+    System.Reflection.MonoMethod:Invoke(Object, BindingFlags, Binder, Object[], CultureInfo)
+    System.Reflection.MethodBase:Invoke(Object, Object[])
+    XLua.OverloadMethodWrap:Call(IntPtr)
+    XLua.MethodWrap:Call(IntPtr)
+    XLua.LuaDLL.lua_CSFunction:Invoke(IntPtr)
+    XLua.StaticLuaCallbacks:FixCSFunction(IntPtr)
+</code></pre><ul>
+<li>一些平台不允许运行时代码生成。因此，任何依赖于目标设备上即时 (JIT) 编译的托管代码都将失败。相反，您必须提前 (AOT) 编译所有托管代码。当我们使用 IL2CPP 模式时，就确定了必须使用 AOT 编译，也就是说，所有Lua侧调用的代码，必须在编译期间就已经生成对应的代码。没有增加 Compile 方法前，AOT 编译器不承认它应该为 Test2 带有 T 的泛型方法生成 System.Int32 类型的代码 ，因此它继续，跳过此方法。当调用该方法并且运行时找不到要执行的正确代码时，它会返回此错误消息。</li>
+<li>当增加了 Compile 方法后，相当于强制编译器生成正确的代码。而此方法不需要调用，它只需要存在编译器就可以识别它。</li>
+<li>然而，当泛型类型全为引用类型时，则不需要增加强制编译的方法，但如果有一个泛型类型为值类型时，则需要增加强制编译方法。xlua文档中的说明，在CSharp侧有同样的泛型参数调用过，也就是编译器有对这个类型进行提前编译。而其中的 mono 下可以直接使用，目前应该是针对Android下的mono，可以使用 JIT，而iOS下只能使用 il2cpp。对于其他平台下，mono 也有 AOT 限制的，同样不能使用（XBox One、PS4等）。</li>
+<li>因此，如果需要对某个泛型方法进行强制编译，可以将常用的值类型对象进行强制编译，就可以在lua侧自由调用了。</li>
+</ul>
+<pre tabindex=0><code>    private void Compile()
+    {
+        var o = new TestGeneric();
+        o.Test2&lt;int&gt;();
+        o.Test2&lt;float&gt;();
+        o.Test2&lt;bool&gt;();
+        ...
+        o.Test3&lt;object, int&gt;();
+        o.Test3&lt;object, float&gt;();
+        o.Test3&lt;object, bool&gt;();
+        ...
+        o.Test3&lt;int, object&gt;();
+        o.Test3&lt;float, object&gt;();
+        o.Test3&lt;bool, object&gt;();
+    }
+</code></pre><ul>
+<li>注意，此方法创建的泛型实例方法，由于是使用反射方式创建的，需要自己缓存起来，重复使用，避免频繁反射导致性能下降。</li>
 </ul>
 <h3 id=反射>反射</h3>
 <ul>
 <li>前面提到，CSharp侧的类注册的时候，如果没有提前生成wrap脚本，则都会通过反射进行创建。</li>
 <li>反射占据了xlua框架的很大一部分，为了降低反射带来的性能问题，反射后的对象都会进行缓存，避免多次反射。</li>
+<li>AOT 平台不能实现 System.Reflection.Emit 命名空间中的任何方法。其余的 System.Reflection 都是可以接受的，只要编译器可以推断出通过反射使用的代码需要在运行时存在。</li>
 </ul>
 <h3 id=64位整型>64位整型</h3>
 <ul>
