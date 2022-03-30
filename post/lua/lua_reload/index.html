@@ -1,0 +1,484 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="Lua篇 — (4) Lua热重载">
+<meta property="og:title" content="Lua篇 — (4) Lua热重载">
+<meta property="twitter:title" content="Lua篇 — (4) Lua热重载">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>Lua篇 — (4) Lua热重载-</title>
+<link rel=canonical href=/post/lua/lua_reload/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+<li>
+<a href=/categories/googleplay%E7%B3%BB%E5%88%97>googleplay系列</a>
+</li>
+<li>
+<a href=/categories/lua%E7%B3%BB%E5%88%97>lua系列</a>
+</li>
+<li>
+<a href=/categories/tmp%E7%B3%BB%E5%88%97>tmp系列</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/lua title=Lua>
+Lua
+</a>
+</div>
+<h1>Lua篇 — (4) Lua热重载</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Tuesday, March 29, 2022
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>由于lua的弱语言特性，不需要编译即可运行，因此使用lua开发的项目，如果修改lua代码，不需要等待编译的时间，如果修改完能直接重载，则开发效率会更高。</p>
+<h3 id=简介>简介</h3>
+<ul>
+<li>Unity + lua 开发的项目，开发过程中，修改完lua代码，不需要重新编译，重启Unity即可执行新逻辑。随着项目内容逐渐增大，重启Unity的耗时也会日益增长，往往会出现修改一个小参数，就需要等较长的时间才能重新执行，开发效率较低，所以热重载就显得比较重要。</li>
+</ul>
+<h3 id=加载方式>加载方式</h3>
+<ul>
+<li>加载lua脚本，常用的方式一般有两种：dostring、require（其他的如 dofile、loadstring 等这里暂不分析），即将lua代码加到内存中并执行。这里以lua 5.3.5 版本为例，查看其具体的实现。</li>
+</ul>
+<h4 id=dostring>dostring</h4>
+<ul>
+<li>xlua中CSharp侧的 DoString 方法为</li>
+</ul>
+<pre tabindex=0><code>        // LuaEnv.cs
+
+        public object[] DoString(byte[] chunk, string chunkName = &quot;chunk&quot;, LuaTable env = null)
+        {
+#if THREAD_SAFE || HOTFIX_ENABLE
+            lock (luaEnvLock)
+            {
+#endif
+                var _L = L;
+                int oldTop = LuaAPI.lua_gettop(_L);
+                int errFunc = LuaAPI.load_error_func(_L, errorFuncRef);
+                if (LuaAPI.xluaL_loadbuffer(_L, chunk, chunk.Length, chunkName) == 0)
+                {
+                    if (env != null)
+                    {
+                        env.push(_L);
+                        LuaAPI.lua_setfenv(_L, -2);
+                    }
+
+                    if (LuaAPI.lua_pcall(_L, 0, -1, errFunc) == 0)
+                    {
+                        LuaAPI.lua_remove(_L, errFunc);
+                        return translator.popValues(_L, oldTop);
+                    }
+                    else
+                        ThrowExceptionFromError(oldTop);
+                }
+                else
+                    ThrowExceptionFromError(oldTop);
+
+                return null;
+#if THREAD_SAFE || HOTFIX_ENABLE
+            }
+#endif
+        }
+</code></pre><ul>
+<li>tolua中CSharp侧的 DoString 方法为</li>
+</ul>
+<pre tabindex=0><code>        // LuaState.cs
+
+        public void DoString(string chunk, string chunkName = &quot;LuaState.cs&quot;)
+        {
+#if UNITY_EDITOR
+            if (!beStart)
+            {
+                throw new LuaException(&quot;you must call Start() first to initialize LuaState&quot;);
+            }
+#endif
+            byte[] buffer = Encoding.UTF8.GetBytes(chunk);
+            LuaLoadBuffer(buffer, chunkName);
+        }
+
+        protected void LuaLoadBuffer(byte[] buffer, string chunkName)
+        {
+            LuaDLL.tolua_pushtraceback(L);
+            int oldTop = LuaGetTop();
+
+            if (LuaLoadBuffer(buffer, buffer.Length, chunkName) == 0)
+            {
+                if (LuaPCall(0, LuaDLL.LUA_MULTRET, oldTop) == 0)
+                {                    
+                    LuaSetTop(oldTop - 1);
+                    return;
+                }
+            }
+
+            string err = LuaToString(-1);
+            LuaSetTop(oldTop - 1);                        
+            throw new LuaException(err, LuaException.GetLastError());
+        }
+
+        ...
+</code></pre><ul>
+<li>可以看到，DoString的流程都是一致的。
+<ul>
+<li>调用lua侧的 luaL_loadbuffer 方法，加载一段 Lua 代码块。如果没有错误，则把一个编译好的代码块作为一个 Lua 函数压到栈顶。然后再</li>
+<li>调用lua侧的 lua_pcall 方法，执行栈顶的函数。</li>
+</ul>
+</li>
+</ul>
+<h4 id=require>require</h4>
+<ul>
+<li>require 方法，在lua库中默认注册，其实现为</li>
+</ul>
+<pre tabindex=0><code>// loadlib.c
+
+static const luaL_Reg ll_funcs[] = {
+#if defined(LUA_COMPAT_MODULE)
+  {&quot;module&quot;, ll_module},
+#endif
+  {&quot;require&quot;, ll_require},
+  {NULL, NULL}
+};
+
+static int ll_require (lua_State *L) {
+  const char *name = luaL_checkstring(L, 1);
+  lua_settop(L, 1);  /* LOADED table will be at index 2 */
+  lua_getfield(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
+  lua_getfield(L, 2, name);  /* LOADED[name] */
+  if (lua_toboolean(L, -1))  /* is it there? */
+    return 1;  /* package is already loaded */
+  /* else must load package */
+  lua_pop(L, 1);  /* remove 'getfield' result */
+  findloader(L, name);
+  lua_pushstring(L, name);  /* pass name as argument to module loader */
+  lua_insert(L, -2);  /* name is 1st argument (before search data) */
+  lua_call(L, 2, 1);  /* run loader to load module */
+  if (!lua_isnil(L, -1))  /* non-nil return? */
+    lua_setfield(L, 2, name);  /* LOADED[name] = returned value */
+  if (lua_getfield(L, 2, name) == LUA_TNIL) {   /* module set no value? */
+    lua_pushboolean(L, 1);  /* use true as result */
+    lua_pushvalue(L, -1);  /* extra copy to be returned */
+    lua_setfield(L, 2, name);  /* LOADED[name] = true */
+  }
+  return 1;
+}
+
+static void findloader (lua_State *L, const char *name) {
+  int i;
+  luaL_Buffer msg;  /* to build error message */
+  luaL_buffinit(L, &amp;msg);
+  /* push 'package.searchers' to index 3 in the stack */
+  if (lua_getfield(L, lua_upvalueindex(1), &quot;searchers&quot;) != LUA_TTABLE)
+    luaL_error(L, &quot;'package.searchers' must be a table&quot;);
+  /*  iterate over available searchers to find a loader */
+  for (i = 1; ; i++) {
+    if (lua_rawgeti(L, 3, i) == LUA_TNIL) {  /* no more searchers? */
+      lua_pop(L, 1);  /* remove nil */
+      luaL_pushresult(&amp;msg);  /* create error message */
+      luaL_error(L, &quot;module '%s' not found:%s&quot;, name, lua_tostring(L, -1));
+    }
+    lua_pushstring(L, name);
+    lua_call(L, 1, 2);  /* call it */
+    if (lua_isfunction(L, -2))  /* did it find a loader? */
+      return;  /* module loader found */
+    else if (lua_isstring(L, -2)) {  /* searcher returned error message? */
+      lua_pop(L, 1);  /* remove extra return */
+      luaL_addvalue(&amp;msg);  /* concatenate error message */
+    }
+    else
+      lua_pop(L, 2);  /* remove both returns */
+  }
+}
+
+...
+
+</code></pre><ul>
+<li>从上面看出，require 方法的大致流程为
+<ul>
+<li>检查第一个参数 name 是否为字符串，第一个参数为模块名。</li>
+<li>将 LUA_REGISTRYINDEX 表中的 LUA_LOADED_TABLE 表入栈（即 &ldquo;_LOADED&rdquo; 表）。</li>
+<li>将 LOADED 表中模块名对应的值入栈。</li>
+<li>如果栈顶不为nil、false，表示已经加载过此模块，则返回，不再进行二次加载。</li>
+<li>移除栈顶的数据，调用findloader方法加载并执行lua代码
+<ul>
+<li>根据 package.searchers 中的 loader 方法，加载对应的lua脚本到栈顶。</li>
+<li>如果栈顶为function，表示模块加载成功。</li>
+</ul>
+</li>
+<li>将模块名插入到栈顶方法前，执行栈顶方法，即将模块名作为参数，执行加载的模块代码。</li>
+<li>如果有返回值，则设置 LOADED[name] 为对应的返回值。</li>
+<li>如果没有返回值，则设置 LOADED[name] 为 true（所以判断是否加载过需要检查 nil 和 false ）。</li>
+</ul>
+</li>
+<li>因此，一般情况下，执行完返回， LOADED[name] 中会缓存模块对应的 table。</li>
+</ul>
+<h3 id=热重载流程>热重载流程</h3>
+<ul>
+<li>从加载实现可以看到，dostring 每次都会重新加载并执行代码，而 require 会先检查是否已经加载过代码，如果加载过则不会再加载。</li>
+<li>xlua中默认是采用 dostring 方式来加载lua代码，一般每个UI界面都会绑定一个lua脚本，所以修改lua代码后，只要重新加载UI界面，触发 dostring 方法，即可实现热重载。</li>
+<li>require 方法，由于会检测是否已经加载过对应 module，所以热重载大致流程为：
+<ul>
+<li>获取已加载的 module 。</li>
+<li>移除lua缓存的 LOADED[name] 对象。</li>
+<li>执行 require 方法，重新加载 module 。</li>
+<li>将新的 module 数据更新到旧的 module 中。</li>
+<li>将 LOADED[name] 设置为修改后的旧 module。</li>
+</ul>
+</li>
+<li>代码实现如下</li>
+</ul>
+<pre tabindex=0><code>function Reload(moduleName)
+	local loadedName = string.gsub(moduleName, '/', '.');
+	local oldModule = package.loaded[loadedName];
+  print(oldModule)
+	package.loaded[loadedName] = nil;
+  local ok,err = pcall(require, loadedName)
+	if not ok then
+      package.loaded[loadedName] = oldModule;
+      error('reload error : ' .. moduleName .. '\n' .. tostring(err));
+      return;
+    end
+  local newTable = _G[tableName];
+	_G[tableName] = nil;
+	local newModule = package.loaded[loadedName];
+	if oldModule == nil then
+        oldModule = newModule;
+    end
+    if oldTable == nil then
+        oldTable = newTable;
+    else
+        local reload_tables = {};
+        UpdateTable(oldTable, newTable, reload_tables);
+    end
+
+	package.loaded[loadedName] = oldModule;
+	_G[tableName] = oldTable;
+    --print('Test G2   ' .. tableName .. '    ' .. tostring(_G[tableName]) .. '  ' .. tostring(newTable))
+    print('reload completed : '.. moduleName);
+end
+</code></pre><ul>
+<li>如果 dostring 想要不重新加载实现热重载，流程和 require 的也相似，就需要自己做缓存和更新缓存。</li>
+</ul>
+<h3 id=热重载修改>热重载修改</h3>
+<ul>
+<li>热重载的修改内容主要有：
+<ul>
+<li>table
+<ul>
+<li>遍历新加载的 new_table 的所有key，进行修改。
+<ul>
+<li>如果 old_table 中没有对应key，则直接将 new_table 的key-value设置到 old_table 中。</li>
+<li>如果key对应的值为 table ，则继续递归执行。</li>
+<li>如果key对应的值为 function ，则使用 function 规则进行修改。</li>
+<li>如果key对应的值为其他，则不处理，即不修改对应变量，保证原数据不受影响。</li>
+</ul>
+</li>
+<li>使用 metatable 规则对元表进行修改。</li>
+</ul>
+</li>
+</ul>
+<pre tabindex=0><code>-- reload_tables 用来记录已经处理过的 new_table，避免出现循环引用导致崩溃。
+function UpdateTable(old_table, new_table, reload_tables)
+    --print('UpdateTable ')
+    if type(old_table) ~= 'table' then
+        print('UpdateTable Error, old_table is  '.. type(old_table));
+        return;
+    end
+    if type(new_table) ~= 'table' then
+        print('UpdateTable Error, new_table is  '.. type(new_table));
+        return;
+    end
+
+    for key,new_value in pairs(new_table) do
+        if old_table[key] == nil then
+            old_table[key] = new_value;
+        else
+            local new_type = type(new_value);
+            if  new_type == 'table' then
+                if reload_tables[new_value] == nil then
+                    reload_tables[new_value] = true;
+                    UpdateTable(old_table[key], new_value, reload_tables);
+                end
+            elseif new_type == 'function' then
+                UpdateFunc(old_table[key], new_value ,key);
+                old_table[key] = new_value;
+            end
+        end
+    end
+end
+</code></pre><ul>
+<li>function
+<ul>
+<li>使用 debug.getupvalue 方法，获取 old_function 的所有 upvalue 。</li>
+<li>使用 debug.getupvalue 方法，获取 new_function 的所有 upvalue 。</li>
+<li>检查 new_function 中的所有 upvalue ，如果 old_function 中有对应 key 的 upvalue ，则将 old_function 的 upvalue 值设置为 new_function 的对应 upvalue ，即只更新方法，保持原数据。</li>
+</ul>
+</li>
+</ul>
+<pre tabindex=0><code>function UpdateFunc(old_func, new_func, key)
+    --print('UpdateFunc ' .. key)
+    if type(old_func) ~= 'function' then
+        print('UpdateFunc Error, old_func :  ' .. key .. '  '.. type(old_func));
+        return;
+    end
+    if type(new_func) ~= 'function' then
+        print('UpdateFunc Error, new_func :  ' .. key .. '  '.. type(new_func));
+        return;
+    end
+
+    local old_upvalue = {}
+    for i = 1, 99999 do
+        local name, value = debug.getupvalue(old_func, i)
+        if not name then
+            break;
+        end
+        old_upvalue[name] = value;
+    end
+
+    for i = 1, 99999 do 
+        local name, value = debug.getupvalue(new_func, i)
+        if not name then
+            break;
+        end
+        local old_value = old_upvalue[name];
+        if old_value ~= nil then
+            --print('setupvalue ' .. name)
+            debug.setupvalue(new_func, i, old_value);
+        end
+    end
+
+end
+</code></pre><ul>
+<li>metatable
+<ul>
+<li>使用 debug.getmetatable 方法，获取 old_table 的 old_metatable 。</li>
+<li>使用 debug.getmetatable 方法，获取 new_table 的 new_metatable 。</li>
+<li>将 old_metatable 作为 old_table ， new_metatable 作为 new_table ，使用 table 规则进行修改。因为有些方法是存在元表中，通过元表中 __index 方法来实现调用的，因此修改元表方法保证能使用更新后的方法执行逻辑。</li>
+</ul>
+</li>
+</ul>
+<pre tabindex=0><code>function UpdateMetatable(old_table, new_table, reload_tables)
+    --print('UpdateMetatable ')
+    if type(old_table) ~= 'table' then
+        print('UpdateMetatable Error, old_table is  '.. type(old_table));
+        return;
+    end
+    if type(new_table) ~= 'table' then
+        print('UpdateMetatable Error, new_table is  '.. type(new_table));
+        return;
+    end
+
+    local old_mt = debug.getmetatable(old_table);
+    local new_mt = debug.getmetatable(new_table);
+    if type(old_mt) == 'table' and type(new_mt) == 'table' then 
+        UpdateTable(old_mt, new_mt, reload_tables);
+    end
+end
+</code></pre></li>
+</ul>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/lua/lua_xlua/ data-toggle=tooltip data-placement=top title="Lua篇 — (3) xLua">&larr;
+Previous Post</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2022
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>
