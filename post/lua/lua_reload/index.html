@@ -177,7 +177,7 @@ post-container">
 </code></pre><ul>
 <li>可以看到，DoString的流程都是一致的。
 <ul>
-<li>调用lua侧的 luaL_loadbuffer 方法，加载一段 Lua 代码块。如果没有错误，则把一个编译好的代码块作为一个 Lua 函数压到栈顶。然后再</li>
+<li>调用lua侧的 luaL_loadbuffer 方法，加载一段 Lua 代码块。如果没有错误，则把一个编译好的代码块作为一个 Lua 函数压到栈顶。</li>
 <li>调用lua侧的 lua_pcall 方法，执行栈顶的函数。</li>
 </ul>
 </li>
@@ -263,10 +263,9 @@ static void findloader (lua_State *L, const char *name) {
 </li>
 <li>将模块名插入到栈顶方法前，执行栈顶方法，即将模块名作为参数，执行加载的模块代码。</li>
 <li>如果有返回值，则设置 LOADED[name] 为对应的返回值。</li>
-<li>如果没有返回值，则设置 LOADED[name] 为 true（所以判断是否加载过需要检查 nil 和 false ）。</li>
+<li>如果没有返回值，则设置 LOADED[name] 为 true（所以判断是否加载过需要检查 nil 和 false ）。因此，一般情况下，执行完返回， LOADED[name] 中会缓存模块对应的 table。</li>
 </ul>
 </li>
-<li>因此，一般情况下，执行完返回， LOADED[name] 中会缓存模块对应的 table。</li>
 </ul>
 <h3 id=热重载流程>热重载流程</h3>
 <ul>
@@ -281,43 +280,67 @@ static void findloader (lua_State *L, const char *name) {
 <li>将 LOADED[name] 设置为修改后的旧 module。</li>
 </ul>
 </li>
-<li>代码实现如下</li>
+<li>由于 LUA_LOADED_TABLE 表（即 LOADED）是存在 LUA_REGISTRYINDEX 表中，lua侧不能直接调用，所以需要通过其他方式调用。 loadlib.c 中将 LUA_LOADED_TABLE 表绑定到 package 中，给lua侧调用。</li>
+</ul>
+<pre tabindex=0><code>// loadlib.c
+
+LUAMOD_API int luaopen_package (lua_State *L) {
+  createclibstable(L);
+  luaL_newlib(L, pk_funcs);  /* create 'package' table */
+  createsearcherstable(L);
+  /* set paths */
+  setpath(L, &quot;path&quot;, LUA_PATH_VAR, LUA_PATH_DEFAULT);
+  setpath(L, &quot;cpath&quot;, LUA_CPATH_VAR, LUA_CPATH_DEFAULT);
+  /* store config information */
+  lua_pushliteral(L, LUA_DIRSEP &quot;\n&quot; LUA_PATH_SEP &quot;\n&quot; LUA_PATH_MARK &quot;\n&quot;
+                     LUA_EXEC_DIR &quot;\n&quot; LUA_IGMARK &quot;\n&quot;);
+  lua_setfield(L, -2, &quot;config&quot;);
+  /* set field 'loaded' */
+  luaL_getsubtable(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
+  lua_setfield(L, -2, &quot;loaded&quot;);
+  /* set field 'preload' */
+  luaL_getsubtable(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE);
+  lua_setfield(L, -2, &quot;preload&quot;);
+  lua_pushglobaltable(L);
+  lua_pushvalue(L, -2);  /* set 'package' as upvalue for next lib */
+  luaL_setfuncs(L, ll_funcs, 1);  /* open lib into global table */
+  lua_pop(L, 1);  /* pop global table */
+  return 1;  /* return 'package' table */
+}
+...
+
+</code></pre><ul>
+<li>所以，lua侧可以直接通过 package.loaded 获取已加载的模块。热重载流程实现大致如下：</li>
 </ul>
 <pre tabindex=0><code>function Reload(moduleName)
-	local loadedName = string.gsub(moduleName, '/', '.');
-	local oldModule = package.loaded[loadedName];
-  print(oldModule)
-	package.loaded[loadedName] = nil;
-  local ok,err = pcall(require, loadedName)
-	if not ok then
-      package.loaded[loadedName] = oldModule;
-      error('reload error : ' .. moduleName .. '\n' .. tostring(err));
-      return;
+	  local loadedName = string.gsub(moduleName, '/', '.');
+	  local oldModule = package.loaded[loadedName];
+	  package.loaded[loadedName] = nil;
+    local ok,err = pcall(require, loadedName)
+	  if not ok then
+        package.loaded[loadedName] = oldModule;
+        error('reload error : ' .. moduleName .. '\n' .. tostring(err));
+        return;
     end
-  local newTable = _G[tableName];
-	_G[tableName] = nil;
-	local newModule = package.loaded[loadedName];
-	if oldModule == nil then
+	  local newModule = package.loaded[loadedName];
+	  if oldModule == nil then
         oldModule = newModule;
-    end
-    if oldTable == nil then
-        oldTable = newTable;
     else
         local reload_tables = {};
-        UpdateTable(oldTable, newTable, reload_tables);
+        UpdateTable(oldModule, newModule, reload_tables);
     end
 
-	package.loaded[loadedName] = oldModule;
-	_G[tableName] = oldTable;
-    --print('Test G2   ' .. tableName .. '    ' .. tostring(_G[tableName]) .. '  ' .. tostring(newTable))
+	  package.loaded[loadedName] = oldModule;
     print('reload completed : '.. moduleName);
 end
 </code></pre><ul>
 <li>如果 dostring 想要不重新加载实现热重载，流程和 require 的也相似，就需要自己做缓存和更新缓存。</li>
+<li>注意，如果lua脚本没有返回值，则 package.loaded 为 true，而对应的 table 需要根据自己的业务进行更新。</li>
 </ul>
 <h3 id=热重载修改>热重载修改</h3>
 <ul>
-<li>热重载的修改内容主要有：
+<li>
+<p>热重载的修改内容主要有：</p>
 <ul>
 <li>table
 <ul>
@@ -361,6 +384,8 @@ function UpdateTable(old_table, new_table, reload_tables)
             end
         end
     end
+
+    UpdateMetatable(old_table, new_table, reload_tables)
 end
 </code></pre><ul>
 <li>function
@@ -430,7 +455,13 @@ end
         UpdateTable(old_mt, new_mt, reload_tables);
     end
 end
-</code></pre></li>
+</code></pre><h3 id=总结>总结</h3>
+<ul>
+<li>热重载一般是针对方法进行修改，保证现有的数据不受影响，所以对 table 中的非方法数据一般不做修改。</li>
+<li>热重载修改的内容，也可根据自己项目的需求进行调整，例如：要修改某些常量数据、不修改metatable等。</li>
+<li>一般用lua开发的项目，热重载功能都是必备的。从加载到重载，了解其中的过程，会发现功能并不复杂。由于热重载能大大提高开发效率，一般会在项目初期就加入此功能，降低开发难度。</li>
+</ul>
+</li>
 </ul>
 <hr>
 <ul class=pager>
