@@ -7,17 +7,17 @@
 <meta property="og:type" content="article">
 <meta property="og:image" content="https://fallingxun.github.io//">
 <meta property="twitter:image" content="https://fallingxun.github.io//">
-<meta name=title content>
-<meta property="og:title" content>
-<meta property="twitter:title" content>
+<meta name=title content="算法篇 — JPS寻路">
+<meta property="og:title" content="算法篇 — JPS寻路">
+<meta property="twitter:title" content="算法篇 — JPS寻路">
 <meta name=description content>
 <meta property="og:description" content>
 <meta property="twitter:description" content>
 <meta property="twitter:card" content="summary">
 <meta name=keyword content>
 <link rel="shortcut icon" href=/img/favicon.ico>
-<title>Series-</title>
-<link rel=canonical href=/series/>
+<title>算法篇 — JPS寻路-</title>
+<link rel=canonical href=/post/algorithm/algorithm_jps/>
 <link rel=stylesheet href=/css/iDisqus.min.css>
 <link rel=stylesheet href=/css/bootstrap.min.css>
 <link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
@@ -62,13 +62,25 @@
 </div>
 </nav>
 <script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
-<header class=intro-header style="background-image:url('/')">
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
 <div class=container>
 <div class=row>
 <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
-<div class=site-heading>
-<h1>Xun's Blog </h1>
-<span class=subheading></span>
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/algorithm title=Algorithm>
+Algorithm
+</a>
+</div>
+<h1>算法篇 — JPS寻路</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Thursday, April 7, 2022
+</span>
 </div>
 </div>
 </div>
@@ -80,9 +92,96 @@
 <div class="col-lg-8 col-lg-offset-2
 col-md-10 col-md-offset-1
 post-container">
+<h3 id=简介>简介</h3>
+<ul>
+<li>相关定义
+<ul>
+<li>x ：当前节点。</li>
+<li>p(x) ：x 的父节点 。</li>
+<li>neighbours(x) ：x 的所有邻居节点。</li>
+<li>d ：p(x) 到 x 的方向。</li>
+</ul>
+</li>
+</ul>
+<h4 id=邻居修剪规则neighbour-pruning-rules>邻居修剪规则（Neighbour Pruning Rules)</h4>
+<ul>
+<li>修剪规则包含以下情况：
+<ul>
+<li>x 为起点，即 p(x) 为 null。
+<ul>
+<li>不需要修剪。</li>
+</ul>
+</li>
+<li>p(x) 到 x 为直线移动（即水平方向或竖直方向）。
+<ul>
+<li>对于 neighbours(x) 中的任意一个邻居节点 n ，如果从 p(x) 到 n （不经过 x）的路径不大于从 p(x) 到 n （经过 x）的路径，则 n 需要修剪。</li>
+</ul>
+</li>
+<li>p(x) 到 x 为对角线移动。
+<ul>
+<li>对于 neighbours(x) 中的任意一个邻居节点 n ，如果从 p(x) 到 n （不经过 x）的路径小于从 p(x) 到 n （经过 x）的路径，则 n 需要修剪。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>也就是说，根据最优路径选择，当前 x 认为是最优路径上的节点，因此到下一个节点，经过 x 的路径应该是最优的，不应该存在有其他路径更优（即比此路径更短）。</li>
+</ul>
+<h4 id=自然邻居natural-neighbour>自然邻居（Natural Neighbour）</h4>
+<ul>
+<li>如果 neighbours(x) 中没有障碍点，经过邻居修剪规则后，剩下的点称为自然邻居。</li>
+</ul>
+<h4 id=强制邻居forced-neighbour>强制邻居（Forced Neighbour）</h4>
+<ul>
+<li>n 为 neighbours(x) 中的一个节点，如果 n 为强制邻居，则需要满足：
+<ul>
+<li>n 不是 x 的自然邻居。</li>
+<li>从 p(x) 到 n （经过 x）的路径小于从 p(x) 到 n （不经过 x）的路径。</li>
+</ul>
+</li>
+</ul>
+<h4 id=跳点jump-point>跳点（Jump Point)</h4>
+<ul>
+<li>当前方向为 d ，当前节点为 x ，如果节点 y 为节点 x 的跳点，则存在一个最小值 k ，使得节点 y 满足 y = x + kd ，并且满足以下其中一个条件：
+<ul>
+<li>条件1 ：节点 y 为目标节点。</li>
+<li>条件2 ：节点 y 至少有一个强制邻居。</li>
+<li>条件3 ：方向 d 为对角线移动，且存在节点 z ，满足 z = y + k~i~d~i~ ，并且满足条件1或条件2，使得节点 z 为节点 y 的跳点。其中
+<ul>
+<li>k~i~ ： 自然数 N。</li>
+<li>d~i~ ： 与当前方向夹角为45度的方向，即水平和竖直方向。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>上面规则也可以描述为：
+<ul>
+<li>当前方向 d 为直线移动，如果此方向上存在一个节点 y 为目标节点，或者节点 y 有一个强制邻居，则节点 y 为节点 x 的跳点。</li>
+<li>当前方向 d 为对角线移动，如果此方向上存在一个节点 y ，沿着此方向的水平或竖直方向的直线移动能找到节点 y 的跳点，则节点 y 为节点 x 的跳点。</li>
+</ul>
+</li>
+</ul>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/lua/lua_reload/ data-toggle=tooltip data-placement=top title="Lua篇 — (4) Lua热重载">&larr;
+Previous Post</a>
+</li>
+</ul>
 <div id=disqus-comment></div>
 </div>
-<div class="col-lg-8 col-lg-offset-2
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
 col-md-10 col-md-offset-1
 sidebar-container">
 </div>
