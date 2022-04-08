@@ -92,16 +92,18 @@ Thursday, April 7, 2022
 <div class="col-lg-8 col-lg-offset-2
 col-md-10 col-md-offset-1
 post-container">
+<p>A* 寻路算法是常用的寻路方法，JPS寻路在A* 的基础上，进行跳点剪枝优化，提升了寻路性能。</p>
 <h3 id=简介>简介</h3>
 <ul>
-<li>相关定义
+<li>A* 算法，会维护一个最小堆。由于频繁加入、删除点，就需要经常更新最小堆。而JPS算法，则减少了需要更新的节点数量，从而提升了寻路的效率。</li>
+</ul>
+<h3 id=跳点剪枝>跳点剪枝</h3>
+<h4 id=相关定义>相关定义</h4>
 <ul>
 <li>x ：当前节点。</li>
 <li>p(x) ：x 的父节点 。</li>
 <li>neighbours(x) ：x 的所有邻居节点。</li>
 <li>d ：p(x) 到 x 的方向。</li>
-</ul>
-</li>
 </ul>
 <h4 id=邻居修剪规则neighbour-pruning-rules>邻居修剪规则（Neighbour Pruning Rules)</h4>
 <ul>
@@ -202,7 +204,7 @@ post-container">
 </ul>
 </li>
 </ul>
-<h3 id=jps流程>JPS流程</h3>
+<h3 id=相关定理>相关定理</h3>
 <ul>
 <li>使用跳点剪枝进行搜索总会得到最优解。证明流程如下：
 <ul>
@@ -212,6 +214,63 @@ post-container">
 <li>对于每一段路径 π~i~' ，从起点 n~0~ 到终点 n~k~ ，使用跳点算法计算时，都不需要对中间的任意节点进行展开搜索，因为从 n~0~ 到 n~k~ 的路径一定是最优的。</li>
 <li>由于对角线优先路径的拐点也为跳点，所以每个拐点都需要展开搜索。</li>
 <li>开始节点必须在每次搜索开始时展开，而目标节点定义为一个跳跃点，因此两者都得到了扩展。</li>
+</ul>
+</li>
+</ul>
+<h3 id=伪代码算法>伪代码算法</h3>
+<h4 id=算法1-确定后继节点identify-successors>算法1 确定后继节点（Identify Successors)</h4>
+<ul>
+<li>相关定义：
+<ul>
+<li>x ：当前节点。</li>
+<li>s ：起始节点。</li>
+<li>g ：目标节点。</li>
+<li>successors(x) ：x 节点的所有后继节点集合。</li>
+</ul>
+</li>
+<li>算法流程：
+<ul>
+<li>通过邻居修剪规则，修剪 x 的邻居。</li>
+<li>遍历修剪后的邻居节点，使用跳点方法（Function jump），判断邻居节点是否为跳点。</li>
+<li>如果邻居节点为跳点，则加入 successors(x) 中。</li>
+<li>返回 successors(x) 集合。</li>
+</ul>
+</li>
+</ul>
+<h4 id=算法2-跳点方法function-jump>算法2 跳点方法（Function jump）</h4>
+<ul>
+<li>相关定义：
+<ul>
+<li>x ：初始节点。</li>
+<li>d ：前进方向。</li>
+<li>s ：起始节点。</li>
+<li>g ：目标节点。</li>
+</ul>
+</li>
+<li>算法流程：
+<ul>
+<li>节点 n 为 x 沿着当前方向 d 移动一步。</li>
+<li>如果 n 为阻挡或者超出格子边界，则返回 null。</li>
+<li>如果 n 为 g ，则返回 n 。</li>
+<li>如果 n 有强迫邻居，则返回 n 。</li>
+<li>如果 d 为对角方向，则对水平方向 d~1~ 和竖直方向 d~2~ ，调用跳点方法 jump(n, d~i~, s, g) ，检查是否为跳点，如果是则返回 n 。</li>
+<li>沿当前方向，递归调用跳点方法 jump(n, d, s, g) 并返回。</li>
+</ul>
+</li>
+</ul>
+<h4 id=算法3-计算对角线优先路径compute-diagonal-first-path>算法3 计算对角线优先路径（Compute Diagonal First Path）</h4>
+<ul>
+<li>相关定义：
+<ul>
+<li>π ：任意最优长度路径。</li>
+</ul>
+</li>
+<li>算法流程：
+<ul>
+<li>选择在 π 上出现的一对相邻边，其中 (n~k−1~, n~k~) 是直线移动，(n~k~, n~k+1~) 是对角线移动。</li>
+<li>将当前的相邻边替换为另一对可移动的相邻边，其中 (n~k−1~, n~k~') 是对角线移动，(n~k~', n~k+1~) 是直线移动，即 n~k~' 不为障碍点。</li>
+<li>重复上面步骤，直到没有可以替换的相邻边。</li>
+<li>返回 π ，得到对角线优先路径。</li>
 </ul>
 </li>
 </ul>
