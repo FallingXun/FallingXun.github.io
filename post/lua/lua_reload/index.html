@@ -342,8 +342,7 @@ end
 </ul>
 <h3 id=热重载修改>热重载修改</h3>
 <ul>
-<li>
-<p>热重载的修改内容主要有：</p>
+<li>热重载的修改内容主要有：
 <ul>
 <li>table
 <ul>
@@ -458,13 +457,157 @@ end
         UpdateTable(old_mt, new_mt, reload_tables);
     end
 end
-</code></pre><h3 id=总结>总结</h3>
+</code></pre></li>
+</ul>
+<h3 id=lua-51-旧版本>lua 5.1 旧版本</h3>
+<ul>
+<li>lua 5.1 旧版本中，经常会使用 module 来管理模块，对于热重载的流程也有一些影响。</li>
+</ul>
+<h4 id=module-方法>module 方法</h4>
+<ul>
+<li>module(&ldquo;filename&rdquo;[,package.seeall])
+<ul>
+<li>创建一个模块，使用独立的环境 env 。（<strong>lua5.1 版本之后废弃</strong>）</li>
+</ul>
+</li>
+<li>以 lua5.1 为例，module 方法的具体实现为：</li>
+</ul>
+<pre tabindex=0><code>// loadlib.c
+
+...
+
+static const luaL_Reg pk_funcs[] = {
+  {&quot;loadlib&quot;, ll_loadlib},
+  {&quot;seeall&quot;, ll_seeall},
+  {NULL, NULL}
+};
+
+static const luaL_Reg ll_funcs[] = {
+  {&quot;module&quot;, ll_module},
+  {&quot;require&quot;, ll_require},
+  {NULL, NULL}
+};
+
+...
+
+LUALIB_API int luaopen_package (lua_State *L) {
+  ...
+
+  /* create `package' table */
+  luaL_register(L, LUA_LOADLIBNAME, pk_funcs);
+
+  ...
+
+  luaL_register(L, NULL, ll_funcs);  /* open lib into global table */
+
+  ...
+  return 1;  /* return 'package' table */
+}
+</code></pre><ul>
+<li>可以看到，当初始化调用 luaopen_package 方法时：
+<ul>
+<li>将 &ldquo;seeall&rdquo; 方法注册到 package 中，对应的方法为 llseeall 。</li>
+<li>将 &ldquo;module&rdquo; 方法注册到全局表中，对应的方法为 ll_module 。</li>
+</ul>
+</li>
+</ul>
+<pre tabindex=0><code>// loadlib.c
+
+...
+
+static int ll_module (lua_State *L) {
+  const char *modname = luaL_checkstring(L, 1);
+  int loaded = lua_gettop(L) + 1;  /* index of _LOADED table */
+  lua_getfield(L, LUA_REGISTRYINDEX, &quot;_LOADED&quot;);
+  lua_getfield(L, loaded, modname);  /* get _LOADED[modname] */
+  if (!lua_istable(L, -1)) {  /* not found? */
+    lua_pop(L, 1);  /* remove previous result */
+    /* try global variable (and create one if it does not exist) */
+    if (luaL_findtable(L, LUA_GLOBALSINDEX, modname, 1) != NULL)
+      return luaL_error(L, &quot;name conflict for module &quot; LUA_QS, modname);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, loaded, modname);  /* _LOADED[modname] = new table */
+  }
+  /* check whether table already has a _NAME field */
+  lua_getfield(L, -1, &quot;_NAME&quot;);
+  if (!lua_isnil(L, -1))  /* is table an initialized module? */
+    lua_pop(L, 1);
+  else {  /* no; initialize it */
+    lua_pop(L, 1);
+    modinit(L, modname);
+  }
+  lua_pushvalue(L, -1);
+  setfenv(L);
+  dooptions(L, loaded - 1);
+  return 0;
+}
+
+static void dooptions (lua_State *L, int n) {
+  int i;
+  for (i = 2; i &lt;= n; i++) {
+    lua_pushvalue(L, i);  /* get option (a function) */
+    lua_pushvalue(L, -2);  /* module */
+    lua_call(L, 1, 0);
+  }
+}
+
+</code></pre><ul>
+<li>module 方法的大致流程为：
+<ul>
+<li>检查作为模块名的第一个参数是否为字符串。</li>
+<li>从 package.loaded 中获取模块名对应的对象，即 _LOADED[modname] 。</li>
+<li>如果 _LOADED[modname] 不是一个 table ，表示没有创建过此模块，则创建对应模块。
+<ul>
+<li>在全局表中创建一个新 table ，key 值为 modname。</li>
+<li>将 table 存入 package.loaded 中。</li>
+</ul>
+</li>
+<li>初始化模块的 table 。</li>
+<li>设置模块 table 的 env 为 modname。</li>
+<li>遍历 module 的所有参数，从第二个起参数，依次将其作为 function ，以模块 table 参数执行对应方法。</li>
+</ul>
+</li>
+<li>由于 module 方法设置了新的 env ，所以导致模块无法访问全局表。lua 提供了方便的方法，使用 package.seeall 作为参数传入，即 module(&ldquo;filename&rdquo;, package.seeall)。</li>
+</ul>
+<pre tabindex=0><code>// loadlib.c
+
+static int ll_seeall (lua_State *L) {
+  luaL_checktype(L, 1, LUA_TTABLE);
+  if (!lua_getmetatable(L, 1)) {
+    lua_createtable(L, 0, 1); /* create new metatable */
+    lua_pushvalue(L, -1);
+    lua_setmetatable(L, 1);
+  }
+  lua_pushvalue(L, LUA_GLOBALSINDEX);
+  lua_setfield(L, -2, &quot;__index&quot;);  /* mt.__index = _G */
+  return 0;
+}
+
+</code></pre><ul>
+<li>可以看到，seeall 方法会对传入的 table，创建一个 metatable ，并将 metatable 的 __index 方法设置为全局表（_G）。所以作为 module 方法的第二个参数传入，则可以在模块创建完成后，对模块 table 进行设置，从而实现模块能够访问 _G 中的对象，对于开发者来说比较便利。</li>
+<li>module 方法虽然对开发者来说很便利，但是也存在有一些问题：
+<ul>
+<li>全局环境被污染。由于 module 的创建流程中，会将创建的 table 也存入 _G 表中。</li>
+<li>模块的独立性被破坏。由于可以访问 _G 表，所以能够访问所有全局的对象，而且，对于其他模块，由于也存入了 _G 表，所以也能直接通过模块名访问。</li>
+</ul>
+</li>
+</ul>
+<h4 id=module-热重载>module 热重载</h4>
+<ul>
+<li>从 module 方法的流程，可以看到，require 使用 module 方法的脚本后，在 lua 侧会产生：
+<ul>
+<li>package.loaded[path] = true 或 table</li>
+<li>package.loaded[moduleName] = table</li>
+<li>_G[moduleName] = table</li>
+</ul>
+</li>
+<li>所以热重载的时候，需要将 moduleName 对应的缓存也进行修改，才能保证重新 require 后能重新执行 module 方法更新对应的 table。</li>
+</ul>
+<h3 id=总结>总结</h3>
 <ul>
 <li>热重载一般是针对方法进行修改，保证现有的数据不受影响，所以对 table 中的非方法数据一般不做修改。</li>
 <li>热重载修改的内容，也可根据自己项目的需求进行调整，例如：要修改某些常量数据、不修改metatable等。</li>
 <li>一般用lua开发的项目，热重载功能都是必备的。从加载到重载，了解其中的过程，会发现功能并不复杂。由于热重载能大大提高开发效率，一般会在项目初期就加入此功能，降低开发难度。</li>
-</ul>
-</li>
 </ul>
 <hr>
 <ul class=pager>
