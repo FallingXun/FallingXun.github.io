@@ -1,0 +1,333 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="Shader篇 — 景深">
+<meta property="og:title" content="Shader篇 — 景深">
+<meta property="twitter:title" content="Shader篇 — 景深">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>Shader篇 — 景深-</title>
+<link rel=canonical href=/post/render/shader/shader_depthoffield/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+<li>
+<a href=/categories/googleplay%E7%B3%BB%E5%88%97>googleplay系列</a>
+</li>
+<li>
+<a href=/categories/lua%E7%B3%BB%E5%88%97>lua系列</a>
+</li>
+<li>
+<a href=/categories/tmp%E7%B3%BB%E5%88%97>tmp系列</a>
+</li>
+<li>
+<a href=/categories/%E6%B8%B2%E6%9F%93%E7%B3%BB%E5%88%97>渲染系列</a>
+</li>
+<li>
+<a href=/categories/%E7%AE%97%E6%B3%95%E7%B3%BB%E5%88%97>算法系列</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/shader title=Shader>
+Shader
+</a>
+</div>
+<h1>Shader篇 — 景深</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Monday, April 11, 2022
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>游戏中常常会使用多种后处理效果来增强表现力，而景深是常见的后处理效果之一。</p>
+<h3 id=简介>简介</h3>
+<ul>
+<li>对于一个画面，我们常常想要突出某个对象，因此会将对象以外的其他区域进行模糊处理，只有对象保持清晰，这种效果就是景深。在游戏中，我们要实现景深效果有很多方式，如
+<ul>
+<li>分离背景和目标对象，将背景模糊后再和目标对象组合。</li>
+<li>指定固定的区域，区域外的进行模糊处理，区域内的保持清晰。</li>
+<li>指定一个距离范围，在此距离范围外的进行模糊处理，范围内的保持清晰。</li>
+</ul>
+</li>
+<li>当目标对象前面有其他物体产生遮挡时，使用第三种方案能较好地实现景深效果，后面将以第三种方案实现景深效果。</li>
+</ul>
+<h3 id=实现>实现</h3>
+<ul>
+<li>景深的主要步骤为：
+<ul>
+<li>获取深度纹理。</li>
+<li>比对深度值。</li>
+<li>输出颜色。</li>
+</ul>
+</li>
+</ul>
+<h4 id=获取深度纹理>获取深度纹理</h4>
+<ul>
+<li>为了要知道每个对象和相机的距离，我们需要获取当前渲染的深度纹理，通过采样深度纹理，就可以定位每个片元的深度值，即可以知道哪些片元是属于背景或前景，需要模糊，哪些片元是属于目标对象，需要保持原状。</li>
+<li>Unity中提供了获取深度纹理的方法，当我们在 CSharp 中设置相机的深度模式后，在Shader就能获得对应的深度纹理。CSharp 中的设置逻辑为：</li>
+</ul>
+<pre tabindex=0><code>    ...
+    Camera cam = GetComponent&lt;Camera&gt;();
+    cam.depthTextureMode = DepthTextureMode.Depth;
+</code></pre><ul>
+<li>有三种可能的深度纹理模式：
+<ul>
+<li>DepthTextureMode.Depth ：深度纹理。</li>
+<li>DepthTextureMode.DepthNormals ：深度和视图空间法线打包到一个纹理中。</li>
+<li>DepthTextureMode.MotionVectors ：当前帧的每个屏幕纹素的每像素屏幕空间运动。包装成 RG16 纹理。</li>
+</ul>
+</li>
+<li>设置完成后，在 Shader 中使用对应的变量 _CameraDepthTexture（对应 DepthTextureMode.Depth）即可以获取深度纹理。</li>
+</ul>
+<pre tabindex=0><code>Shader &quot;XXXXXXXX&quot;
+{
+    Properties
+    {
+        ...
+    }
+
+    SubShader
+    {
+        Pass
+        {
+            ...
+
+            sampler2D _CameraDepthTexture;
+            
+            ...
+        }
+    }
+
+    ...
+}
+</code></pre><ul>
+<li>渲染进深度纹理的对象，需要具备以下条件：
+<ul>
+<li>渲染队列 ≤ 2500 。</li>
+<li>Shader 或者 FallBack 的 Shader 中有 ShadowCaster 的 Pass ，一般情况下FallBack 设置为 &ldquo;Diffuse&rdquo; 即可。</li>
+</ul>
+<pre tabindex=0><code>  Pass 
+  {
+      Name &quot;ShadowCaster&quot;
+      Tags { &quot;LightMode&quot; = &quot;ShadowCaster&quot; }
+  }
+</code></pre></li>
+</ul>
+<h4 id=比对深度值>比对深度值</h4>
+<ul>
+<li>通过设置并声明深度图后，就得到了当前帧的深度纹理 _CameraDepthTexture 。为了得到深度信息，需要采样深度图。</li>
+</ul>
+<pre tabindex=0><code>...
+
+			float4 frag(v2f i) : SV_Target
+      {
+			    float d = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv[0]);
+          ...
+      }
+...
+
+</code></pre><ul>
+<li>SAMPLE_DEPTH_TEXTURE 是 Unity 封装好的采样方法，具体实现为</li>
+</ul>
+<pre tabindex=0><code>
+#   define SAMPLE_DEPTH_TEXTURE(sampler, uv) (tex2D(sampler, uv).r)
+
+</code></pre><ul>
+<li>一般情况下，也可以自己使用 tex2D 方法采样，获取 r 分量作为深度值。而使用 Unity 封装的方法，则在某些平台上，就不需要自己再进行一些特殊处理。</li>
+<li>采样出来的深度值 d ，往往是非线性的（透视投影），所以需要变换到线性空间下，Unity 提供了变换的方法，即 Linear01Depth 和 LinearEyeDepth 。</li>
+</ul>
+<pre tabindex=0><code>
+// Z buffer to linear 0..1 depth
+inline float Linear01Depth( float z )
+{
+    return 1.0 / (_ZBufferParams.x * z + _ZBufferParams.y);
+}
+// Z buffer to linear depth
+inline float LinearEyeDepth( float z )
+{
+    return 1.0 / (_ZBufferParams.z * z + _ZBufferParams.w);
+}
+
+</code></pre><ul>
+<li>这里我们使用 LinearEyeDepth ，能比较直观地对比深度值。</li>
+</ul>
+<pre tabindex=0><code>
+			float4 frag(v2f i) : SV_Target
+      {
+			    float d = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv[0]);
+          float z = LinearEyeDepth(d);
+          ...
+      }
+</code></pre><ul>
+<li>此时， z 值即为当前距离相机的深度值。当设置当前的目标范围为 (_Near, _Far) 时，如果在目标范围内，用 1 表示，不在范围内，则用 0 表示。</li>
+</ul>
+<pre tabindex=0><code>
+			float4 frag(v2f i) : SV_Target
+      {
+			    float d = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv[0]);
+          float z = LinearEyeDepth(d);
+
+          float near = sign(z - _Near);
+          float far = sign(_Far - z);
+
+          ...
+      }
+</code></pre><ul>
+<li>当 z > _Near 时， near 为 1，表示满足最小值，否则为 0 。同样，当 z &lt; _Far 时，表示满足最大值，否则为 0 。</li>
+<li>因此，当 near * far 为 1 ，表示当前 z 处于 (_Near, _Far) 中，不需要模糊处理，即得到当前深度值的比对结果。</li>
+</ul>
+<h4 id=输出颜色>输出颜色</h4>
+<ul>
+<li>当知道每个片元是否属于目标范围后，就可以输出最终的目标颜色。
+<ul>
+<li>属于目标范围，直接采样纹理输出对应颜色值。</li>
+<li>不属于目标范围，需要进行模糊处理，输出处理后的颜色值。</li>
+</ul>
+</li>
+<li>模糊处理有很多种方式，如高斯模糊等。这里使用简单的均值模糊来实现。</li>
+</ul>
+<pre tabindex=0><code>
+			v2f vert(a2v i)
+			{
+				  v2f o;
+				  o.pos = UnityObjectToClipPos(i.position);
+				  o.uv[0] = i.uv;
+				  o.uv[1] = i.uv + _MainTex_TexelSize.xy * float2(-1, -1) * _BlurSize;
+				  o.uv[2] = i.uv + _MainTex_TexelSize.xy * float2(0, -1) * _BlurSize;
+				  o.uv[3] = i.uv + _MainTex_TexelSize.xy * float2(1, -1) * _BlurSize;
+				  o.uv[4] = i.uv + _MainTex_TexelSize.xy * float2(0, -1) * _BlurSize;
+				  o.uv[5] = i.uv + _MainTex_TexelSize.xy * float2(0, 1) * _BlurSize;
+				  o.uv[6] = i.uv + _MainTex_TexelSize.xy * float2(1, -1) * _BlurSize;
+				  o.uv[7] = i.uv + _MainTex_TexelSize.xy * float2(1, 0) * _BlurSize;
+				  o.uv[8] = i.uv + _MainTex_TexelSize.xy * float2(1, 1) * _BlurSize;
+				  return o;
+			}
+
+			float4 frag(v2f i) : SV_Target
+			{
+				  float d = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv[0]);
+				  float z = LinearEyeDepth(d);
+				  float near = sign(z - _Near);
+				  float far = sign(_Far - z);
+
+				  float blur = (1 - near * far) * 8 ;
+				  float count = blur + 1;
+				  float4 sum = tex2D(_MainTex, i.uv[0]) / count;
+				  // 中心像素占0.3，周围像素各占0.0875，避免均值模糊导致变暗
+				  sum *= 1 + 2 * blur / 8; 
+				  for(int j = 1; j &lt; count; j++)
+				  {
+				  	  sum += tex2D(_MainTex, i.uv[j]) * 0.0875;
+				  }
+				  float4 color = sum;
+
+				  return color;
+			}
+
+</code></pre>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/algorithm/algorithm_jps/ data-toggle=tooltip data-placement=top title="算法篇 — JPS寻路">&larr;
+Previous Post</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2022
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>
