@@ -283,10 +283,15 @@ inline float LinearEyeDepth( float z )
 </code></pre><ul>
 <li>如果在目标范围内，则只采样当前像素的颜色。如果不在目标范围内，则会额外采样周围的8个像素颜色，然后进行混合模糊。</li>
 <li>_BlurSize 用来控制模糊采样的像素位置取值，越大则取间隔越远的像素，使得模糊效果更加明显。
+<figure>
 <img src="/img/ShaderDemo/DepthOfField/Normal.png?raw=true" alt=Normal.png>
-[常规效果]
-<img src="/img/ShaderDemo/DepthOfField/DepthTexture.png?raw=true" alt=DepthTexture.png>
-[景深效果]</li>
+<center><figcaption>常规效果</figcaption></center>
+</figure>
+<figure>
+<img src="/img/ShaderDemo/DepthOfField/DepthOfField.png?raw=true" alt=DepthTexture.png>
+<center><figcaption>景深效果</figcaption></center>
+</figure>
+</li>
 </ul>
 <h3 id=性能分析>性能分析</h3>
 <ul>
