@@ -280,7 +280,27 @@ inline float LinearEyeDepth( float z )
 				  return color;
 			}
 
-</code></pre>
+</code></pre><ul>
+<li>如果在目标范围内，则只采样当前像素的颜色。如果不在目标范围内，则会额外采样周围的8个像素颜色，然后进行混合模糊。</li>
+<li>_BlurSize 用来控制模糊采样的像素位置取值，越大则取间隔越远的像素，使得模糊效果更加明显。
+<img src="/img/ShaderDemo/DepthOfField/Normal.png?raw=true" alt=Normal.png>
+[常规效果]
+<img src="/img/ShaderDemo/DepthOfField/DepthTexture.png?raw=true" alt=DepthTexture.png>
+[景深效果]</li>
+</ul>
+<h3 id=性能分析>性能分析</h3>
+<ul>
+<li>当我们使用深度图来实现景深效果时，增加了一个获取深度图的流程，通过 Unity 的 FrameDebugger 工具，渲染过程如下：
+<img src="/img/ShaderDemo/DepthOfField/DepthTexture.png?raw=true" alt=DepthTexture.png>
+[左：获取深度图。 右：不获取深度图。]</li>
+<li>可以看到，当获取深度图时，增加了一个 UpdateDepthTexture 的流程，即更新深度图。在此过程中，会做一次 Clear 操作，然后对符合条件的对象进行一次渲染。当前示例中有 4 个对象，所以多了 5 个 drawcall ，即每个符合的对象都会被渲染两次。当场景比较复杂时，符合条件的对象会有很多，那么 drawcall 会接近翻倍，性能上会有较大的影响。</li>
+<li>因此，如果在场景本身已经存在深度图的时候，使用这种方式实现景深效果则不会额外增加渲染压力，否则需要进行斟酌。</li>
+</ul>
+<h3 id=总结>总结</h3>
+<ul>
+<li>使用深度图实现景深效果，对于目标区间比较容易控制，能较方便控制需要突出的区间。然而，由于其性能上的限制，很多情况下，往往会舍弃一些表现效果，选择其他性能消耗较低的方案来实现，需要开发者根据项目需求进行抉择。</li>
+<li>Demo示例工程： <a href=https://github.com/FallingXun/ShaderDemo/tree/main/DepthOfField>https://github.com/FallingXun/ShaderDemo/tree/main/DepthOfField</a></li>
+</ul>
 <hr>
 <ul class=pager>
 <li class=previous>
