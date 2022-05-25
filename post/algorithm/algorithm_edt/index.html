@@ -237,10 +237,10 @@ post-container">
 </ul>
 <pre tabindex=0><code class=language-math data-lang=math>  G(i,j) = \min_{y} \lbrace (j - y)^2 | F(i, y) = 0 \rbrace
 </code></pre><ul>
-<li>变换二：从变换一的 G 开始，变换产生一个图像 S ，它是 F 的距离映射。对于点 (i,j) 所在的列，点 (i, j) 到当前列的每一个点 (x, j) 的距离（即到每一行的距离），加上 G(x, j) 的值，其中的最小值，则为点 (i, j) 在 F 中的距离，即 S(i, j)。
-$S(i,j) = \min_{x} \lbrace G(x, j) + (i - x)^2 \rbrace$</li>
+<li>变换二：从变换一的 G 开始，变换产生一个图像 S ，它是 F 的距离映射。对于点 (i,j) 所在的列，点 (i, j) 到当前列的每一个点 (x, j) 的距离（即到每一行的距离），加上 G(x, j) 的值，其中的最小值，则为点 (i, j) 在 F 中的距离，即 S(i, j)。</li>
 </ul>
-</li>
+<pre tabindex=0><code class=language-math data-lang=math>  S(i,j) = \min_{x} \lbrace G(x, j) + (i - x)^2 \rbrace
+</code></pre></li>
 </ul>
 <h4 id=伪代码-2>伪代码</h4>
 <p>
@@ -384,6 +384,10 @@ $S(i,j) = \min_{x} \lbrace G(x, j) + (i - x)^2 \rbrace$</li>
 <li>暴力算法在一定范围内，由于实现简单，一定程度上耗时还是相对能接受的。</li>
 <li>独立扫描算法表现较好，但处理较大图片的时候耗时相对还是较高，但是算法相对简单，方便扩展。</li>
 <li>光栅扫描算法是其中表现最好的，对于 2048 x 2048 的图片，耗时也相对较低，因此也是使用相对较广泛的算法。</li>
+</ul>
+<h3 id=示例工程>示例工程</h3>
+<ul>
+<li>项目示例工程：https://github.com/FallingXun/AlgorithmDemo/tree/main/EDT</li>
 </ul>
 <h3 id=参考>参考</h3>
 <ul>
