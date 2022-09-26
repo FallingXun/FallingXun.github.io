@@ -82,7 +82,7 @@ Algorithm
 Posted by
 Xun
 on
-Monday, May 23, 2022
+Sunday, September 25, 2022
 </span>
 </div>
 </div>
@@ -105,20 +105,16 @@ post-container">
 <h3 id=brute-force>Brute Force</h3>
 <h4 id=简介-1>简介</h4>
 <ul>
-<li>暴力算法，就是从头开始，逐一对主字符串进行匹配，当匹配不成功的时候再从下一个字符串开始匹配。</li>
-<li>
+<li>暴力算法，就是从头开始，逐一对主字符串进行匹配，当匹配不成功的时候再从下一个字符串开始匹配。
 <img src="/img/Algorithm/KMP/BruteForce_1.png?raw=true" alt=BruteForce_1.png>
 </li>
-<li>从首个字符开始匹配主字符串和子字符串。</li>
-<li>
+<li>从首个字符开始匹配主字符串和子字符串。
 <img src="/img/Algorithm/KMP/BruteForce_2.png?raw=true" alt=BruteForce_2.png>
 </li>
-<li>字符相同，则都移动到下一个字符继续匹配。</li>
-<li>
+<li>字符相同，则都移动到下一个字符继续匹配。
 <img src="/img/Algorithm/KMP/BruteForce_3.png?raw=true" alt=BruteForce_3.png>
 </li>
-<li>一直往后遍历匹配，直到出现字符不相同，则需要回退。</li>
-<li>
+<li>一直往后遍历匹配，直到出现字符不相同，则需要回退。
 <img src="/img/Algorithm/KMP/BruteForce_4.png?raw=true" alt=BruteForce_4.png>
 </li>
 <li>第一个字符为首的匹配失败，以第二个字符为首重新开始匹配。</li>
@@ -169,22 +165,18 @@ post-container">
 <h4 id=简介-2>简介</h4>
 <ul>
 <li>KMP 算法通过分析子字符串的结构，在匹配过程中，省去一部分匹配操作，从而提升效率。</li>
-<li>回头看前面的示例</li>
-<li>
+<li>回头看前面的示例
 <img src="/img/Algorithm/KMP/KMPBase_1.png?raw=true" alt=KMPBase_1.png>
 </li>
 <li>当 m = 4 、c = 4 时，Main[4] 和 Child[4] 不相同，主字符串的前4位已经匹配过，和子字符串前4位相同。</li>
 <li>假设整个字符串的所有字符都互异，则可以将子字符串的首位移动到主字符串的第5位，即 m = 4 、c = 0，因为前4位字符相互肯定不会相同，可以直接跳过。</li>
-<li>然而，如果存在会相同字符，则需要知道子字符串的前几位和主字符串的后几位字符串是否匹配。</li>
-<li>
+<li>然而，如果存在会相同字符，则需要知道子字符串的前几位和主字符串的后几位字符串是否匹配。
 <img src="/img/Algorithm/KMP/KMPBase_2.png?raw=true" alt=KMPBase_2.png>
 </li>
-<li>如果不相同，则子字符串继续向右移动。</li>
-<li>
+<li>如果不相同，则子字符串继续向右移动。
 <img src="/img/Algorithm/KMP/KMPBase_3.png?raw=true" alt=KMPBase_3.png>
 </li>
-<li>如果找到相同的，则可以跳过相同部分，从下一个字符开始匹配。</li>
-<li>
+<li>如果找到相同的，则可以跳过相同部分，从下一个字符开始匹配。
 <img src="/img/Algorithm/KMP/KMPBase_4.png?raw=true" alt=KMPBase_4.png>
 </li>
 <li>可以看到，图（2）（3）中的红框部分比较，其实等价于，主字符串和子字符串相同部分，后缀和前缀的对比。因此只要我们知道，当子字符的某个索引位置匹配失败时，前面部分的后缀和前缀相同的长度是多少，则子字符可以跳过那部分索引，减少了重复匹配的情况，从而提升匹配效率。</li>
@@ -301,8 +293,7 @@ post-container">
 </code></pre><h4 id=算法分析-1>算法分析</h4>
 <ul>
 <li>假设主字符串的长度为 m ，子字符串的长度为 n，分别进行分析。</li>
-<li>对子字符串求 next 过程，后缀 postfix 一直增加，而前缀 prefix 可能随 postfix 一起增加，也可能减少。减到 -1 时，只能继续随postfix增加。</li>
-<li>
+<li>对子字符串求 next 过程，后缀 postfix 一直增加，而前缀 prefix 可能随 postfix 一起增加，也可能减少。减到 -1 时，只能继续随postfix增加。
 <img src="/img/Algorithm/KMP/KMPAnalyze_1.png?raw=true" alt=KMPAnalyze_1.png>
 </li>
 <li>可以看到，prefix 的变化，可以分为增加部分和减少部分，增加部分最多只能变化 n - 1 次，即最多只能和 postfix 增加一样的大小，而减少部分也最多只能变化 n - 1 次，即只能减少增加的部分，因此子字符串的时间复杂度为 O(n)。</li>
@@ -312,16 +303,13 @@ post-container">
 <h3 id=kmp-改进版>KMP 改进版</h3>
 <h4 id=简介-3>简介</h4>
 <ul>
-<li>再看前面的示例</li>
-<li>
+<li>再看前面的示例
 <img src="/img/Algorithm/KMP/KMPImprove_1.png?raw=true" alt=KMPImprove_1.png>
 </li>
-<li>当匹配到第五个字符不相同时，根据 KMP 算法，子字符串回退到 c = 2 继续匹配。</li>
-<li>
+<li>当匹配到第五个字符不相同时，根据 KMP 算法，子字符串回退到 c = 2 继续匹配。
 <img src="/img/Algorithm/KMP/KMPImprove_2.png?raw=true" alt=KMPImprove_2.png>
 </li>
-<li>c = 2 匹配失败，子字符串回退到 c = 0 继续匹配。</li>
-<li>
+<li>c = 2 匹配失败，子字符串回退到 c = 0 继续匹配。
 <img src="/img/Algorithm/KMP/KMPImprove_3.png?raw=true" alt=KMPImprove_3.png>
 </li>
 <li>c = 0 匹配失败，主字符串和子字符串都继续向右移动。</li>
@@ -417,12 +405,8 @@ post-container">
 <hr>
 <ul class=pager>
 <li class=previous>
-<a href=/post/render/shader/shader_depthoffield/ data-toggle=tooltip data-placement=top title="Shader篇 — 景深">&larr;
+<a href=/post/algorithm/algorithm_edt/ data-toggle=tooltip data-placement=top title="算法篇 — EDT（欧式距离变换）">&larr;
 Previous Post</a>
-</li>
-<li class=next>
-<a href=/post/algorithm/algorithm_edt/ data-toggle=tooltip data-placement=top title="算法篇 — EDT（欧式距离变换）">Next
-Post &rarr;</a>
 </li>
 </ul>
 <div id=disqus-comment></div>
