@@ -7,17 +7,17 @@
 <meta property="og:type" content="article">
 <meta property="og:image" content="https://fallingxun.github.io//">
 <meta property="twitter:image" content="https://fallingxun.github.io//">
-<meta name=title content="GooglePlay">
-<meta property="og:title" content="GooglePlay">
-<meta property="twitter:title" content="GooglePlay">
+<meta name=title content="图形学篇 — 重心坐标插值">
+<meta property="og:title" content="图形学篇 — 重心坐标插值">
+<meta property="twitter:title" content="图形学篇 — 重心坐标插值">
 <meta name=description content>
 <meta property="og:description" content>
 <meta property="twitter:description" content>
 <meta property="twitter:card" content="summary">
 <meta name=keyword content>
 <link rel="shortcut icon" href=/img/favicon.ico>
-<title>GooglePlay-</title>
-<link rel=canonical href=/tags/googleplay/>
+<title>图形学篇 — 重心坐标插值-</title>
+<link rel=canonical href=/post/render/graphics/graphics_barycentricinterpolation/>
 <link rel=stylesheet href=/css/iDisqus.min.css>
 <link rel=stylesheet href=/css/bootstrap.min.css>
 <link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
@@ -68,76 +68,64 @@
 </div>
 </nav>
 <script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
-<header class=intro-header style="background-image:url('/')">
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
 <div class=container>
 <div class=row>
 <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
-<div class=site-heading>
-<h1>Xun's Blog </h1>
-<span class=subheading></span>
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/graphics title=Graphics>
+Graphics
+</a>
+</div>
+<h1>图形学篇 — 重心坐标插值</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Tuesday, September 27, 2022
+</span>
 </div>
 </div>
 </div>
 </div>
 </header>
+<article>
 <div class=container>
 <div class=row>
-<div class="col-lg-8 col-lg-offset-1
-col-md-8 col-md-offset-1
-col-sm-12
-col-xs-12
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
 post-container">
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/googleplay/googleplayoffline/>
-<h2 class=post-title>
-GooglePlay篇 — (3) 离线配置
-</h2>
-<div class=post-content-preview>
-<p>谷歌unity的登录和IAP支付插件，很多设置需要在联网状态下进行，离线状态下，不能直接应用，需要进一步进行处理。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Wednesday, July 7, 2021
-</p>
-</div>
 <hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/googleplay/googleplaypay/>
-<h2 class=post-title>
-GooglePlay篇 — (2) 支付
-</h2>
-<div class=post-content-preview>
-<p>本文档主要介绍接入Unity的IAP，来实现谷歌的支付功能。</p>
+<ul class=pager>
+<li class=previous>
+<a href=/post/render/graphics/graphics_transform/ data-toggle=tooltip data-placement=top title="图形学篇 — 变换">&larr;
+Previous Post</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
 </div>
-</a>
-<p class=post-meta>
-Posted byXun Tuesday, July 6, 2021
-</p>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
 </div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/googleplay/googleplaylogin/>
-<h2 class=post-title>
-GooglePlay篇 — (1) 登录
-</h2>
-<div class=post-content-preview>
-<p>本文档主要是以Google Play SDK for Unity方式接入登录来说明谷歌登录的设置，主要介绍谷歌后台设置、Unity侧设置和安卓设备上的设置等相关情况</p>
 </div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, July 5, 2021
-</p>
-</div>
-<hr>
-</div>
-<div class="col-lg-3 col-lg-offset-0
-col-md-3 col-md-offset-0
-col-sm-12
-col-xs-12
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
 sidebar-container">
 </div>
 </div>
 </div>
+</article>
 <footer>
 <div class=container>
 <div class=row>
