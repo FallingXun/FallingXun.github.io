@@ -101,10 +101,10 @@ post-container">
 <p>在几何中，重心坐标有特别的性质，相应也有许多用途，其中重心坐标插值在图形学中也有广泛应用。</p>
 <h3 id=简介>简介</h3>
 <ul>
-<li>设 △ABC 的顶点坐标为 v1 、v2 、v3 ，对于ABC 中的任意一点 P ，坐标为 v0 ，都可以。如果存在 λ1 、 λ2 、λ3 ，使得
+<li>设 三角形ABC 的顶点坐标为 v1 、v2 、v3 ，对于ABC 中的任意一点 P ，坐标为 v0 ，都可以。如果存在 λ1 、 λ2 、λ3 ，使得
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_1.png?raw=true" alt=Math_BarycentricInterpolation_1.png>
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_2.png?raw=true" alt=Math_BarycentricInterpolation_2.png>
-那么点 (λ1, λ2, λ3) 即为点 P 在 △ABC 中的（归一化）重心坐标。此时由三个顶点和 P 点划分的三个三角形的面积比例为 λ1:λ2:λ3 。
+那么点 (λ1, λ2, λ3) 即为点 P 在 三角形ABC 中的（归一化）重心坐标。此时由三个顶点和 P 点划分的三个三角形的面积比例为 λ1:λ2:λ3 。
 <img src="/img/Render/Graphics/BarycentricInterpolation/BarycentricInterpolation_1.png?raw=true" alt=BarycentricInterpolation_1.png>
 </li>
 <li>可以看出，对于三角形中任意一个点，通过找到其重心坐标，即找到该点相对于三个顶点的权重，就可以通过三个顶点的数据，对该点进行插值，从而对三角形中的所有点都可以进行插值，这种插值方式即为重心坐标插值。</li>
@@ -112,7 +112,7 @@ post-container">
 </ul>
 <h3 id=2d-重心坐标推导>2D 重心坐标推导</h3>
 <ul>
-<li>△PBA 的面积为
+<li>三角形PBA 的面积为
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_3.png?raw=true" alt=Math_BarycentricInterpolation_3.png>
 其中
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_4.png?raw=true" alt=Math_BarycentricInterpolation_4.png>
