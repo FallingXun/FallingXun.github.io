@@ -1,6 +1,5 @@
 <!doctype html><html lang=zh-cn>
 <head>
-<meta name=generator content="Hugo 0.89.0">
 <meta charset=utf-8>
 <meta http-equiv=x-ua-compatible content="IE=edge">
 <meta name=viewport content="width=device-width,initial-scale=1">
@@ -8,17 +7,17 @@
 <meta property="og:type" content="article">
 <meta property="og:image" content="https://fallingxun.github.io//">
 <meta property="twitter:image" content="https://fallingxun.github.io//">
-<meta name=title content>
-<meta property="og:title" content>
-<meta property="twitter:title" content>
+<meta name=title content="图形学篇 — 双线性插值">
+<meta property="og:title" content="图形学篇 — 双线性插值">
+<meta property="twitter:title" content="图形学篇 — 双线性插值">
 <meta name=description content>
 <meta property="og:description" content>
 <meta property="twitter:description" content>
 <meta property="twitter:card" content="summary">
 <meta name=keyword content>
 <link rel="shortcut icon" href=/img/favicon.ico>
-<title>Xun's Blog-</title>
-<link rel=canonical href=/>
+<title>图形学篇 — 双线性插值-</title>
+<link rel=canonical href=/post/render/graphics/graphics_bilinearinterpolation/>
 <link rel=stylesheet href=/css/iDisqus.min.css>
 <link rel=stylesheet href=/css/bootstrap.min.css>
 <link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
@@ -69,151 +68,68 @@
 </div>
 </nav>
 <script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
-<header class=intro-header style="background-image:url('/')">
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
 <div class=container>
 <div class=row>
 <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
-<div class=site-heading>
-<h1>Xun's Blog </h1>
-<span class=subheading></span>
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/graphics title=Graphics>
+Graphics
+</a>
+</div>
+<h1>图形学篇 — 双线性插值</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Thursday, September 29, 2022
+</span>
 </div>
 </div>
 </div>
 </div>
 </header>
+<article>
 <div class=container>
 <div class=row>
-<div class="col-lg-8 col-lg-offset-1
-col-md-8 col-md-offset-1
-col-sm-12
-col-xs-12
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
 post-container">
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/lua/lua_xlua/>
-<h2 class=post-title>
-Lua篇 — (3) xLua
-</h2>
-<div class=post-content-preview>
-<p>由于很多旧项目是以CSharp开发的，热更时就会遇到难题。而xLua框架的出现，让很多项目能够在改动最小的情况下，支持热更新功能。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Thursday, November 4, 2021
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/lua/lua_tolua/>
-<h2 class=post-title>
-Lua篇 — (2) ToLua
-</h2>
-<div class=post-content-preview>
-<p>ToLua是很多项目都使用的lua框架，为了更好地使用，需要对框架有比较清晰的认识。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Wednesday, November 3, 2021
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/lua/lua_main/>
-<h2 class=post-title>
-Lua篇 — (1) Lua介绍
-</h2>
-<div class=post-content-preview>
-<p>随着游戏行业的发展，热更已经成为游戏开发不可或缺的功能。热更有很多方案，lua热更是使用较广泛，也相对稳定的方案。因此，需要对lua有一定程度的了解，对于lua热更框架才能理解得更加透彻。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Saturday, October 23, 2021
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/googleplay/googleplayoffline/>
-<h2 class=post-title>
-GooglePlay篇 — (3) 离线配置
-</h2>
-<div class=post-content-preview>
-<p>谷歌unity的登录和IAP支付插件，很多设置需要在联网状态下进行，离线状态下，不能直接应用，需要进一步进行处理。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Wednesday, July 7, 2021
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/googleplay/googleplaypay/>
-<h2 class=post-title>
-GooglePlay篇 — (2) 支付
-</h2>
-<div class=post-content-preview>
-<p>本文档主要介绍接入Unity的IAP，来实现谷歌的支付功能。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Tuesday, July 6, 2021
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/googleplay/googleplaylogin/>
-<h2 class=post-title>
-GooglePlay篇 — (1) 登录
-</h2>
-<div class=post-content-preview>
-<p>本文档主要是以Google Play SDK for Unity方式接入登录来说明谷歌登录的设置，主要介绍谷歌后台设置、Unity侧设置和安卓设备上的设置等相关情况</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, July 5, 2021
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/tmp/textmeshoutline/>
-<h2 class=post-title>
-TMP(TextMeshPro)优化篇 — (2) 描边投影效果
-</h2>
-<div class=post-content-preview>
-<p>TMP(TextMeshPro)比起原本使用的text，能有更丰富的字体效果表现，基于SDF的实现，可以让字体不会在放大显示后变得模糊，避免了字体贴图的突然扩张。同时，描边和投影效果也不再使用多个text偏移叠加的实现方式，能较大程度减少顶点数量和overdraw。(当前版本 <a href=mailto:com.unity.textmeshpro@1.4.1>com.unity.textmeshpro@1.4.1</a>)</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, February 8, 2021
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/tmp/textmeshprogcoptimize/>
-<h2 class=post-title>
-TMP(TextMeshPro)优化篇 — (1) 堆内存
-</h2>
-<div class=post-content-preview>
-<p>TextMeshPro(TMP)是Unity的字体插件，具有很强大的功能，然而使用的过程中会发现堆内存的申请频率和大小都不低，尤其是在UI界面的使用上，每次打开界面，都会使得界面上的TMP进行初始化，随着使用时长的增加，就容易引起GC。（当前版本 <a href=mailto:com.unity.textmeshpro@1.4.1>com.unity.textmeshpro@1.4.1</a>）。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Sunday, February 7, 2021
-</p>
-</div>
 <hr>
 <ul class=pager>
 <li class=previous>
-<a href=/>&larr; Newer Posts</a>
+<a href=/post/render/graphics/graphics_anti-aliasing/ data-toggle=tooltip data-placement=top title="图形学篇 — 抗锯齿">&larr;
+Previous Post</a>
+</li>
+<li class=next>
+<a href=/post/render/graphics/graphics_beziercurves/ data-toggle=tooltip data-placement=top title="图形学篇 — 贝塞尔曲线">Next
+Post &rarr;</a>
 </li>
 </ul>
+<div id=disqus-comment></div>
 </div>
-<div class="col-lg-3 col-lg-offset-0
-col-md-3 col-md-offset-0
-col-sm-12
-col-xs-12
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
 sidebar-container">
 </div>
 </div>
 </div>
+</article>
 <footer>
 <div class=container>
 <div class=row>
