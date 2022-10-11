@@ -101,18 +101,18 @@ post-container">
 <p>在几何中，重心坐标有特别的性质，相应也有许多用途，其中重心坐标插值在图形学中也有广泛应用。</p>
 <h3 id=简介>简介</h3>
 <ul>
-<li>设 三角形ABC 的顶点坐标为 v1 、v2 、v3 ，对于ABC 中的任意一点 P ，坐标为 v0 ，都可以。如果存在 λ1 、 λ2 、λ3 ，使得
+<li>设 三角形ABC 的顶点坐标为 v1 、v2 、v3 ，对于ABC 中的任意一点 P ，坐标为 v0 ，都可以。如果存在 α 、 β 、γ ，使得
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_1.png?raw=true" alt=Math_BarycentricInterpolation_1.png>
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_2.png?raw=true" alt=Math_BarycentricInterpolation_2.png>
-那么点 (λ1, λ2, λ3) 即为点 P 在 三角形ABC 中的（归一化）重心坐标。此时由三个顶点和 P 点划分的三个三角形的面积比例为 λ1:λ2:λ3 。
+那么点 (α, β, γ) 即为点 P 在 三角形ABC 中的（归一化）重心坐标。此时由三个顶点和 P 点划分的三个三角形的面积比例为 α:β:γ 。
 <img src="/img/Render/Graphics/BarycentricInterpolation/BarycentricInterpolation_1.png?raw=true" alt=BarycentricInterpolation_1.png>
 </li>
 <li>可以看出，对于三角形中任意一个点，通过找到其重心坐标，即找到该点相对于三个顶点的权重，就可以通过三个顶点的数据，对该点进行插值，从而对三角形中的所有点都可以进行插值，这种插值方式即为重心坐标插值。</li>
-<li>因此，重心坐标插值的核心，即找到每个点对应的权重 λ1 、 λ2 、 λ3 。</li>
+<li>因此，重心坐标插值的核心，即找到每个点对应的权重 α 、 β 、 γ 。</li>
 </ul>
-<h3 id=2d-重心坐标推导>2D 重心坐标推导</h3>
+<h3 id=重心坐标推导>重心坐标推导</h3>
 <ul>
-<li>三角形PBA 的面积为
+<li>三角形PAB 的面积为
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_3.png?raw=true" alt=Math_BarycentricInterpolation_3.png>
 其中
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_4.png?raw=true" alt=Math_BarycentricInterpolation_4.png>
@@ -123,7 +123,53 @@ post-container">
 因此，同理可以得到
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_8.png?raw=true" alt=Math_BarycentricInterpolation_8.png>
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_9.png?raw=true" alt=Math_BarycentricInterpolation_9.png>
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_10.png?raw=true" alt=Math_BarycentricInterpolation_10.png>
 </li>
+<li>知道了每个三角形的面积后，每个顶点对应的权重为
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_11.png?raw=true" alt=Math_BarycentricInterpolation_11.png>
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_12.png?raw=true" alt=Math_BarycentricInterpolation_12.png>
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_13.png?raw=true" alt=Math_BarycentricInterpolation_13.png>
+</li>
+</ul>
+<h3 id=透视校正插值>透视校正插值</h3>
+<ul>
+<li>渲染流水线中，重心坐标插值，通常是在光栅化阶段，对屏幕空间（Screen Space）下的像素进行，而不是在观察空间（View Space）下进行。由于透视投影不是线性变换，因此变换后的三角形和变换前的形状可能会发生变化，如下图所示
+<figure>
+<img src="/img/Render/Graphics/BarycentricInterpolation/BarycentricInterpolation_2.png?raw=true" alt=BarycentricInterpolation_2.png>
+<center><figcaption>正交投影（左）和 透视投影（右）的示例</figcaption></center>
+</figure>
+可以看到，正交投影下，屏幕上的 b 点对应 B 点，都为中点。而透视投影下的 b 点对应的 B 点，则并不为中点，即透视投影发生了非线性变换。因此，在屏幕空间下对三角形的插值，并不能得到正确的结果，需要进行校正。
+<figure>
+<img src="/img/Render/Graphics/BarycentricInterpolation/BarycentricInterpolation_3.png?raw=true" alt=BarycentricInterpolation_3.png>
+<center><figcaption>正交投影（左）和 透视投影（右）的示例</figcaption></center>
+</figure>
+</li>
+<li>从前面的推导过程，我们可以得到三角形 ABC 中的点 P 的重心坐标 (α, β, γ)，则深度值为
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_14.png?raw=true" alt=Math_BarycentricInterpolation_14.png>
+同样，三角形 A&rsquo;B&rsquo;C' 中的点 P' 的重心坐标 (α', β', γ')，则深度值为
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_15.png?raw=true" alt=Math_BarycentricInterpolation_15.png>
+根据重心坐标的性质有
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_16.png?raw=true" alt=Math_BarycentricInterpolation_16.png>
+对等式两边进行变换
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_17.png?raw=true" alt=Math_BarycentricInterpolation_17.png>
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_18.png?raw=true" alt=Math_BarycentricInterpolation_18.png>
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_19.png?raw=true" alt=Math_BarycentricInterpolation_19.png>
+从而，我们得到了 P 点深度值的另一种表示方式，对比可以得到 α, β, γ 和 α', β', γ' 的一组对应关系
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_20.png?raw=true" alt=Math_BarycentricInterpolation_20.png>
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_21.png?raw=true" alt=Math_BarycentricInterpolation_21.png>
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_22.png?raw=true" alt=Math_BarycentricInterpolation_22.png>
+由于
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_23.png?raw=true" alt=Math_BarycentricInterpolation_23.png>
+所以可以得到
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_24.png?raw=true" alt=Math_BarycentricInterpolation_24.png>
+</li>
+<li>因此， P' 点的属性 I' ，需要以 α, β, γ 进行插值，则有
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_25.png?raw=true" alt=Math_BarycentricInterpolation_25.png>
+</li>
+</ul>
+<h3 id=总结>总结</h3>
+<ul>
+<li>重心坐标插值方法，在图形学中应用相对比较广泛，深度、法线、颜色等都可以通过这种方式进行插值。了解重心坐标的概念和推导方式后，还需要注意透视投影带来的问题，需要通过校正后，才能得到正确的插值表现。</li>
 </ul>
 <hr>
 <ul class=pager>
