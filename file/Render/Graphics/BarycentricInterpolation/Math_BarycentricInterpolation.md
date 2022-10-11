@@ -5,7 +5,7 @@
 
 - Math_BarycentricInterpolation_2
 ```math
-(\alpha + \beta + \gamma)v_0 = \alpha v_1 + \beta v_2 + \gamma v_3
+(\alpha + \beta + \gamma)v_P = \alpha v_A + \beta v_B + \gamma v_C
 ```
 
 - Math_BarycentricInterpolation_3
