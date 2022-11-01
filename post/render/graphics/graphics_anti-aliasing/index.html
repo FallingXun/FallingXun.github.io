@@ -123,7 +123,10 @@ post-container">
 </ul>
 <h3 id=taa>TAA</h3>
 <ul>
-<li>TAA（Temporal Antialiasing），使用前一帧的结果来改进图像的技术。在 TAA 之前，MSAA 是实时引擎中使用最多的抗锯齿技术。然而在延迟渲染中， MSAA 并不能有很好的效率。一方面，采样点可见性和像素着色的硬件加速映射关系丢失，使得 MSAA 不得不退回消耗更大的 SSAA 。另一方面，在 MSAA 下，延迟渲染 G-Buffers 的存储和内存带宽需求都是成倍增长，远远超过了 MSAA 方案带来的优化效益。</li>
+<li>TAA（Temporal Antialiasing），使用前一帧的结果来改进图像的技术。在 TAA 之前，MSAA 是实时引擎中使用最多的抗锯齿技术。然而在延迟渲染中， MSAA 并不能有很好的效率。一方面，采样点可见性和像素着色的硬件加速映射关系丢失，使得 MSAA 不得不退回消耗更大的 SSAA 。另一方面，在 MSAA 下，延迟渲染 G-Buffers 的存储和内存带宽需求都是成倍增长，远远超过了 MSAA 方案带来的优化效益。而 TAA 通过从前一帧重新投影得到着色结果，有效地分摊了连续帧上每个像素着色多个样本的成本，并在单样本着色的基础上以很小的成本实现了超采样。从质量的角度来看，与单帧后处理抗锯齿技术相比，TAA不仅更有效地抑制了锯齿，而且产生了更稳定的时间结果。
+<img src="/img/Render/Graphics/Antialiasing/TAA_1.png?raw=true" alt=TAA_1.png>
+</li>
+<li>TAA 的大致流程如上图所示，在第 N 帧之前为每个像素收集了一些样本(红色点)，并已被混合并作为每像素(橙色点)的颜色值存储在历史缓冲区中。对第 N 帧中的每一个像素，会映射到上一帧该位置对应的像素，得到颜色值，该颜色值也就是以前累积的样本的混合值。然后，对于当前帧 N ，在抖动的位置着色一个新的样本(绿色点)，并将结果与重新采样的历史颜色合并，最终得到该像素的最终颜色（蓝色点）。第 N 帧这个像素的颜色，也将作为 N + 1 帧的历史颜色。</li>
 </ul>
 <p><a href=http://www.leiy.cc/publications/TAA/TemporalAA.pdf>http://www.leiy.cc/publications/TAA/TemporalAA.pdf</a></p>
 <hr>
