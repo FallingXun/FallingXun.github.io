@@ -1,0 +1,268 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="CustomizedVariant — 定制化变体">
+<meta property="og:title" content="CustomizedVariant — 定制化变体">
+<meta property="twitter:title" content="CustomizedVariant — 定制化变体">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>CustomizedVariant — 定制化变体-</title>
+<link rel=canonical href=/post/unity/customizedvariant/customizedvariant/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+<li>
+<a href=/categories/googleplay%E7%B3%BB%E5%88%97>googleplay系列</a>
+</li>
+<li>
+<a href=/categories/lua%E7%B3%BB%E5%88%97>lua系列</a>
+</li>
+<li>
+<a href=/categories/tmp%E7%B3%BB%E5%88%97>tmp系列</a>
+</li>
+<li>
+<a href=/categories/unity%E7%B3%BB%E5%88%97>unity系列</a>
+</li>
+<li>
+<a href=/categories/%E5%9B%BE%E5%BD%A2%E5%AD%A6%E7%B3%BB%E5%88%97>图形学系列</a>
+</li>
+<li>
+<a href=/categories/%E6%B8%B2%E6%9F%93%E7%B3%BB%E5%88%97>渲染系列</a>
+</li>
+<li>
+<a href=/categories/%E7%AE%97%E6%B3%95%E7%B3%BB%E5%88%97>算法系列</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/%E5%8F%98%E4%BD%93 title=变体>
+变体
+</a>
+<a class=tag href=/tags/%E5%AE%9A%E5%88%B6 title=定制>
+定制
+</a>
+</div>
+<h1>CustomizedVariant — 定制化变体</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Tuesday, November 29, 2022
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>定制化变体工具。能对现有的预制体，定制一套对应的变体预制体。整套变体都沿用对应原预制体的信息，并且可以进行编辑修改。</p>
+<h2 id=简介>简介</h2>
+<ul>
+<li>Unity 提供了变体机制，即对源预制体创建一个新的预制体（变体），新预制体（变体）只记录对源预制体的修改信息。对变体的所有修改，都不会影响源预制体，同时能沿用源预制体的所有信息。变体其实是对嵌套预制体的扩展，提供另一种差异化途径，其特点主要有：
+<ul>
+<li>可以修改任意组件（Component）和任意物体（GameObject）的属性</li>
+<li>可以添加任意组件（AddComponent）</li>
+<li>可以移除任意组件（RemoveComponent）</li>
+<li>可以添加新的物体（AddGameObject）</li>
+</ul>
+</li>
+<li>另一方面，由于是嵌套预制机制的扩展，变体也有一定的限制（预览模式下）：
+<ul>
+<li>不允许变更嵌套预制体的对象（同嵌套预制规则）</li>
+<li>不允许修改嵌套预制体的节点顺序（同嵌套预制体规则）</li>
+</ul>
+</li>
+<li>可以看出，如果源预制体中存在嵌套预制体，而嵌套预制体同样也有对应的变体，那么源预制体的变体是无法引用到嵌套预制体的变体的，也就是说，嵌套预制体的变体修改则无法和源预制体的变体关联起来。因此，要想定制一套对应的变体预制体，关键就是将嵌套预制体的变体修改应用到源预制体的变体上。</li>
+<li>这里，先设定一系列概念：
+<ul>
+<li>xxx_CustomizedTemp.prefab : 临时变体，由 xxx.prefab 创建的变体</li>
+<li>xxx_Customized.prefab ：定制变体，由 xxx_CustomizedTemp.prefab 创建的变体。</li>
+</ul>
+</li>
+</ul>
+<h2 id=框架介绍>框架介绍</h2>
+<p>
+<img src="/img/Unity/CustomizedVariant/Panel_A.png?raw=true" alt=Panel_A.png>
+</p>
+<ul>
+<li>以上图为例，Item_A 为 Panel_A 的嵌套预制体，RedPoint 为 Item_A 的嵌套预制体。当创建 Panel_A 的变体 Panel_A_Customized 时，将 Item_A 和 RedPoint 的变体（Item_A_Customized 、 RedPoint_Customized）信息也应用到 Panel_A_Customized 上，那么 Panel_A_Customized 就真正成为 Panel_A 对应的定制化变体预制体。此时，Panel_A_Customized 记录了 Item_A_Customized 、 RedPoint_Customized 、 Panel_A_Customized 的所有修改信息。</li>
+<li>然而，当 Item_A_Customized 或 RedPoint_Customized 出现新的修改后，Panel_A_Customized 难以同步进行更新，因为不能分辨哪些修改信息是属于自身变体的，哪些是属于嵌套预制变体的。因此，需要将嵌套预制变体的修改信息分离出来，用 Panel_A_CustomizedTemp 来记录，则 Panel_A_Customized 只记录自身的修改信息。同理，由于 RedPoint 为 Item_A 的嵌套预制体，则 Item_A_CustomizedTemp 用来记录其修改，而 Item_A_Customized 只记录自身修改信息。</li>
+<li>可以看出，通过分离后， xxx_CustomizedTemp.prefab 作为 xxx.prefab 的变体，记录所有嵌套预制的变体修改信息，而 xxx_Customized.prefab 作为 xxx_CustomizedTemp.prefab 的变体，只记录 xxx.prefab 的变体修改信息，从而实现了逐级分离，如下图所示：
+<img src="/img/Unity/CustomizedVariant/A.png?raw=true" alt=A.png>
+<img src="/img/Unity/CustomizedVariant/B.png?raw=true" alt=B.png>
+<img src="/img/Unity/CustomizedVariant/C.png?raw=true" alt=C.png>
+</li>
+</ul>
+<h2 id=定制化变体>定制化变体</h2>
+<ul>
+<li>从上面可以知道，要想定制一套变体，首先要对应的预制体创建两个变体，xxx_CustomizedTemp.prefab 和 xxx_Customized.prefab 。
+<img src="/img/Unity/CustomizedVariant/Prefab.png?raw=true" alt=Prefab.png>
+</li>
+<li>其中，xxx_Customized 是想要的定制变体，可以像常规预制体一样，自由调整其信息。而 xxx_CustomizedTemp ，则需要将所有嵌套预制的变更应用上去。</li>
+<li>然后，由于嵌套预制可能有多层，在常规预制体下，内层的预制修改不会影响到外层，而外层的预制修改可能会覆盖内层的修改，所以对于 xxx_CustomizedTemp 变体，需要自底向上，逐层获取嵌套预制体，将其 Customized 变体修改信息应用到 xxx_CustomizedTemp 上，保持和预制体同样的机制，保证了修改信息的准确性。</li>
+<li>由简述中可以知道，定制变体的修改信息有四种类型，应用的时候有一定的顺序以及应用方式。</li>
+</ul>
+<h3 id=应用添加新的物体addgameobjects>应用添加新的物体（AddGameObjects）</h3>
+<ul>
+<li>由于产生了新的对象，而对象可能被组件引用，所以新增的对象，需要最先应用，才能保证后续的引用关系能够正确赋值。</li>
+<li>伪代码如下：
+<ul>
+<li>实例化<strong>根预制体</strong> CustomizedTemp 变体对象</li>
+<li>获取<strong>子预制体</strong> Customized 变体对象所有新增的物体</li>
+<li>将新增的对象，实例化到根预制体实例对象对应节点上</li>
+<li>修改新增的对象名，保持根预制体实例对象上原有对象对应的名字</li>
+<li>将根预制体实例对象应用回根预制体上</li>
+</ul>
+</li>
+</ul>
+<h3 id=应用移除组件removecomponents>应用移除组件（RemoveComponents）</h3>
+<ul>
+<li>当所有物体都加上后，就可以开始对组件进行操作。由于有的组件会产生互斥，如 Horizontal Layout Group 和 Vertical Layout Group ，两者同时只能存在一个，所以需要先移除旧的组件，才能保证新的组件能够正确应用上去。</li>
+<li>伪代码如下：
+<ul>
+<li>实例化<strong>根预制体</strong> CustomizedTemp 变体对象</li>
+<li>获取<strong>子预制体</strong> Customized 变体对象所有移除的组件</li>
+<li>找到根预制体实例上对应需要移除组件的物体，将组件移除</li>
+<li>将根预制体实例对象应用回根预制体上</li>
+</ul>
+</li>
+</ul>
+<h3 id=应用添加组件addcomponents>应用添加组件（AddComponents）</h3>
+<ul>
+<li>处理完新增对象和移除组件后，就能进行添加组件的操作，对于子节点的引用，也能顺利进行。</li>
+<li>伪代码如下：
+<ul>
+<li>实例化<strong>根预制体</strong> CustomizedTemp 变体对象</li>
+<li>获取<strong>子预制体</strong> Customized 变体对象所有新增的组件</li>
+<li>找到根预制体实例上对应需要添加组件的物体，将组件添加上去</li>
+<li>将原组件的序列化数据，复制到新的组件上</li>
+<li>检查原组件的变量，如果引用的是子节点对象，则需要将新组件的引用，修改为其自身子节点的对应对象</li>
+<li>将根预制体实例对象应用回根预制体上</li>
+</ul>
+</li>
+</ul>
+<h3 id=应用属性修改propertymodifications>应用属性修改（PropertyModifications）</h3>
+<ul>
+<li>当所有增删修改都应用后，预制体的对象就已经齐全，就可以对组件或物体的属性变更进行应用。</li>
+<li>伪代码如下：
+<ul>
+<li>实例化<strong>根预制体</strong> CustomizedTemp 变体对象</li>
+<li>获取<strong>子预制体</strong> Customized 变体对象所有修改的属性</li>
+<li>剔除不进行应用的特殊属性
+<ul>
+<li>m_Name ：嵌套预制的名字修改，如果为添加 _CustomizedTemp 或 _Customized 后缀，则不需要应用</li>
+<li>m_RootOrder ：节点顺序变化，由于嵌套预制体不允许修改子节点的位置，所以不需要应用</li>
+</ul>
+</li>
+<li>如果修改的属性为子节点对象的引用，则需要将引用对象修改为根预制体中对应的对象</li>
+<li>将所有变更属性应用并保存</li>
+</ul>
+</li>
+</ul>
+<h2 id=效果展示>效果展示</h2>
+<p>
+<img src="/img/Unity/CustomizedVariant/Compare_Redpoint.png?raw=true" alt=Compare_Redpoint.png>
+<img src="/img/Unity/CustomizedVariant/Compare_Item_A.png?raw=true" alt=Compare_Item_A.png>
+<img src="/img/Unity/CustomizedVariant/Compare_Panel_A.png?raw=true" alt=Compare_Panel_A.png>
+</p>
+<h2 id=项目地址>项目地址</h2>
+<p><a href=https://github.com/FallingXun/Customized-Variant.git>定制化变体 Customized-Variant</a></p>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/render/graphics/graphics_beziercurves/ data-toggle=tooltip data-placement=top title="图形学篇 — 贝塞尔曲线">&larr;
+Previous Post</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2022
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>
