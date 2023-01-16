@@ -188,15 +188,15 @@ post-container">
 <li>上面规则也可以描述为：
 <ul>
 <li>当前方向 d 为直线移动，如果此方向上存在一个节点 y 为目标节点，或者节点 y 有一个强制邻居，则节点 y 为节点 x 的跳点。</li>
-<li>当前方向 d 为对角线移动，如果此方向上存在一个节点 y ，沿着此方向的水平或竖直方向的直线移动能找到节点 y 的跳点，则节点 y 为节点 x 的跳点。
-<img src="/img/Algorithm/JPS/JumpPoint_1.png?raw=true" alt=JumpPoint_1.png>
-</li>
+<li>当前方向 d 为对角线移动，如果此方向上存在一个节点 y ，沿着此方向的水平或竖直方向的直线移动能找到节点 y 的跳点，则节点 y 为节点 x 的跳点。</li>
 </ul>
 </li>
-<li>如图，节点 z （黄色）为目标节点，当直线移动时，找到节点 y 为强制邻居，所以节点 y 为跳点。
+<li>如图，节点 z（蓝色）为目标节点，当直线移动时，找到节点 y 为强制邻居，所以节点 y 为跳点。
+<img src="/img/Algorithm/JPS/JumpPoint_1.png?raw=true" alt=JumpPoint_1.png>
+</li>
+<li>当对角线移动时，沿当前方向以及水平竖直方向寻找，找到节点 y ，沿节点 y 的水平方向找到目标节点 z ，即找到跳点，因此节点 y 为跳点。
 <img src="/img/Algorithm/JPS/JumpPoint_2.png?raw=true" alt=JumpPoint_2.png>
 </li>
-<li>当对角线移动时，沿当前方向以及水平竖直方向寻找，找到节点 y ，沿节点 y 的水平方向找到目标节点 z ，即找到跳点，因此节点 y 为跳点。</li>
 </ul>
 <h4 id=拐点turning-point>拐点（Turning Point）</h4>
 <ul>
