@@ -141,7 +141,7 @@ post-container">
 </li>
 </ul>
 </li>
-<li>如图中所示，红色格子为障碍点，灰色格子为需要修剪的，而绿色格子则是符合条件，不需要修剪的。</li>
+<li>如图中所示，红色节点为障碍点，灰色节点为需要修剪的，而绿色节点则是符合条件，不需要修剪的。</li>
 <li>也就是说，根据最优路径选择，当前 x 认为是最优路径上的节点，因此到下一个节点，经过 x 的路径应该是最优的，不应该存在有其他路径更优（即比此路径更短）。</li>
 </ul>
 <h4 id=自然邻居natural-neighbour>自然邻居（Natural Neighbour）</h4>
@@ -150,11 +150,11 @@ post-container">
 <img src="/img/Algorithm/JPS/JPS_3.png?raw=true" alt=JPS_3.png>
 <img src="/img/Algorithm/JPS/JPS_1.png?raw=true" alt=JPS_1.png>
 </li>
-<li>如图，对于直线移动，x 的邻居中有障碍点（格子 2），则假设 x 的邻居中没有障碍点，修剪完后剩下的格子 6 ，即为自然邻居。
+<li>如图，对于直线移动，x 的邻居中有障碍点（节点 2），则假设 x 的邻居中没有障碍点，修剪完后剩下的节点 6 ，即为自然邻居。
 <img src="/img/Algorithm/JPS/JPS_4.png?raw=true" alt=JPS_4.png>
 <img src="/img/Algorithm/JPS/JPS_2.png?raw=true" alt=JPS_2.png>
 </li>
-<li>同样，对于对角线移动，格子 2、3、6 为自然邻居。</li>
+<li>同样，对于对角线移动，节点 2、3、6 为自然邻居。</li>
 </ul>
 <h4 id=强制邻居forced-neighbour>强制邻居（Forced Neighbour）</h4>
 <ul>
@@ -166,10 +166,10 @@ post-container">
 </li>
 </ul>
 </li>
-<li>可以看到，修剪过后，剩下的格子为 3、6，其中格子 6 为自然邻居，则格子 3 为强制邻居。
+<li>可以看到，修剪过后，剩下的节点为 3、6，其中节点 6 为自然邻居，则节点 3 为强制邻居。
 <img src="/img/Algorithm/JPS/JPS_4.png?raw=true" alt=JPS_4.png>
 </li>
-<li>同样，对角线移动时，修剪过后剩下格子 1、2、3、6，其中格子 2、3、6 为自然邻居，则格子 3 为强制邻居。</li>
+<li>同样，对角线移动时，修剪过后剩下节点 1、2、3、6，其中节点 2、3、6 为自然邻居，则节点 3 为强制邻居。</li>
 </ul>
 <h4 id=跳点jump-point>跳点（Jump Point)</h4>
 <ul>
@@ -188,18 +188,26 @@ post-container">
 <li>上面规则也可以描述为：
 <ul>
 <li>当前方向 d 为直线移动，如果此方向上存在一个节点 y 为目标节点，或者节点 y 有一个强制邻居，则节点 y 为节点 x 的跳点。</li>
-<li>当前方向 d 为对角线移动，如果此方向上存在一个节点 y ，沿着此方向的水平或竖直方向的直线移动能找到节点 y 的跳点，则节点 y 为节点 x 的跳点。</li>
+<li>当前方向 d 为对角线移动，如果此方向上存在一个节点 y ，沿着此方向的水平或竖直方向的直线移动能找到节点 y 的跳点，则节点 y 为节点 x 的跳点。
+<img src="/img/Algorithm/JPS/JumpPoint_1.png?raw=true" alt=JumpPoint_1.png>
+</li>
 </ul>
 </li>
+<li>如图，节点 z （黄色）为目标节点，当直线移动时，找到节点 y 为强制邻居，所以节点 y 为跳点。
+<img src="/img/Algorithm/JPS/JumpPoint_2.png?raw=true" alt=JumpPoint_2.png>
+</li>
+<li>当对角线移动时，沿当前方向以及水平竖直方向寻找，找到节点 y ，沿节点 y 的水平方向找到目标节点 z ，即找到跳点，因此节点 y 为跳点。</li>
 </ul>
 <h4 id=拐点turning-point>拐点（Turning Point）</h4>
 <ul>
-<li>路径上的一个节点 n_i-1 到节点 n_i 的方向和节点 n_i 到节点 n_i+1 的方向不同时，则节点 n_i 为拐点。</li>
+<li>路径上的一个节点 n_k-1 到节点 n_k 的方向和节点 n_k 到节点 n_k+1 的方向不同时，则节点 n_k 为拐点。</li>
 <li>拐点有三种情况：
 <ul>
 <li>从对角到另一个对角移动。</li>
 <li>从直线到对角移动。</li>
-<li>从对角到直线移动。</li>
+<li>从对角到直线移动。
+<img src="/img/Algorithm/JPS/TurningPoint_1.png?raw=true" alt=TurningPoint_1.png>
+</li>
 </ul>
 </li>
 </ul>
@@ -280,7 +288,7 @@ post-container">
 <li>算法流程：
 <ul>
 <li>节点 n 为 x 沿着当前方向 d 移动一步。</li>
-<li>如果 n 为阻挡或者超出格子边界，则返回 null。</li>
+<li>如果 n 为阻挡或者超出节点边界，则返回 null。</li>
 <li>如果 n 为 g ，则返回 n 。</li>
 <li>如果 n 有强制邻居，则返回 n 。</li>
 <li>如果 d 为对角方向，则对水平方向 d_1 和竖直方向 d_2 ，调用跳点方法 jump(n, d_i, s, g) ，检查是否为跳点，如果是则返回 n 。</li>
