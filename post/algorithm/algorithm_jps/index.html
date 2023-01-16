@@ -161,15 +161,15 @@ post-container">
 <li>n 为 neighbours(x) 中的一个节点，如果 n 为强制邻居，则需要满足：
 <ul>
 <li>n 不是 x 的自然邻居。</li>
-<li>从 p(x) 到 n （经过 x）的路径小于从 p(x) 到 n （不经过 x）的路径。
-<img src="/img/Algorithm/JPS/JPS_3.png?raw=true" alt=JPS_3.png>
-</li>
+<li>从 p(x) 到 n （经过 x）的路径小于从 p(x) 到 n （不经过 x）的路径。</li>
 </ul>
 </li>
 <li>可以看到，修剪过后，剩下的节点为 3、6，其中节点 6 为自然邻居，则节点 3 为强制邻居。
+<img src="/img/Algorithm/JPS/JPS_3.png?raw=true" alt=JPS_3.png>
+</li>
+<li>同样，对角线移动时，修剪过后剩下节点 1、2、3、6，其中节点 2、3、6 为自然邻居，则节点 3 为强制邻居。
 <img src="/img/Algorithm/JPS/JPS_4.png?raw=true" alt=JPS_4.png>
 </li>
-<li>同样，对角线移动时，修剪过后剩下节点 1、2、3、6，其中节点 2、3、6 为自然邻居，则节点 3 为强制邻居。</li>
 </ul>
 <h4 id=跳点jump-point>跳点（Jump Point)</h4>
 <ul>
