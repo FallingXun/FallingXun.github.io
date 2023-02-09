@@ -537,7 +537,629 @@ post-container">
 
         ...
     }
-</code></pre>
+</code></pre><ul>
+<li>s_Raycasters 列表的对象，是通过 RaycasterManager.AddRaycaster 方法加入的。BaseRaycaster 对象激活时，OnEnable 方法，将自身注册到 s_Raycasters 列表中，关闭时通过 OnDisable 方法将自身移除。所以 RayCaster 对象，也是以组件的形式挂载到 GameObject 上，根据不同的子类型，重写 Raycast 方法，可以实现不同的射线检测模式。</li>
+</ul>
+<pre tabindex=0><code>    public abstract class BaseRaycaster : UIBehaviour
+    {
+        ...
+
+        public abstract void Raycast(PointerEventData eventData, List&lt;RaycastResult&gt; resultAppendList);
+
+        ...
+
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            RaycasterManager.AddRaycaster(this);
+        }
+
+        protected override void OnDisable()
+        {
+            RaycasterManager.RemoveRaycasters(this);
+            base.OnDisable();
+        }
+        
+        ...
+    }
+</code></pre><h3 id=physicsraycaster>PhysicsRaycaster</h3>
+<ul>
+<li>PhysicRaycaster 的 Raycast 代码如下：</li>
+</ul>
+<pre tabindex=0><code>    public class PhysicsRaycaster : BaseRaycaster
+    {
+        ...
+
+        public override void Raycast(PointerEventData eventData, List&lt;RaycastResult&gt; resultAppendList)
+        {
+#if PACKAGE_PHYSICS
+            Ray ray = new Ray();
+            int displayIndex = 0;
+            float distanceToClipPlane = 0;
+            if (!ComputeRayAndDistance(eventData, ref ray, ref displayIndex, ref distanceToClipPlane))
+                return;
+
+            int hitCount = 0;
+
+            if (m_MaxRayIntersections == 0)
+            {
+                if (ReflectionMethodsCache.Singleton.raycast3DAll == null)
+                    return;
+
+                m_Hits = ReflectionMethodsCache.Singleton.raycast3DAll(ray, distanceToClipPlane, finalEventMask);
+                hitCount = m_Hits.Length;
+            }
+            else
+            {
+                if (ReflectionMethodsCache.Singleton.getRaycastNonAlloc == null)
+                    return;
+                if (m_LastMaxRayIntersections != m_MaxRayIntersections)
+                {
+                    m_Hits = new RaycastHit[m_MaxRayIntersections];
+                    m_LastMaxRayIntersections = m_MaxRayIntersections;
+                }
+
+                hitCount = ReflectionMethodsCache.Singleton.getRaycastNonAlloc(ray, m_Hits, distanceToClipPlane, finalEventMask);
+            }
+
+            if (hitCount != 0)
+            {
+                if (hitCount &gt; 1)
+                    System.Array.Sort(m_Hits, 0, hitCount, RaycastHitComparer.instance);
+
+                for (int b = 0, bmax = hitCount; b &lt; bmax; ++b)
+                {
+                    var result = new RaycastResult
+                    {
+                        gameObject = m_Hits[b].collider.gameObject,
+                        module = this,
+                        distance = m_Hits[b].distance,
+                        worldPosition = m_Hits[b].point,
+                        worldNormal = m_Hits[b].normal,
+                        screenPosition = eventData.position,
+                        displayIndex = displayIndex,
+                        index = resultAppendList.Count,
+                        sortingLayer = 0,
+                        sortingOrder = 0
+                    };
+                    resultAppendList.Add(result);
+                }
+            }
+#endif
+        }
+
+        ...
+    }
+</code></pre><ul>
+<li>可以看到，PhysicsRaycaster.Raycast 主要做了：
+<ul>
+<li>通过反射方式，调用 Physics.RaycastAll 或 Physics.Raycast 方法，进行射线检测。</li>
+<li>对检测结果进行排序。</li>
+<li>将结果转成 List<raycastresult> 对象返回。</li>
+</ul>
+</li>
+<li>射线检测是 Unity 的内部方法，通过发射射线，获取所有穿过的碰撞体对象，而排序则是通过 RaycastHitComparer.Compare 实现的。</li>
+</ul>
+<pre tabindex=0><code>    public class PhysicsRaycaster : BaseRaycaster
+    {
+        ...
+
+#if PACKAGE_PHYSICS
+        private class RaycastHitComparer : IComparer&lt;RaycastHit&gt;
+        {
+            public static RaycastHitComparer instance = new RaycastHitComparer();
+            public int Compare(RaycastHit x, RaycastHit y)
+            {
+                return x.distance.CompareTo(y.distance);
+            }
+        }
+#endif
+
+    }
+</code></pre><ul>
+<li>RaycastHitComparer 只考虑远近距离，即通过比较射线接触的物体的距离，从近到远进行排序。</li>
+</ul>
+<h3 id=physics2draycaster>Physics2DRaycaster</h3>
+<ul>
+<li>Physics2DRaycaster 的 Raycast 代码如下：</li>
+</ul>
+<pre tabindex=0><code>    public class Physics2DRaycaster : PhysicsRaycaster
+    {
+        ...
+
+        public override void Raycast(PointerEventData eventData, List&lt;RaycastResult&gt; resultAppendList)
+        {
+#if PACKAGE_PHYSICS2D
+            Ray ray = new Ray();
+            float distanceToClipPlane = 0;
+            int displayIndex = 0;
+            if (!ComputeRayAndDistance(eventData, ref ray, ref displayIndex, ref distanceToClipPlane))
+                return;
+
+            int hitCount = 0;
+
+            if (maxRayIntersections == 0)
+            {
+                if (ReflectionMethodsCache.Singleton.getRayIntersectionAll == null)
+                    return;
+                m_Hits = ReflectionMethodsCache.Singleton.getRayIntersectionAll(ray, distanceToClipPlane, finalEventMask);
+                hitCount = m_Hits.Length;
+            }
+            else
+            {
+                if (ReflectionMethodsCache.Singleton.getRayIntersectionAllNonAlloc == null)
+                    return;
+
+                if (m_LastMaxRayIntersections != m_MaxRayIntersections)
+                {
+                    m_Hits = new RaycastHit2D[maxRayIntersections];
+                    m_LastMaxRayIntersections = m_MaxRayIntersections;
+                }
+
+                hitCount = ReflectionMethodsCache.Singleton.getRayIntersectionAllNonAlloc(ray, m_Hits, distanceToClipPlane, finalEventMask);
+            }
+
+            if (hitCount != 0)
+            {
+                for (int b = 0, bmax = hitCount; b &lt; bmax; ++b)
+                {
+                    Renderer r2d = null;
+                    // Case 1198442: Check for 2D renderers when filling in RaycastResults
+                    var rendererResult = m_Hits[b].collider.gameObject.GetComponent&lt;Renderer&gt;();
+                    if (rendererResult != null)
+                    {
+                        if (rendererResult is SpriteRenderer)
+                        {
+                            r2d = rendererResult;
+                        }
+#if PACKAGE_TILEMAP
+                        if (rendererResult is TilemapRenderer)
+                        {
+                            r2d = rendererResult;
+                        }
+#endif
+                        if (rendererResult is SpriteShapeRenderer)
+                        {
+                            r2d = rendererResult;
+                        }
+                    }
+
+                    var result = new RaycastResult
+                    {
+                        gameObject = m_Hits[b].collider.gameObject,
+                        module = this,
+                        distance = Vector3.Distance(eventCamera.transform.position, m_Hits[b].point),
+                        worldPosition = m_Hits[b].point,
+                        worldNormal = m_Hits[b].normal,
+                        screenPosition = eventData.position,
+                        displayIndex = displayIndex,
+                        index = resultAppendList.Count,
+                        sortingLayer =  r2d != null ? r2d.sortingLayerID : 0,
+                        sortingOrder = r2d != null ? r2d.sortingOrder : 0
+                    };
+                    resultAppendList.Add(result);
+                }
+            }
+#endif
+        }
+
+        ...
+    }
+</code></pre><ul>
+<li>Physics2DRaycaster.Raycast 和 PhysicsRaycaster.Raycast 相比，少了排序的操作，其主要做了：
+<ul>
+<li>通过反射调用 Physics2D.GetRayIntersectionAll 或 Physics2D.GetRayIntersectionNonAlloc 进行射线检测。</li>
+<li>获取射线检测到的对象上的 Renderer（SpriteRenderer、TilemapRenderer、SpriteShapeRenderer）。</li>
+<li>将结果转成 List<raycastresult> 对象返回。</li>
+</ul>
+</li>
+</ul>
+<h3 id=graphicraycaster>GraphicRaycaster</h3>
+<ul>
+<li>GraphicRaycaster 重写的 Raycast 方法，部分代码如下：</li>
+</ul>
+<pre tabindex=0><code>    public class GraphicRaycaster : BaseRaycaster
+    {
+        ...
+
+         public override void Raycast(PointerEventData eventData, List&lt;RaycastResult&gt; resultAppendList)
+        {
+            if (canvas == null)
+                return;
+            // 获取 canvas 下的 graphic 对象
+            var canvasGraphics = GraphicRegistry.GetRaycastableGraphicsForCanvas(canvas);
+            if (canvasGraphics == null || canvasGraphics.Count == 0)
+                return;
+
+            ...
+
+            // 获取事件坐标
+            var eventPosition = Display.RelativeMouseAt(eventData.position);
+           
+            ...
+
+            float hitDistance = float.MaxValue;
+
+            Ray ray = new Ray();
+
+            if (currentEventCamera != null)
+                ray = currentEventCamera.ScreenPointToRay(eventPosition);
+
+            ...
+
+            m_RaycastResults.Clear();
+
+            // 进行 Raycast 检测
+            Raycast(canvas, currentEventCamera, eventPosition, canvasGraphics, m_RaycastResults);
+
+            // 将结果转到 List&lt;RaycastResult&gt; 列表返回
+            int totalCount = m_RaycastResults.Count;
+            for (var index = 0; index &lt; totalCount; index++)
+            {
+                var go = m_RaycastResults[index].gameObject;
+                bool appendGraphic = true;
+                
+                if (ignoreReversedGraphics)
+                {
+                    if (currentEventCamera == null)
+                    {
+                        // If we dont have a camera we know that we should always be facing forward
+                        var dir = go.transform.rotation * Vector3.forward;
+                        appendGraphic = Vector3.Dot(Vector3.forward, dir) &gt; 0;
+                    }
+                    else
+                    {
+                        // If we have a camera compare the direction against the cameras forward.
+                        var cameraForward = currentEventCamera.transform.rotation * Vector3.forward * currentEventCamera.nearClipPlane;
+                        appendGraphic = Vector3.Dot(go.transform.position - currentEventCamera.transform.position - cameraForward, go.transform.forward) &gt;= 0;
+                    }
+                }
+
+                if (appendGraphic)
+                {
+                    float distance = 0;
+                    Transform trans = go.transform;
+                    Vector3 transForward = trans.forward;
+
+                    if (currentEventCamera == null || canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+                        distance = 0;
+                    else
+                    {
+                        // http://geomalgorithms.com/a06-_intersect-2.html
+                        distance = (Vector3.Dot(transForward, trans.position - ray.origin) / Vector3.Dot(transForward, ray.direction));
+
+                        // Check to see if the go is behind the camera.
+                        if (distance &lt; 0)
+                            continue;
+                    }
+
+                    if (distance &gt;= hitDistance)
+                        continue;
+
+                    var castResult = new RaycastResult
+                    {
+                        gameObject = go,
+                        module = this,
+                        distance = distance,
+                        screenPosition = eventPosition,
+                        displayIndex = displayIndex,
+                        index = resultAppendList.Count,
+                        depth = m_RaycastResults[index].depth,
+                        sortingLayer = canvas.sortingLayerID,
+                        sortingOrder = canvas.sortingOrder,
+                        worldPosition = ray.origin + ray.direction * distance,
+                        worldNormal = -transForward
+                    };
+                    resultAppendList.Add(castResult);
+                }
+            }
+        }
+
+        ...
+    }
+
+</code></pre><ul>
+<li>从流程上看，GraphicRaycaster 重写的 Raycast 方法，创建射线后，并没有直接使用射线检测，而是通过调用内部的 Raycast 方法进行检测，再将结果返回。</li>
+</ul>
+<pre tabindex=0><code>    public class GraphicRaycaster : BaseRaycaster
+    {
+        ...
+
+        [NonSerialized] static readonly List&lt;Graphic&gt; s_SortedGraphics = new List&lt;Graphic&gt;();
+        private static void Raycast(Canvas canvas, Camera eventCamera, Vector2 pointerPosition, IList&lt;Graphic&gt; foundGraphics, List&lt;Graphic&gt; results)
+        {
+            // Necessary for the event system
+            int totalCount = foundGraphics.Count;
+            for (int i = 0; i &lt; totalCount; ++i)
+            {
+                Graphic graphic = foundGraphics[i];
+
+                // -1 means it hasn't been processed by the canvas, which means it isn't actually drawn
+                if (!graphic.raycastTarget || graphic.canvasRenderer.cull || graphic.depth == -1)
+                    continue;
+
+                if (!RectTransformUtility.RectangleContainsScreenPoint(graphic.rectTransform, pointerPosition, eventCamera, graphic.raycastPadding))
+                    continue;
+
+                if (eventCamera != null &amp;&amp; eventCamera.WorldToScreenPoint(graphic.rectTransform.position).z &gt; eventCamera.farClipPlane)
+                    continue;
+
+                if (graphic.Raycast(pointerPosition, eventCamera))
+                {
+                    s_SortedGraphics.Add(graphic);
+                }
+            }
+
+            s_SortedGraphics.Sort((g1, g2) =&gt; g2.depth.CompareTo(g1.depth));
+            totalCount = s_SortedGraphics.Count;
+            for (int i = 0; i &lt; totalCount; ++i)
+                results.Add(s_SortedGraphics[i]);
+
+            s_SortedGraphics.Clear();
+        }
+
+    }
+</code></pre><ul>
+<li>GraphicRaycaster 内部的 Raycast 方法，主要步骤：
+<ul>
+<li>剔除不需要进行检测的情况（如 raycastTarget 关闭，响应点坐标不在 rectTransform 范围内、超过远裁剪平面等）。</li>
+<li>调用 Graphic.Raycast 方法，判断当前 graphic 是否符合响应坐标，符合则加入 s_SortedGraphics 列表。</li>
+<li>对 s_SortedGraphics 列表的对象，根据深度从大到小排序。</li>
+<li>将 s_SortedGraphics 对象转到 results 中并返回。</li>
+</ul>
+</li>
+<li>Graphic.Raycast 方法的代码如下：</li>
+</ul>
+<pre tabindex=0><code>    public abstract class Graphic : UIBehaviour, ICanvasElement
+    {
+        ...
+
+        public virtual bool Raycast(Vector2 sp, Camera eventCamera)
+        {
+            if (!isActiveAndEnabled)
+                return false;
+
+            var t = transform;
+            var components = ListPool&lt;Component&gt;.Get();
+
+            bool ignoreParentGroups = false;
+            bool continueTraversal = true;
+
+            while (t != null)
+            {
+                t.GetComponents(components);
+                for (var i = 0; i &lt; components.Count; i++)
+                {
+                    var canvas = components[i] as Canvas;
+                    if (canvas != null &amp;&amp; canvas.overrideSorting)
+                        continueTraversal = false;
+
+                    var filter = components[i] as ICanvasRaycastFilter;
+
+                    if (filter == null)
+                        continue;
+
+                    var raycastValid = true;
+
+                    var group = components[i] as CanvasGroup;
+                    if (group != null)
+                    {
+                        if (ignoreParentGroups == false &amp;&amp; group.ignoreParentGroups)
+                        {
+                            ignoreParentGroups = true;
+                            raycastValid = filter.IsRaycastLocationValid(sp, eventCamera);
+                        }
+                        else if (!ignoreParentGroups)
+                            raycastValid = filter.IsRaycastLocationValid(sp, eventCamera);
+                    }
+                    else
+                    {
+                        raycastValid = filter.IsRaycastLocationValid(sp, eventCamera);
+                    }
+
+                    if (!raycastValid)
+                    {
+                        ListPool&lt;Component&gt;.Release(components);
+                        return false;
+                    }
+                }
+                t = continueTraversal ? t.parent : null;
+            }
+            ListPool&lt;Component&gt;.Release(components);
+            return true;
+        }
+
+        ...
+    }
+</code></pre><ul>
+<li>Graphic.Raycast 方法的流程为：
+<ul>
+<li>获取自身所有 Graphic 组件。</li>
+<li>对每一个继承 ICanvasRaycastFilter 接口的 Graphic 组件，执行 ICanvasRaycastFilter.IsRaycastLocationValid 方法，检测响应点是否对此组件有效，如果无效则直接返回。</li>
+<li>逐级向上，直到 Canvas 设置了 overrideSorting ，或者直到根节点，返回有效。</li>
+</ul>
+</li>
+<li>GraphicRaycaster 内部的 Raycast 方法主要通过 RectTransform 的 Rect 来过滤组件，而 Graphic 的 Raycast 主要是用来确认该组件是否被射线检测命中。</li>
+</ul>
+<h2 id=executeevents-执行事件>ExecuteEvents 执行事件</h2>
+<ul>
+<li>射线检测模块完成后，得到了 RaycastResult 数据，接下来就要执行相关的事件。继续看 StandaloneInputModule.ProcessTouchPress 方法，部分代码如下：</li>
+</ul>
+<pre tabindex=0><code>    public class StandaloneInputModule : PointerInputModule
+    {
+        ...
+
+        protected void ProcessTouchPress(PointerEventData pointerEvent, bool pressed, bool released)
+        {
+            var currentOverGo = pointerEvent.pointerCurrentRaycast.gameObject;
+
+            // PointerDown notification
+            if (pressed)
+            {
+                ...
+
+                var newClick = ExecuteEvents.GetEventHandler&lt;IPointerClickHandler&gt;(currentOverGo);
+
+                ...
+
+                pointerEvent.pointerClick = newClick;
+
+                ...
+            }
+
+            // PointerUp notification
+            if (released)
+            {
+                ...
+
+                // see if we mouse up on the same element that we clicked on...
+                var pointerClickHandler = ExecuteEvents.GetEventHandler&lt;IPointerClickHandler&gt;(currentOverGo);
+
+                // PointerClick and Drop events
+                if (pointerEvent.pointerClick == pointerClickHandler &amp;&amp; pointerEvent.eligibleForClick)
+                {
+                    ExecuteEvents.Execute(pointerEvent.pointerClick, pointerEvent, ExecuteEvents.pointerClickHandler);
+                }
+
+                ...
+
+                pointerEvent.pointerClick = null;
+
+                ...
+            }
+
+            m_InputPointerEvent = pointerEvent;
+        }
+        
+        ...
+    }
+
+</code></pre><ul>
+<li>这里以点击事件为例，射线检测完成后，得到了目标 gameObject ，当按下时，通过调用 ExecuteEvents.GetEventHandler<ipointerclickhandler> 方法获取点击事件响应的最终 gameObject。当释放时，如果还是同一个 gameObject，则执行 ExecuteEvents.Execute 方法执行点击事件。</li>
+</ul>
+<pre tabindex=0><code>    public static class ExecuteEvents
+    {
+        ...
+
+        private static bool ShouldSendToComponent&lt;T&gt;(Component component) where T : IEventSystemHandler
+        {
+            var valid = component is T;
+            if (!valid)
+                return false;
+
+            var behaviour = component as Behaviour;
+            if (behaviour != null)
+                return behaviour.isActiveAndEnabled;
+            return true;
+        }
+
+        /// &lt;summary&gt;
+        /// Get the specified object's event event.
+        /// &lt;/summary&gt;
+        private static void GetEventList&lt;T&gt;(GameObject go, IList&lt;IEventSystemHandler&gt; results) where T : IEventSystemHandler
+        {
+            // Debug.LogWarning(&quot;GetEventList&lt;&quot; + typeof(T).Name + &quot;&gt;&quot;);
+            if (results == null)
+                throw new ArgumentException(&quot;Results array is null&quot;, &quot;results&quot;);
+
+            if (go == null || !go.activeInHierarchy)
+                return;
+
+            var components = ListPool&lt;Component&gt;.Get();
+            go.GetComponents(components);
+
+            var componentsCount = components.Count;
+            for (var i = 0; i &lt; componentsCount; i++)
+            {
+                if (!ShouldSendToComponent&lt;T&gt;(components[i]))
+                    continue;
+
+                // Debug.Log(string.Format(&quot;{2} found! On {0}.{1}&quot;, go, s_GetComponentsScratch[i].GetType(), typeof(T)));
+                results.Add(components[i] as IEventSystemHandler);
+            }
+            ListPool&lt;Component&gt;.Release(components);
+            // Debug.LogWarning(&quot;end GetEventList&lt;&quot; + typeof(T).Name + &quot;&gt;&quot;);
+        }
+
+        /// &lt;summary&gt;
+        /// Whether the specified game object will be able to handle the specified event.
+        /// &lt;/summary&gt;
+        public static bool CanHandleEvent&lt;T&gt;(GameObject go) where T : IEventSystemHandler
+        {
+            var internalHandlers = s_HandlerListPool.Get();
+            GetEventList&lt;T&gt;(go, internalHandlers);
+            var handlerCount = internalHandlers.Count;
+            s_HandlerListPool.Release(internalHandlers);
+            return handlerCount != 0;
+        }
+
+        /// &lt;summary&gt;
+        /// Bubble the specified event on the game object, figuring out which object will actually receive the event.
+        /// &lt;/summary&gt;
+        public static GameObject GetEventHandler&lt;T&gt;(GameObject root) where T : IEventSystemHandler
+        {
+            if (root == null)
+                return null;
+
+            Transform t = root.transform;
+            while (t != null)
+            {
+                if (CanHandleEvent&lt;T&gt;(t.gameObject))
+                    return t.gameObject;
+                t = t.parent;
+            }
+            return null;
+        }
+    }
+</code></pre><ul>
+<li>可以看到，对于点击事件 IPointerClickHandler，对射线检测得到的对象，会获取其挂载的 IPointerClickHandler 类型的激活状态的组件，找到了则返回 gameObject 。如果找不到，则从父节点中继续查找。</li>
+</ul>
+<pre tabindex=0><code>    public static class ExecuteEvents
+    {
+        ...
+
+        public static bool Execute&lt;T&gt;(GameObject target, BaseEventData eventData, EventFunction&lt;T&gt; functor) where T : IEventSystemHandler
+        {
+            var internalHandlers = s_HandlerListPool.Get();
+            GetEventList&lt;T&gt;(target, internalHandlers);
+            //  if (s_InternalHandlers.Count &gt; 0)
+            //      Debug.Log(&quot;Executinng &quot; + typeof (T) + &quot; on &quot; + target);
+
+            var internalHandlersCount = internalHandlers.Count;
+            for (var i = 0; i &lt; internalHandlersCount; i++)
+            {
+                T arg;
+                try
+                {
+                    arg = (T)internalHandlers[i];
+                }
+                catch (Exception e)
+                {
+                    var temp = internalHandlers[i];
+                    Debug.LogException(new Exception(string.Format(&quot;Type {0} expected {1} received.&quot;, typeof(T).Name, temp.GetType().Name), e));
+                    continue;
+                }
+
+                try
+                {
+                    functor(arg, eventData);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogException(e);
+                }
+            }
+
+            var handlerCount = internalHandlers.Count;
+            s_HandlerListPool.Release(internalHandlers);
+            return handlerCount &gt; 0;
+        }
+
+        ...
+    }
+</code></pre><ul>
+<li>ExecuteEvents.Execute<t> 方法，则根据对应的事件类型，如：点击事件 IPointerClickHandler，通过调用 GetEventList<t> 获取类型为 IPointerClickHandler 的组件，并对所有执行 IPointerClickHandler.OnPointerClick(PointerEventData eventData) 方法，其他事件类型同理，可在 ExecuteEvents 中找到对应实现。</li>
+</ul>
 <hr>
 <ul class=pager>
 <li class=previous>
