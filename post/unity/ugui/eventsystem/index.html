@@ -124,6 +124,13 @@ post-container">
 <li>如何执行对应方法</li>
 </ul>
 </li>
+<li>Unity 的事件系统，主要由输入模块（InputModule）、射线检测模块（Raycast）、事件执行模块（ExecuteEvents）组成，在事件系统（EventSystem）的管理下进行。</li>
+</ul>
+<h2 id=时序图>时序图</h2>
+<ul>
+<li>EventSystem 的时序图如下
+<img src="/img/Unity/EventSystem/EventSystem%e6%97%b6%e5%ba%8f%e5%9b%be.png?raw=true" alt=EventSystem时序图.png>
+</li>
 </ul>
 <h2 id=eventsystem-主流程>EventSystem 主流程</h2>
 <ul>
@@ -1159,6 +1166,18 @@ post-container">
     }
 </code></pre><ul>
 <li>ExecuteEvents.Execute<t> 方法，则根据对应的事件类型，如：点击事件 IPointerClickHandler，通过调用 GetEventList<t> 获取类型为 IPointerClickHandler 的组件，并对所有执行 IPointerClickHandler.OnPointerClick(PointerEventData eventData) 方法，其他事件类型同理，可在 ExecuteEvents 中找到对应实现。</li>
+</ul>
+<h2 id=总结>总结</h2>
+<ul>
+<li>通过了解 Unity 的事件系统的运作流程，可以对其有更加清晰的认识，也能更好地使用。</li>
+<li>对于特殊的需求，也可以通过重写不同模块的方法来自定义，如：
+<ul>
+<li>重写 InputModule 的 Process 方法， 自定义输入系统处理流程。</li>
+<li>重写 InputModule 的 GetTouchPointerEventData 方法，自定义触碰事件数据生成方法。</li>
+<li>重写 Raycast 的 Raycast 方法，自定义射线检测处理规则。</li>
+<li>&mldr;</li>
+</ul>
+</li>
 </ul>
 <hr>
 <ul class=pager>

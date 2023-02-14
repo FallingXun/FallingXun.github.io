@@ -92,147 +92,22 @@ col-sm-12
 col-xs-12
 post-container">
 <div class=post-preview>
-<a href=https://fallingxun.github.io/post/unity/ugui/eventsystem/>
+<a href=https://fallingxun.github.io/post/tmp/textmeshprogcoptimize/>
 <h2 class=post-title>
-Unity篇 — 事件系统
+TMP(TextMeshPro)优化篇 — (1) 堆内存
 </h2>
 <div class=post-content-preview>
-<p>Unity 中各种点击、拖拽的交互响应是不可或缺的。在 UGUI 中，使用了 EventSystem 进行管理。</p>
+<p>TextMeshPro(TMP)是Unity的字体插件，具有很强大的功能，然而使用的过程中会发现堆内存的申请频率和大小都不低，尤其是在UI界面的使用上，每次打开界面，都会使得界面上的TMP进行初始化，随着使用时长的增加，就容易引起GC。（当前版本 <a href=mailto:com.unity.textmeshpro@1.4.1>com.unity.textmeshpro@1.4.1</a>）。</p>
 </div>
 </a>
 <p class=post-meta>
-Posted byXun Sunday, January 29, 2023
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/unity/customizedvariant/customizedvariant/>
-<h2 class=post-title>
-Unity篇 — 定制化变体
-</h2>
-<div class=post-content-preview>
-<p>定制化变体工具。能对现有的预制体，定制一套对应的变体预制体。整套变体都沿用对应原预制体的信息，并且可以进行编辑修改。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Tuesday, November 29, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/render/graphics/graphics_beziercurves/>
-<h2 class=post-title>
-图形学篇 — 贝塞尔曲线
-</h2>
-<div class=post-content-preview>
-<p>贝塞尔曲线是计算机图形中常用的绘制曲线的方法，能根据多个点的位置绘制出光滑的曲线。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Friday, September 30, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/render/graphics/graphics_bilinearinterpolation/>
-<h2 class=post-title>
-图形学篇 — 双线性插值
-</h2>
-<div class=post-content-preview>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Thursday, September 29, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/render/graphics/graphics_anti-aliasing/>
-<h2 class=post-title>
-图形学篇 — 抗锯齿
-</h2>
-<div class=post-content-preview>
-<p>屏幕显示画面是以像素格子输出显示的，往往边缘会出现一些锯齿状的效果，抗锯齿技术则可以较好地解决这种表现问题。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Wednesday, September 28, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/render/graphics/graphics_barycentricinterpolation/>
-<h2 class=post-title>
-图形学篇 — 重心坐标插值
-</h2>
-<div class=post-content-preview>
-<p>在几何中，重心坐标有特别的性质，相应也有许多用途，其中重心坐标插值在图形学中也有广泛应用。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Tuesday, September 27, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/render/graphics/graphics_transform/>
-<h2 class=post-title>
-图形学篇 — 变换
-</h2>
-<div class=post-content-preview>
-<p>变换，指将数据通过一定的规则进行转换，通常可以用矩阵来进行表示。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, September 26, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/algorithm_kmp/>
-<h2 class=post-title>
-算法篇 — KMP 字符串匹配
-</h2>
-<div class=post-content-preview>
-<p>字符串匹配，通常会使用暴力匹配算法来进行。而KMP算法是一种改进的字符串匹配算法，在字符串的匹配上通常有较好的表现。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Sunday, September 25, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/algorithm_meshsubdivision/>
-<h2 class=post-title>
-算法篇 — 曲面细分（Mesh Subdivision）
-</h2>
-<div class=post-content-preview>
-<p>出于性能考虑，模型的面数一般都会有一定限制。然而，当靠近观察时，就能明显看到有很多不光滑的地方。曲面细分方法，通过将原来的面进行调整，可以使原来的面变得平滑，从而提升表现效果。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, June 20, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/algorithm_edt/>
-<h2 class=post-title>
-算法篇 — EDT 欧式距离变换
-</h2>
-<div class=post-content-preview>
-<p>距离变换是计算并标识空间点（对目标点）距离的过程，其中 EDT（Euclidean Distance Transform），欧式距离变换精度高，与实际距离相符，应用更广泛。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, May 23, 2022
+Posted byXun Sunday, February 7, 2021
 </p>
 </div>
 <hr>
 <ul class=pager>
-<li class=next>
-<a href=/page/2/>Older Posts &rarr;</a>
+<li class=previous>
+<a href=/page/2/>&larr; Newer Posts</a>
 </li>
 </ul>
 </div>

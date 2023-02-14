@@ -1,6 +1,5 @@
 <!doctype html><html lang=zh-cn>
 <head>
-<meta name=generator content="Hugo 0.89.0">
 <meta charset=utf-8>
 <meta http-equiv=x-ua-compatible content="IE=edge">
 <meta name=viewport content="width=device-width,initial-scale=1">
@@ -8,17 +7,17 @@
 <meta property="og:type" content="article">
 <meta property="og:image" content="https://fallingxun.github.io//">
 <meta property="twitter:image" content="https://fallingxun.github.io//">
-<meta name=title content>
-<meta property="og:title" content>
-<meta property="twitter:title" content>
+<meta name=title content="算法篇 — 曲面细分（Mesh Subdivision）">
+<meta property="og:title" content="算法篇 — 曲面细分（Mesh Subdivision）">
+<meta property="twitter:title" content="算法篇 — 曲面细分（Mesh Subdivision）">
 <meta name=description content>
 <meta property="og:description" content>
 <meta property="twitter:description" content>
 <meta property="twitter:card" content="summary">
 <meta name=keyword content>
 <link rel="shortcut icon" href=/img/favicon.ico>
-<title>Xun's Blog-</title>
-<link rel=canonical href=/>
+<title>算法篇 — 曲面细分（Mesh Subdivision）-</title>
+<link rel=canonical href=/post/algorithm/algorithm_meshsubdivision/>
 <link rel=stylesheet href=/css/iDisqus.min.css>
 <link rel=stylesheet href=/css/bootstrap.min.css>
 <link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
@@ -72,178 +71,86 @@
 </div>
 </nav>
 <script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
-<header class=intro-header style="background-image:url('/')">
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
 <div class=container>
 <div class=row>
 <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
-<div class=site-heading>
-<h1>Xun's Blog </h1>
-<span class=subheading></span>
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/algorithm title=Algorithm>
+Algorithm
+</a>
+</div>
+<h1>算法篇 — 曲面细分（Mesh Subdivision）</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Monday, June 20, 2022
+</span>
 </div>
 </div>
 </div>
 </div>
 </header>
+<article>
 <div class=container>
 <div class=row>
-<div class="col-lg-8 col-lg-offset-1
-col-md-8 col-md-offset-1
-col-sm-12
-col-xs-12
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
 post-container">
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/unity/ugui/eventsystem/>
-<h2 class=post-title>
-Unity篇 — 事件系统
-</h2>
-<div class=post-content-preview>
-<p>Unity 中各种点击、拖拽的交互响应是不可或缺的。在 UGUI 中，使用了 EventSystem 进行管理。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Sunday, January 29, 2023
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/unity/customizedvariant/customizedvariant/>
-<h2 class=post-title>
-Unity篇 — 定制化变体
-</h2>
-<div class=post-content-preview>
-<p>定制化变体工具。能对现有的预制体，定制一套对应的变体预制体。整套变体都沿用对应原预制体的信息，并且可以进行编辑修改。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Tuesday, November 29, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/render/graphics/graphics_beziercurves/>
-<h2 class=post-title>
-图形学篇 — 贝塞尔曲线
-</h2>
-<div class=post-content-preview>
-<p>贝塞尔曲线是计算机图形中常用的绘制曲线的方法，能根据多个点的位置绘制出光滑的曲线。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Friday, September 30, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/render/graphics/graphics_bilinearinterpolation/>
-<h2 class=post-title>
-图形学篇 — 双线性插值
-</h2>
-<div class=post-content-preview>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Thursday, September 29, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/render/graphics/graphics_anti-aliasing/>
-<h2 class=post-title>
-图形学篇 — 抗锯齿
-</h2>
-<div class=post-content-preview>
-<p>屏幕显示画面是以像素格子输出显示的，往往边缘会出现一些锯齿状的效果，抗锯齿技术则可以较好地解决这种表现问题。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Wednesday, September 28, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/render/graphics/graphics_barycentricinterpolation/>
-<h2 class=post-title>
-图形学篇 — 重心坐标插值
-</h2>
-<div class=post-content-preview>
-<p>在几何中，重心坐标有特别的性质，相应也有许多用途，其中重心坐标插值在图形学中也有广泛应用。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Tuesday, September 27, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/render/graphics/graphics_transform/>
-<h2 class=post-title>
-图形学篇 — 变换
-</h2>
-<div class=post-content-preview>
-<p>变换，指将数据通过一定的规则进行转换，通常可以用矩阵来进行表示。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, September 26, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/algorithm_kmp/>
-<h2 class=post-title>
-算法篇 — KMP 字符串匹配
-</h2>
-<div class=post-content-preview>
-<p>字符串匹配，通常会使用暴力匹配算法来进行。而KMP算法是一种改进的字符串匹配算法，在字符串的匹配上通常有较好的表现。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Sunday, September 25, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/algorithm_meshsubdivision/>
-<h2 class=post-title>
-算法篇 — 曲面细分（Mesh Subdivision）
-</h2>
-<div class=post-content-preview>
 <p>出于性能考虑，模型的面数一般都会有一定限制。然而，当靠近观察时，就能明显看到有很多不光滑的地方。曲面细分方法，通过将原来的面进行调整，可以使原来的面变得平滑，从而提升表现效果。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, June 20, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/algorithm_edt/>
-<h2 class=post-title>
-算法篇 — EDT 欧式距离变换
-</h2>
-<div class=post-content-preview>
-<p>距离变换是计算并标识空间点（对目标点）距离的过程，其中 EDT（Euclidean Distance Transform），欧式距离变换精度高，与实际距离相符，应用更广泛。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, May 23, 2022
-</p>
-</div>
-<hr>
-<ul class=pager>
-<li class=next>
-<a href=/page/2/>Older Posts &rarr;</a>
+<h3 id=简介>简介</h3>
+<ul>
+<li>曲面细分方法，就是将原来的一个面，切分成更细小的多个面，然后调整切分后的面的位置，使得这些新的面和周围的面变得更加平滑。当我们需要近距离观察某个物体的时候，如果保持现有的网格，则会看到很多块状的表现，进行细分后，原来的块状效果大部分都能变成曲面，看起来会更加自然。</li>
+<li>曲面细分算法有：
+<ul>
+<li>Loop 算法</li>
+<li>Catmull-Clark算法</li>
+</ul>
 </li>
 </ul>
+<h3 id=loop-算法>Loop 算法</h3>
+<ul>
+<li>对于所有面都为三角面的模型，常用的曲面细分算法就是 Loop 算法，
+<a href=https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/thesis-10.pdf>https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/thesis-10.pdf</a></li>
+</ul>
+<h3 id=catmull-clark-算法>Catmull-Clark 算法</h3>
+<p><a href=https://people.eecs.berkeley.edu/~sequin/CS284/PAPERS/CatmullClark_SDSurf.pdf>https://people.eecs.berkeley.edu/~sequin/CS284/PAPERS/CatmullClark_SDSurf.pdf</a></p>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/algorithm/algorithm_edt/ data-toggle=tooltip data-placement=top title="算法篇 — EDT 欧式距离变换">&larr;
+Previous Post</a>
+</li>
+<li class=next>
+<a href=/post/algorithm/algorithm_kmp/ data-toggle=tooltip data-placement=top title="算法篇 — KMP 字符串匹配">Next
+Post &rarr;</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
 </div>
-<div class="col-lg-3 col-lg-offset-0
-col-md-3 col-md-offset-0
-col-sm-12
-col-xs-12
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
 sidebar-container">
 </div>
 </div>
 </div>
+</article>
 <footer>
 <div class=container>
 <div class=row>
