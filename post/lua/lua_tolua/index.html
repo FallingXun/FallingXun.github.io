@@ -1235,7 +1235,10 @@ CSharp侧
 			local enumValue = System.Enum.Parse(enumType, enumKey):GetHashCode()
 		end
 	end
-</code></pre><h3 id=64位整型>64位整型</h3>
+</code></pre><ul>
+<li>由于这里使用反射获取，会有装拆箱问题，所以最好调用一次后将结果缓存起来。</li>
+</ul>
+<h3 id=64位整型>64位整型</h3>
 <ul>
 <li>前面提到，在CSharp的 OpenToLuaLibs 方法中，调用了lua侧的 tolua_openlibs 进行初始化库，其中对lua侧的int64和uint64进行了初始化。
 <ul>
