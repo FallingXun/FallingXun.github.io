@@ -1219,16 +1219,16 @@ CSharp侧
 		-- 获取枚举
 		-- 方法一
 		local valueArray = System.Enum.GetValues(enumType)
-		for	i=0,valueArray.Length do
+		for	i=0,valueArray.Length - 1 do
 			-- 枚举名
-			local enumKey = valueArray.GetValue(i):ToString()
+			local enumKey = valueArray:GetValue(i):ToString()
 			-- 枚举值
-			local enumValue = valueArray.GetValue(i):GetHashCode()
+			local enumValue = valueArray:GetValue(i):GetHashCode()
 		end
 
 		-- 方法二
 		local nameArray = System.Enum.GetNames(enumType)
-		for i=0,nameArray.Length do
+		for i=0,nameArray.Length - 1 do
 			-- 枚举名
 			local enumKey = nameArray[i]
 			-- 枚举值
