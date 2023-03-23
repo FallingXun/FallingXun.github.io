@@ -1206,9 +1206,36 @@ CSharp侧
 <li>tolua.reflection：初始化LuaMethod、LuaProperty、LuaField、LuaConstructor的Wrap文件注册，需要初始化后才能正常反射。</li>
 </ul>
 </li>
-<li>Assembly-CSharp 程序集没有在 LuaReflection 的构造函数中添加到list中，避免放在插件目录无法加载，需要可从lua代码 loadassembly。</li>
+<li>使用 tolua.findtype 方法，一般需要先添加 Assembly-CSharp 程序集。Assembly-CSharp 程序集没有在 LuaReflection 的构造函数中添加到list中，避免放在插件目录无法加载，需要可从lua代码 loadassembly。如果不清楚类型名，可在 CSharp 侧使用 Type.FullName 得到具体类名。</li>
 </ul>
-<h3 id=64位整型>64位整型</h3>
+<pre tabindex=0><code>	tolua.loadassembly(&quot;Assembly-CSharp&quot;)
+	tolua.findtype(&quot;XXXXX&quot;)
+</code></pre><ul>
+<li>对于枚举对象，枚举对象的值需要用 GetHashCode 方法获取。反射获取流程如下</li>
+</ul>
+<pre tabindex=0><code>	tolua.loadassembly(&quot;Assembly-CSharp&quot;)
+	local enumType = tolua.findtype('XXXEnum')
+	if enumType ~= nil and enumType.IsEnum then
+		-- 获取枚举
+		-- 方法一
+		local valueArray = System.Enum.GetValues(enumType)
+		for	i=0,valueArray.Length do
+			-- 枚举名
+			local enumKey = valueArray.GetValue(i):ToString()
+			-- 枚举值
+			local enumValue = valueArray.GetValue(i):GetHashCode()
+		end
+
+		-- 方法二
+		local nameArray = System.Enum.GetNames(enumType)
+		for i=0,nameArray.Length do
+			-- 枚举名
+			local enumKey = nameArray[i]
+			-- 枚举值
+			local enumValue = System.Enum.Parse(enumType, enumKey):GetHashCode()
+		end
+	end
+</code></pre><h3 id=64位整型>64位整型</h3>
 <ul>
 <li>前面提到，在CSharp的 OpenToLuaLibs 方法中，调用了lua侧的 tolua_openlibs 进行初始化库，其中对lua侧的int64和uint64进行了初始化。
 <ul>
