@@ -753,6 +753,44 @@ CSharp侧
 <li>如果 ObjectTranslator.objectsBackMap 中的index和要GC的index不一致，说明此对象已经绑定到新的index，不需要移除引用。</li>
 </ul>
 </li>
+<li>对于枚举对象，userdata 的 metatable 不为对应 Type 的 metatable，而是统一使用 System.Enum 对应的 metatable。</li>
+</ul>
+<pre tabindex=0><code>		// ToLua.cs
+		...
+
+        public static void Push(IntPtr L, System.Enum e)
+        {
+            object obj = null;
+            int enumMetatable = LuaStatic.GetEnumObject(L, e, out obj);
+            PushUserData(L, obj, enumMetatable);
+        }
+</code></pre><pre tabindex=0><code>		// LuaStatic.cs
+		...
+
+		public static int GetEnumObject(IntPtr L, System.Enum e, out object obj)
+        {
+            LuaState state = LuaState.Get(L);
+            obj = state.GetEnumObj(e);
+            return state.EnumMetatable;
+        }    
+</code></pre><pre tabindex=0><code>		// LuaState.cs
+		...
+
+		void OpenBaseLibs()
+        {            
+            ...
+            System_EnumWrap.Register(this);
+
+            ...
+            EnumMetatable = metaMap[typeof(System.Enum)];
+            
+			...
+        }
+</code></pre><ul>
+<li>其中，枚举值 userdata 对象，经常需要获取其对应的值来进行逻辑处理，System_EnumWrap 中增加了 ToInt 方法，能将枚举对象转成 int 值。</li>
+</ul>
+<pre tabindex=0><code>	local intValue = UnityEngine.Space.Self:ToInt()
+</code></pre><ul>
 <li>为了释放已经销毁的UnityEngine.Object的引用关系，CSharp侧提供了一个 LuaState.StepCollect() 方法，放在Update中触发，可以检查已经销毁的对象，移除 ObjectTranslator.objectsBackMap 的已销毁对象，避免字典频繁扩容。</li>
 <li>总的来说，lua侧对CSharp侧对象的引用，只有lua gc触发的时候，才能在CSharp侧对应释放掉引用。</li>
 </ul>
@@ -1219,7 +1257,7 @@ CSharp侧
 		-- 获取枚举
 		-- 方法一
 		local valueArray = System.Enum.GetValues(enumType)
-		for	i=0,valueArray.Length - 1 do
+		for	i = 0,valueArray.Length - 1 do
 			-- 枚举名
 			local enumKey = valueArray:GetValue(i):ToString()
 			-- 枚举值
@@ -1228,7 +1266,7 @@ CSharp侧
 
 		-- 方法二
 		local nameArray = System.Enum.GetNames(enumType)
-		for i=0,nameArray.Length - 1 do
+		for i = 0,nameArray.Length - 1 do
 			-- 枚举名
 			local enumKey = nameArray[i]
 			-- 枚举值
