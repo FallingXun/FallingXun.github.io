@@ -65,59 +65,105 @@ S_{\Delta CAB} = \frac{(x_A - x_C)(y_B - y_C) - (x_B - x_C)(y_A - y_C)}{2}
 
 - Math_BarycentricInterpolation_14
 ```math
-Z_P =  Z_A \alpha + Z_B  \beta + Z_C \gamma
+ax + bz = c
 ```
 
 - Math_BarycentricInterpolation_15
 ```math
-Z_{P'} = Z_{A'} \alpha' + Z_{B'} \beta' + Z_{C'} \gamma'
+\frac{x_{A'}}{x_A} = \frac{z_{A'}}{-n}
 ```
 
 - Math_BarycentricInterpolation_16
 ```math
-1 = \alpha' + \beta' + \gamma'
+\frac{1}{z_{A'}} = -\frac{ax_{A}}{cn} + \frac{b}{c}
 ```
 
 - Math_BarycentricInterpolation_17
 ```math
-\frac{Z_P}{Z_P} = \frac{Z_A}{Z_A} \alpha' + \frac{Z_B}{Z_B} \beta' + \frac{Z_C}{Z_C} \gamma'
+\frac{1}{z'} = -\frac{ax}{cn} + \frac{b}{c}
 ```
 
 - Math_BarycentricInterpolation_18
 ```math
-Z_P = \frac{Z_A Z_P}{Z_A} \alpha' + \frac{Z_B Z_P}{Z_B} \beta' + \frac{Z_C Z_P}{Z_C} \gamma'
+P = (1 - t) A + t B
 ```
 
 - Math_BarycentricInterpolation_19
 ```math
-Z_P = Z_A (\frac{Z_P}{Z_A} \alpha') + Z_B (\frac{Z_P}{Z_B} \beta') + Z_C (\frac{Z_P}{Z_C} \gamma')
+\frac{1}{z_{P'}} = -\frac{ax_P}{cn} + \frac{b}{c}
 ```
+
 - Math_BarycentricInterpolation_20
 ```math
-\alpha = \alpha' \frac{Z_P}{Z_A}
+\frac{1}{z_{P'}} = -\frac{ax_A}{cn}(1 - t) - \frac{ax_B}{cn}t + \frac{b}{c}
 ```
 
 - Math_BarycentricInterpolation_21
 ```math
-\beta = \beta' \frac{Z_P}{Z_B}
+\frac{1}{z_{P'}} = (-\frac{ax_A}{cn}(1 - t) + \frac{b}{c}(1 - t)) + (-\frac{ax_B}{cn}t + \frac{b}{c}t)
+```
+
+- Math_BarycentricInterpolation_21
+```math
+\frac{1}{z_{P'}} = \frac{1}{z_A}(1 - t) + \frac{1}{z_B}t
 ```
 
 - Math_BarycentricInterpolation_22
 ```math
-\gamma = \gamma' \frac{Z_P}{Z_C}
+ax + by + cz = d 
 ```
 
 - Math_BarycentricInterpolation_23
 ```math
-1 = \alpha + \beta + \gamma = (\frac{\alpha'}{Z_A} + \frac{\beta'}{Z_B} + \frac{\gamma'}{Z_C}) Z_P
+\frac{x_{A'}}{x_A} = \frac{z_{A'}}{-n}
 ```
 
 - Math_BarycentricInterpolation_24
 ```math
-Z_P = \frac{1}{\frac{\alpha'}{Z_A} + \frac{\beta'}{Z_B} + \frac{\gamma'}{Z_C}}
+\frac{y_{A'}}{y_A} = \frac{z_{A'}}{-n}
 ```
 
-- Math_BarycentricInterpolation_24
+- Math_BarycentricInterpolation_25
 ```math
-I_{P'} = (\frac{\alpha'}{Z_A} I_{A'} + \frac{\beta'}{Z_B} I_{B'} + \frac{\gamma'}{Z_C} I_{C'}) \frac{1}{\frac{\alpha'}{Z_A} + \frac{\beta'}{Z_B} + \frac{\gamma'}{Z_C}}
+\frac{1}{z_{A'}} = -\frac{ax_A}{dn} - \frac{by_A}{dn} + \frac{c}{d}
+```
+
+- Math_BarycentricInterpolation_26
+```math
+\frac{1}{z'} = -\frac{ax}{dn} - \frac{by}{dn} + \frac{c}{d}
+```
+
+- Math_BarycentricInterpolation_27
+```math
+P = \alpha A + \beta B + \gamma C
+```
+
+- Math_BarycentricInterpolation_28
+```math
+\alpha + \beta + \gamma = 1
+```
+
+- Math_BarycentricInterpolation_29
+```math
+\frac{1}{z_{P'}} = -\frac{ax_P}{dn} - \frac{by_P}{dn} + \frac{c}{d}
+```
+
+- Math_BarycentricInterpolation_30
+```math
+x_P = \alpha x_A + \beta x_B + \gamma x_C
+```
+
+- Math_BarycentricInterpolation_31
+```math
+y_P = \alpha y_A + \beta y_B + \gamma y_C
+```
+
+- Math_BarycentricInterpolation_32
+```math
+\frac{1}{z_{P'}} = \alpha(-\frac{ax_A}{dn} - \frac{by_A}{dn} + \frac{c}{d}) + \beta(-\frac{ax_B}{dn} - \frac{by_B}{dn} + \frac{c}{d}) + \gamma(-\frac{ax_C}{dn} - \frac{by_C}{dn} + \frac{c}{d})
+```
+
+- Math_BarycentricInterpolation_33
+```math
+\frac{1}{z_{P'}} = \frac{1}{z_{A'}}\alpha + \frac{1}{z_{B'}}\beta + \frac{1}{z_{C'}}
 ```

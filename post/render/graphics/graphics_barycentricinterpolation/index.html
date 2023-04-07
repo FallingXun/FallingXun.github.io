@@ -142,33 +142,70 @@ post-container">
 <center><figcaption>正交投影（左）和 透视投影（右）的示例</figcaption></center>
 </figure>
 可以看到，正交投影下，屏幕上的 b 点对应 B 点，都为中点。而透视投影下的 b 点对应的 B 点，则并不为中点，即透视投影发生了非线性变换。因此，在屏幕空间下对三角形的插值，并不能得到正确的结果，需要进行校正。
-<figure>
 <img src="/img/Render/Graphics/BarycentricInterpolation/BarycentricInterpolation_3.png?raw=true" alt=BarycentricInterpolation_3.png>
-<center><figcaption>正交投影（左）和 透视投影（右）的示例</figcaption></center>
-</figure>
 </li>
-<li>从前面的推导过程，我们可以得到三角形 ABC 中的点 P 的重心坐标 (α, β, γ)，则深度值为
+</ul>
+<h4 id=2d-推导>2D 推导</h4>
+<ul>
+<li>以 A&rsquo;B' 为例，其直线方程为
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_14.png?raw=true" alt=Math_BarycentricInterpolation_14.png>
-同样，三角形 A&rsquo;B&rsquo;C' 中的点 P' 的重心坐标 (α', β', γ')，则深度值为
+</li>
+<li>以点 A 和 A' 为例，由相似三角形关系可以得到
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_15.png?raw=true" alt=Math_BarycentricInterpolation_15.png>
-根据重心坐标的性质有
+</li>
+<li>则有
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_16.png?raw=true" alt=Math_BarycentricInterpolation_16.png>
-对等式两边进行变换
+</li>
+<li>因此，对 A&rsquo;B' 上的任意一点都有
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_17.png?raw=true" alt=Math_BarycentricInterpolation_17.png>
+</li>
+<li>假设点 P 为 AB 上的一点，其中
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_18.png?raw=true" alt=Math_BarycentricInterpolation_18.png>
+</li>
+<li>可以得到对应 A&rsquo;B' 上的点 P' 为
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_19.png?raw=true" alt=Math_BarycentricInterpolation_19.png>
-从而，我们得到了 P 点深度值的另一种表示方式，对比可以得到 α, β, γ 和 α', β', γ' 的一组对应关系
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_20.png?raw=true" alt=Math_BarycentricInterpolation_20.png>
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_21.png?raw=true" alt=Math_BarycentricInterpolation_21.png>
+</li>
+<li>也就是说，对于屏幕空间下的直线上的点的深度插值，为观察空间下的深度倒数的插值。</li>
+</ul>
+<h4 id=3d-推导>3D 推导</h4>
+<ul>
+<li>三角形 A&rsquo;B&rsquo;C' 所在的平面方程为
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_22.png?raw=true" alt=Math_BarycentricInterpolation_22.png>
-由于
+</li>
+<li>类比 2D 推导，可以得到
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_23.png?raw=true" alt=Math_BarycentricInterpolation_23.png>
-所以可以得到
+</li>
+<li>同样，对于 yoz 平面，也有
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_24.png?raw=true" alt=Math_BarycentricInterpolation_24.png>
 </li>
-<li>因此， P' 点的属性 I' ，需要以 α, β, γ 进行插值，则有
+<li>因此，可以得到
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_25.png?raw=true" alt=Math_BarycentricInterpolation_25.png>
 </li>
+<li>也就是说，对于三角形 A&rsquo;B&rsquo;C' 中的一点，有
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_26.png?raw=true" alt=Math_BarycentricInterpolation_26.png>
+</li>
+<li>假设 P 为 三角形 ABC 的重心，则有
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_27.png?raw=true" alt=Math_BarycentricInterpolation_27.png>
+</li>
+<li>其中
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_28.png?raw=true" alt=Math_BarycentricInterpolation_28.png>
+</li>
+<li>那么，对应三角形 A&rsquo;B&rsquo;C' 上的点 P' ，有
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_29.png?raw=true" alt=Math_BarycentricInterpolation_29.png>
+</li>
+<li>其中
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_30.png?raw=true" alt=Math_BarycentricInterpolation_30.png>
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_31.png?raw=true" alt=Math_BarycentricInterpolation_31.png>
+</li>
+<li>整理可得
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_32.png?raw=true" alt=Math_BarycentricInterpolation_32.png>
+</li>
+<li>因此可以得到
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_33.png?raw=true" alt=Math_BarycentricInterpolation_33.png>
+</li>
+<li>也就是说，对于屏幕空间下的平面上的点的深度插值，为观察空间下的深度倒数的插值。</li>
 </ul>
 <h3 id=总结>总结</h3>
 <ul>
