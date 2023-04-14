@@ -1,0 +1,240 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="图形学篇 — 阴影">
+<meta property="og:title" content="图形学篇 — 阴影">
+<meta property="twitter:title" content="图形学篇 — 阴影">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>图形学篇 — 阴影-</title>
+<link rel=canonical href=/post/render/graphics/graphics_shadow/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+<li>
+<a href=/categories/googleplay%E7%B3%BB%E5%88%97>googleplay系列</a>
+</li>
+<li>
+<a href=/categories/lua%E7%B3%BB%E5%88%97>lua系列</a>
+</li>
+<li>
+<a href=/categories/tmp%E7%B3%BB%E5%88%97>tmp系列</a>
+</li>
+<li>
+<a href=/categories/unity%E7%B3%BB%E5%88%97>unity系列</a>
+</li>
+<li>
+<a href=/categories/%E5%9B%BE%E5%BD%A2%E5%AD%A6%E7%B3%BB%E5%88%97>图形学系列</a>
+</li>
+<li>
+<a href=/categories/%E6%B8%B2%E6%9F%93%E7%B3%BB%E5%88%97>渲染系列</a>
+</li>
+<li>
+<a href=/categories/%E7%AE%97%E6%B3%95%E7%B3%BB%E5%88%97>算法系列</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/graphics title=Graphics>
+Graphics
+</a>
+</div>
+<h1>图形学篇 — 阴影</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Wednesday, April 5, 2023
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>真实世界中，伴随着光的存在，阴影也会同步出现。因此图形学中，为了让物体看起来更加真实，阴影是不可或缺的。</p>
+<h3 id=简介>简介</h3>
+<ul>
+<li>阴影（Shadow），由全影（umbra）和半影（penumbra）组成。
+<ul>
+<li>全影：拥有完全阴影的区域</li>
+<li>半影：拥有部分阴影的区域
+<img src="/img/Render/Graphics/Shadow/Shadow_1.png?raw=true" alt=Shadow_1.png>
+</li>
+</ul>
+</li>
+<li>软阴影（Soft Shadow），当光源为区域光时产生。</li>
+</ul>
+<h3 id=阴影图shadow-map>阴影图（Shadow Map）</h3>
+<ul>
+<li>1978年，Williams 提出了一种基于 z-buffer 的通用渲染方法，可以用于在任意对象上快速生成阴影。核心思路是：
+<ul>
+<li>从产生阴影的光源位置出发，渲染整个场景，能被看到的地方则能被照亮，不能被看到的地方即为阴影。生成阴影图的时候，仅需要 z-buffer ，光照、纹理、颜色缓冲写入都可以关闭。此时，z-buffer 中的每个像素记录了光源和最靠近的场景对象的深度值 z。</li>
+<li>从观察者的角度出发，再次渲染整个场景。每一个对象所在的像素，都要和阴影图比较。如果该像素到光源的距离比阴影图中记录的距离远，则该像素处在阴影中。
+<img src="/img/Render/Graphics/Shadow/Shadow_2.png?raw=true" alt=Shadow_2.png>
+</li>
+</ul>
+</li>
+<li>Shadow Map 是非常流行的算法，因为其是相对可预测的。构建阴影图的成本，与渲染图元的数量大致呈线性关系，并且访问时间是恒定的。当场景的光源和物体没有移动时，阴影图可以只生成一次，每一帧都反复使用。</li>
+<li>而 Shadow Map 的缺点，就是阴影的质量取决于阴影图的分辨率 (以像素为单位) 和 z-buffer 的数值精度。
+<ul>
+<li>如果想要高精度的阴影，则需要使用较高的分辨率和精度，但相对地就需要占用更大的内存。</li>
+<li>如果要限制内存占用，则需要牺牲阴影的精度，即可能出现混叠等问题。</li>
+</ul>
+</li>
+</ul>
+<h4 id=阴影粉刺shadow-acne>阴影粉刺（Shadow Acne）</h4>
+<ul>
+<li>由于阴影图是在深度比较期间采样的，因此该算法容易出现混叠问题，尤其是靠近对象之间的接触点。一个常见的问题是自阴影混叠，通常叫 surface acne 或 shadow acne，即三角面被错误认为是阴影。产生此问题的原因有两个：
+<ul>
+<li>处理器精度的数值极限问题。</li>
+<li>采样点的值代表的是一个区域的深度值，从光源出发的采样点，几乎不会和从观察方向出发的采样点相同。</li>
+</ul>
+</li>
+</ul>
+<h4 id=斜率比例偏差slope-scale-bias>斜率比例偏差（Slope Scale Bias）</h4>
+<p>
+<img src="/img/Render/Graphics/Shadow/Shadow_3.png?raw=true" alt=Shadow_3.png>
+</p>
+<ul>
+<li>可以看到，区域1中物体表面的点的深度比阴影图的采样点深度小（距离光源更近），因此能被正常照亮，而区域2、3中点的深度，则比阴影图的采样点深度大，因此被错误地认为是在阴影中，因为比较时取了阴影图另一个点的深度来比较。</li>
+<li>为了避免出现 shadow acne 问题，一个常用的方法是引入偏差因子，即当物体的深度与阴影图进行比较前，先对物体深度减去一个小的偏移量后，再进行比较。
+<img src="/img/Render/Graphics/Shadow/Shadow_4.png?raw=true" alt=Shadow_4.png>
+</li>
+<li>然而，如果接收阴影的物体表面和光源越趋于平行时，使用常量的偏移量则容易出现错误。如上图中使用了常量的偏移量，区域1、3能正常被照亮，但区域2仍然会处于阴影中。
+<img src="/img/Render/Graphics/Shadow/Shadow_5.png?raw=true" alt=Shadow_5.png>
+</li>
+<li>另一种更有效的方法是，通过物体表面和光源的角度来设置阴影图的偏移量，阴影图的深度会加上这个偏移量后再进行比较。表面与光源越接近平行，偏移量就越大，从而避免问题。这种类型的偏差即为斜率比例偏差。</li>
+<li>当物体表面和光源接近垂直时，斜率比例偏差几乎为 0，因此一般需要将常量偏差和斜率比例偏差一起使用，来避免出现混叠问题。</li>
+</ul>
+<h4 id=peter-平移peter-panning>Peter 平移（Peter Panning）</h4>
+<ul>
+<li>当偏移量太大时，会导致一个称为 light leaks 或 Peter Panning 的问题，即物体看起来会稍微高于下表面。因为物体接触点下方的区域被推得太远，导致比较深度后不能接收到阴影。</li>
+<li>因此，偏移量的选择需要根据实际情况进行调整。</li>
+</ul>
+<h3 id=pcfpercentage-closer-filtering>PCF（Percentage-Closer Filtering）</h3>
+<ul>
+<li>PCF 是 Shadow Map 的一个扩展，可以用于产生伪软阴影，也可以用于改善由于分辨率不足引起的块状阴影问题。
+<img src="/img/Render/Graphics/Shadow/Shadow_6.png?raw=true" alt=Shadow_6.png>
+</li>
+<li>如图所示，PCF 的流程为
+<ul>
+<li>对于物体表面的点，找到到阴影图中的对应点。</li>
+<li>对阴影图中的点，找到相邻的四个像素点，对阴影图进行采样。</li>
+<li>对每个采样得到的深度结果，和物体表面的深度进行比较，用 0 表示阴影，1 表示光照。</li>
+<li>将所有比较结果进行双线性插值，得到光源最终在物体表面的作用量。</li>
+</ul>
+</li>
+<li>采样、修改附近的阴影图位置，有很多不同的选择，包括采样的面积有多宽，要使用多少样本，采样模式以及如何对结果进行加权等。</li>
+<li>PCF 是非物理的处理方式。因为在真实物理世界中，软阴影的大小会受遮挡物体和接收物体的距离影响，而 PCF 只会从接收物体的点映射到阴影图进行采样，与遮挡物体的距离并不会影响的阴影大小，因此最终会得到几乎相同的软阴影区域。</li>
+<li>然而，自阴影问题，以及前面提到的 Shadow Acne 和 Peter Panning 问题，在 PCF 下会表现得更加糟糕。例如，原本使用 Slope Scale Bias 的时候，阴影图会根据物体表面斜率将表面往远离光源的方向偏移，从而采样点能正常照亮。而当 PCF 在阴影图较大范围采样时，得到的结果可能由非阴影变成阴影，即出现自阴影问题。</li>
+<li>为了解决自阴影问题，需要通过使用常数偏移、斜率比例偏差、接收平面、视图偏差、法线偏差的组合，但仍然需要对根据不同的环境进行手动调整。</li>
+</ul>
+<h3 id=pcss>PCSS</h3>
+<ul>
+<li>尽管 PCF 能产生软阴影，但是遮挡物体的和光源的距离并不会影响的阴影大小，因此软阴影的大小基本是相同的。在此基础上，Fernando 提出了 Percentage-Closer Soft Shadow（PCSS）方法。
+<img src="/img/Render/Graphics/Shadow/PCSS_1.png?raw=true" alt=PCSS_1.png>
+</li>
+<li>从上图可以得到，光源大小和半影大小存在</li>
+</ul>
+<pre tabindex=0><code class=language-math data-lang=math>w_{Penumbra} = \frac{(d_{Receiver} - d_{Blocker}) w_{Light} }{d_{Blocker}}
+</code></pre>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/unity/shader/shader/ data-toggle=tooltip data-placement=top title="Unity篇 — Shader">&larr;
+Previous Post</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2023
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>
