@@ -112,7 +112,8 @@ post-container">
 </li>
 </ul>
 </li>
-<li>软阴影（Soft Shadow），当光源为区域光时产生。</li>
+<li>硬阴影（Hard Shadow）：只有全影区域，边界锐利的阴影。</li>
+<li>软阴影（Soft Shadow）：全影区域和半影区域同时存在的边界柔和阴影，当光源为区域光时产生。</li>
 </ul>
 <h3 id=阴影图shadow-map>阴影图（Shadow Map）</h3>
 <ul>
@@ -179,15 +180,52 @@ post-container">
 <li>然而，自阴影问题，以及前面提到的 Shadow Acne 和 Peter Panning 问题，在 PCF 下会表现得更加糟糕。例如，原本使用 Slope Scale Bias 的时候，阴影图会根据物体表面斜率将表面往远离光源的方向偏移，从而采样点能正常照亮。而当 PCF 在阴影图较大范围采样时，得到的结果可能由非阴影变成阴影，即出现自阴影问题。</li>
 <li>为了解决自阴影问题，需要通过使用常数偏移、斜率比例偏差、接收平面、视图偏差、法线偏差的组合，但仍然需要对根据不同的环境进行手动调整。</li>
 </ul>
-<h3 id=pcss>PCSS</h3>
+<h3 id=pcsspercentage-closer-soft-shadows>PCSS（Percentage-Closer Soft Shadows）</h3>
 <ul>
-<li>尽管 PCF 能产生软阴影，但是遮挡物体的和光源的距离并不会影响的阴影大小，因此软阴影的大小基本是相同的。在此基础上，Fernando 提出了 Percentage-Closer Soft Shadow（PCSS）方法。
-<img src="/img/Render/Graphics/Shadow/PCSS_1.png?raw=true" alt=PCSS_1.png>
-</li>
-<li>从上图可以得到，光源大小和半影大小存在</li>
+<li>尽管 PCF 能产生软阴影，但是遮挡物体的和光源的距离并不会影响的阴影大小，因此软阴影的大小基本是相同的。在此基础上，Fernando 提出了 Percentage-Closer Soft Shadow（PCSS）方法，主要包括三个步骤：
+<ul>
+<li>遮挡物查找。</li>
+<li>半影尺寸估算。</li>
+<li>可变的 PCF 处理。</li>
 </ul>
-<pre tabindex=0><code class=language-math data-lang=math>w_{Penumbra} = \frac{(d_{Receiver} - d_{Blocker}) w_{Light} }{d_{Blocker}}
-</code></pre>
+</li>
+</ul>
+<h4 id=遮挡物查找>遮挡物查找</h4>
+<p>
+<img src="/img/Render/Graphics/Shadow/PCSS_2.png?raw=true" alt=PCSS_2.png>
+</p>
+<ul>
+<li>从图中可以发现，点光源只能产生全影区域，而半影区域需要区域光产生。</li>
+<li>当光源为点光源时，每一个接收物体点，只有一个点光源对其产生作用，映射到阴影图上的一个点，比较深度后确定是否处在阴影中，通过 PCF 方法，来生成软阴影。</li>
+<li>而当光源为区域光时，从光源中心出发产生阴影图，每一个接收物体点，有一片区域光对其产生作用，映射到阴影图上。阴影图上的采样区域大小，受光源大小、接收物体和光源的距离影响。
+<img src="/img/Render/Graphics/Shadow/PCSS_3.png?raw=true" alt=PCSS_3.png>
+</li>
+<li>可以看到，从光源出发，到场景点的所有遮挡物区域，即阴影图这个区域中深度比接收点的深度小的像素点，即右侧阴影图的绿色点。</li>
+</ul>
+<h4 id=半影尺寸估算>半影尺寸估算</h4>
+<p>
+<img src="/img/Render/Graphics/Shadow/PCSS_1.png?raw=true" alt=PCSS_1.png>
+</p>
+<ul>
+<li>从上图可以得到，半影的大小和光源大小、光源到接收面的距离、光源到阻挡物的距离有关，可以表示为
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_1.png?raw=true" alt=Math_Shadow_1.png>
+</li>
+<li>为了得到半影的尺寸，需要的参数有
+<ul>
+<li>接收物到光源的距离。</li>
+<li>遮挡物到光源的距离。</li>
+<li>光源大小。</li>
+</ul>
+</li>
+<li>其中，光源大小一般是已知的，可以通过 shader 统一的输入获得。而接收物到光源的距离，也就是该点在光源下的深度，也可以直接计算得到。而遮挡物到光源的距离，不能直接得到。</li>
+<li>遮挡物在阴影图上为一个区域，如果直接取其中的最小值，则会受最小值的所在位置影响，导致可能出现伪阴影。通常需要对阴影图上所有遮挡物的深度求平均值，来作为遮挡物到光源的距离。</li>
+<li>至此，所有需要的参数都已经得到，则半影的尺寸可以估算出来。</li>
+</ul>
+<h4 id=可变的-pcf-处理>可变的 PCF 处理</h4>
+<ul>
+<li>常规的 PCF ，对各个点都采用相同的内核进行滤波。而可变的 PCF 内核则可以使用变化的滤波范围，以及不同数量的采样点。通过上一个步骤，可以估算出来每个点对应的半影尺寸，因此会基于每个结果来确定每个点执行 PCF 使用的内核参数。</li>
+<li>通过估算得到半影大小后，为了优化性能，可以选择只有存在半影时，才进行 PCF 处理，则省去了全影和完全光照区域的多余计算过程。</li>
+</ul>
 <hr>
 <ul class=pager>
 <li class=previous>
