@@ -263,7 +263,7 @@ post-container">
 <li>如上图示例，未被遮挡的点，即为阴影图采样区域中，深度不小于 4 的值，则 PCF 计算占比为 2/8 = 0.25 。采样区域期望为 2.5 ，方差为 0.75 ，则根据单边切比雪夫不等式估算的上限值为 0.75/(0.75 + (4 - 2.5)^2 = 0.25 ，和 PCF 估算值一致。</li>
 <li>尽管有一定的使用条件，但通常都会使用上限值来作为 PCF 的简化计算，一般都能得到较好的表现结果。</li>
 </ul>
-<h3 id=satsummed-area-table>SAT（Summed-Area Table）</h3>
+<h4 id=satsummed-area-table>SAT（Summed-Area Table）</h4>
 <ul>
 <li>使用单边的切比雪夫不等式估算时，都需要获得每个点在阴影图上某个范围内的期望和方差值，而期望和方差可以通过 SAT 方式来快速获得。
 <img src="/img/Render/Graphics/Shadow/SAT_1.png?raw=true" alt=SAT_1.png>
