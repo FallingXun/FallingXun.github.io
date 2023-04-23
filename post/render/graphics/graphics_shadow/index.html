@@ -226,6 +226,101 @@ post-container">
 <li>常规的 PCF ，对各个点都采用相同的内核进行滤波。而可变的 PCF 内核则可以使用变化的滤波范围，以及不同数量的采样点。通过上一个步骤，可以估算出来每个点对应的半影尺寸，因此会基于每个结果来确定每个点执行 PCF 使用的内核参数。</li>
 <li>通过估算得到半影大小后，为了优化性能，可以选择只有存在半影时，才进行 PCF 处理，则省去了全影和完全光照区域的多余计算过程。</li>
 </ul>
+<h3 id=vsmvariance-shadow-map>VSM（Variance Shadow Map）</h3>
+<ul>
+<li>PCF 中，计算接收点的阴影时，需要对阴影图的多个样本点进行采样，来得到接收点的光照量，即非阴影的占比。然而，当使用较大范围的采样区域和较多的样本点，对一个接收点进行处理时，会有较大的性能压力。</li>
+</ul>
+<h4 id=切比雪夫不等式>切比雪夫不等式</h4>
+<ul>
+<li>切比雪夫不等式指出，对于随机变量 X ，其有限期望为 E(X) = μ ，有限方差 D(X) = σ^2 ，则对任意正数 a ，变量 X 在 [-∞, -μ - a] 和 [μ + a, +∞] 范围的概率 P 满足
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_2.png?raw=true" alt=Math_Shadow_2.png>
+</li>
+<li>也就是说，对一批离散数据，在某个范围内的样本数量占比，可以通过该不等式直接估算出来。</li>
+</ul>
+<h4 id=单边的切比雪夫不等式>单边的切比雪夫不等式</h4>
+<ul>
+<li>单边切比雪夫不等式，可以由马尔科夫不等式推导得到。单边的切比雪夫不等式指出，对于随机变量 X' = X - μ ，期望为 E(X') = E(X - μ) = 0 ，有限方差 D(X') = D(X - μ) = σ^2 ，则对任意正数 a' ，变量 X' 在 [a', +∞] 范围的概率 P 满足
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_3.png?raw=true" alt=Math_Shadow_3.png>
+</li>
+<li>可以看出，单边不等式是对将原数据减去期望值后得到的关系，即求 X' ≥ a' 范围的概率，就是求 X ≥ a' + μ 范围的概率。因此求 X ≥ a 的范围，即 a = a' + μ ，则不等式可以表示为
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_4.png?raw=true" alt=Math_Shadow_4.png>
+</li>
+</ul>
+<h4 id=阴影应用>阴影应用</h4>
+<ul>
+<li>对应到 PCF 中，X 即为阴影图上滤波区域的深度值，a 即为接收点在光源下的深度值，P 即为未被遮挡（a ≤ X）的占比，也就是 PCF 计算需要的结果。</li>
+<li>然而，P 是一个上界，而 PCF 需要得到一个具体值，当满足某些条件时，可以取最大值为最终结果。</li>
+<li>当光源通过一个深度为 d1 的平面遮挡物，在深度为 d2 的平面接收物上产生阴影，设 p 为未被遮挡的概率，由于遮挡物只有一个，且为平面，因此在小范围内，遮挡的区域深度都为 d1 ，未被遮挡的区域都为 d2 ，则期望 μ 为
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_5.png?raw=true" alt=Math_Shadow_5.png>
+方差 σ^2 为
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_6.png?raw=true" alt=Math_Shadow_6.png>
+此时未被遮挡的范围，即 X ≥ d2 ，则 P 的上限值为
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_7.png?raw=true" alt=Math_Shadow_7.png>
+</li>
+<li>此时上限值即为未被遮挡的概率，即可以直接用上限值来估算。
+<img src="/img/Render/Graphics/Shadow/VSM_1.png?raw=true" alt=VSM_1.png>
+</li>
+<li>如上图示例，未被遮挡的点，即为阴影图采样区域中，深度不小于 4 的值，则 PCF 计算占比为 2/8 = 0.25 。采样区域期望为 2.5 ，方差为 0.75 ，则根据单边切比雪夫不等式估算的上限值为 0.75/(0.75 + (4 - 2.5)^2 = 0.25 ，和 PCF 估算值一致。</li>
+<li>尽管有一定的使用条件，但通常都会使用上限值来作为 PCF 的简化计算，一般都能得到较好的表现结果。</li>
+</ul>
+<h3 id=satsummed-area-table>SAT（Summed-Area Table）</h3>
+<ul>
+<li>使用单边的切比雪夫不等式估算时，都需要获得每个点在阴影图上某个范围内的期望和方差值，而期望和方差可以通过 SAT 方式来快速获得。
+<img src="/img/Render/Graphics/Shadow/SAT_1.png?raw=true" alt=SAT_1.png>
+</li>
+<li>如图所示，value[index] 为原始数据，sum[index] 为 value[0] ~ value[index] 的和。当需要求 value[i] ~ value[j] 的平均值时，则
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_8.png?raw=true" alt=Math_Shadow_8.png>
+即原本算法需要 O(n) ，使用 SAT 后只需要 O(1) 即可得到。
+<img src="/img/Render/Graphics/Shadow/SAT_2.png?raw=true" alt=SAT_2.png>
+</li>
+<li>对于二维数据，当需要求 value[left, right] ~ value[top, bottom] 的平均值时，则
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_9.png?raw=true" alt=Math_Shadow_9.png>
+即只需要知道左上、左下、右上、右下的值，就可以在 O(1) 内得到平均值。</li>
+<li>阴影图记录了光源下每个像素的深度值，需要增加一张图记录每个像素的深度平方值，通过分别构建 SAT 数据，即能在 O(1) 时间内得到 PCF 的结果。</li>
+<li>对于 SAT 数据的构建，通常需要一次遍历，即时间复杂度为 O(n) 。在 GPU 生成时，由于需要依赖前一个数据，因此需要 n 个 pass 。
+<img src="/img/Render/Graphics/Shadow/SAT_3.png?raw=true" alt=SAT_3.png>
+</li>
+<li>Justin Hensley 提出了加速算法，如上图所示，主要步骤为：
+<ul>
+<li>第 1 步，将每个像素的值，加上左边第 1 个像素的值，此时每个像素为 2 个数据的和。</li>
+<li>第 2 步，将每个像素的值，加上左边第 2 个像素的值，此时每个像素为 4 个数据的和。</li>
+<li>第 3 步，将每个像素的值，加上左边第 4 个像素的值，此时每个像素为 8 个数据的和。</li>
+<li>第 k 步，对每个像素的值，加上左边第 2^(k - 1) 个像素的值，此时每个像素为 2^k 个数据的和。</li>
+<li>重复以上步骤，直到每个像素为 n 个数据的和。</li>
+</ul>
+</li>
+<li>此加速算法充分利用了 GPU 并行计算的优势，对于一维的 n 个数据，只需要 O(log n) 时间即可完成 SAT 数据的构建。对于二维数据，只需要先进行一次横向处理，再进行一次竖向处理，即可得到 SAT 数据。</li>
+</ul>
+<h3 id=vssmvariance-soft-shadow-map>VSSM（Variance Soft Shadow Map）</h3>
+<ul>
+<li>在 PCSS 中，第三步使用 PCF 计算，可以使用 VSM 来优化计算，然而第一步查找遮挡物，同样需要采样阴影图中的一个区域，来找到被遮挡部分的平均深度。定义
+<ul>
+<li>X ：阴影图上滤波区域的深度值。</li>
+<li>a ：接收点在光源下的深度值。</li>
+<li>z_unocc ：滤波区域中 X ≥ a 的所有样本点的平均深度。</li>
+<li>z_occ ：滤波区域中 X ＜ a 的所有样本点的平均深度。</li>
+<li>z_avg ：滤波区域所有样本点的平均深度。</li>
+<li>N ：滤波区域的样本点数量。</li>
+<li>N_unocc ：滤波区域中 X ≥ a 的样本点数量。</li>
+<li>N_occ ：滤波区域中 X ＜ a 的样本点数量。</li>
+<li>P ：滤波区域中 X ≥ a 的比例。</li>
+</ul>
+</li>
+<li>则有以下关系
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_10.png?raw=true" alt=Math_Shadow_10.png>
+</li>
+<li>可以得到 z_occ 的表示
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_11.png?raw=true" alt=Math_Shadow_11.png>
+</li>
+<li>同样假设遮挡物和接收物都为平面，则未被遮挡的平均深度 z_unocc 即为接收点深度 a ，通过 VSM 可以得到阴影图的平均深度 z_avg ，以及未被遮挡的区域占比 P ，因此平均深度同样可以在 O(1) 时间内得到，从而计算效率得到较大的提升。</li>
+</ul>
+<h3 id=参考文献>参考文献</h3>
+<ul>
+<li><a href=https://http.download.nvidia.com/developer/presentations/2005/SIGGRAPH/Percentage_Closer_Soft_Shadows.pdf>Percentage Closer Soft Shadows</a></li>
+<li><a href=http://igm.univ-mlv.fr/~biri/Enseignement/MII2/Donnees/variance_shadow_maps.pdf>Variance Shadow Maps</a></li>
+<li><a href=https://jankautz.com/publications/VSSM_PG2010.pdf>Variance Soft Shadow Mapping</a></li>
+<li><a href=http://www.shaderwrangler.com/publications/sat/SAT_EG2005.pdf>Fast Summed-Area Table Generation and its Applications</a></li>
+</ul>
 <hr>
 <ul class=pager>
 <li class=previous>
