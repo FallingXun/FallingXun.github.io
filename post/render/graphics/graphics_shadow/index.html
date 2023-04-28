@@ -180,7 +180,7 @@ post-container">
 </ul>
 </li>
 <li>采样、修改附近的阴影图位置，有很多不同的选择，包括采样的面积有多宽，要使用多少样本，采样模式以及如何对结果进行加权等。</li>
-<li>PCF 是非物理的处理方式。因为在真实物理世界中，软阴影的大小会受遮挡物体和接收物体的距离影响，而 PCF 只会从接收物体的点映射到阴影图进行采样，与遮挡物体的距离并不会影响的阴影大小，因此最终会得到几乎相同的软阴影区域。</li>
+<li>PCF 是非物理的处理方式。因为在真实物理世界中，软阴影的大小会受遮挡物体和接收物体的距离影响，而 PCF 只会从着色点映射到阴影图进行采样，与遮挡物体的距离并不会影响的阴影大小，因此最终会得到几乎相同的软阴影区域。</li>
 <li>然而，自阴影问题，以及前面提到的 Shadow Acne 和 Peter Panning 问题，在 PCF 下会表现得更加糟糕。例如，原本使用 Slope Scale Bias 的时候，阴影图会根据物体表面斜率将表面往远离光源的方向偏移，从而采样点能正常照亮。而当 PCF 在阴影图较大范围采样时，得到的结果可能由非阴影变成阴影，即出现自阴影问题。</li>
 <li>为了解决自阴影问题，需要通过使用常数偏移、斜率比例偏差、接收平面、视图偏差、法线偏差的组合，但仍然需要对根据不同的环境进行手动调整。</li>
 </ul>
@@ -200,11 +200,11 @@ post-container">
 </p>
 <ul>
 <li>从图中可以发现，点光源只能产生全影区域，而半影区域需要区域光产生。</li>
-<li>当光源为点光源时，每一个接收物体点，只有一个点光源对其产生作用，映射到阴影图上的一个点，比较深度后确定是否处在阴影中，通过 PCF 方法，来生成软阴影。</li>
-<li>而当光源为区域光时，从光源中心出发产生阴影图，每一个接收物体点，有一片区域光对其产生作用，映射到阴影图上。阴影图上的采样区域大小，受光源大小、接收物体和光源的距离影响。
+<li>当光源为点光源时，每一个着色点，只有一个点光源对其产生作用，映射到阴影图上的一个点，比较深度后确定是否处在阴影中，通过 PCF 方法，来生成软阴影。</li>
+<li>而当光源为区域光时，从光源中心出发产生阴影图，每一个着色点，有一片区域光对其产生作用，映射到阴影图上。阴影图上的采样区域大小，受光源大小、接收物体和光源的距离影响。
 <img src="/img/Render/Graphics/Shadow/PCSS_3.png?raw=true" alt=PCSS_3.png>
 </li>
-<li>可以看到，从光源出发，到场景点的所有遮挡物区域，即阴影图这个区域中深度比接收点的深度小的像素点，即右侧阴影图的绿色点。</li>
+<li>可以看到，从光源出发，到场景点的所有遮挡物区域，即阴影图这个区域中深度比着色点的深度小的像素点，即右侧阴影图的绿色点。</li>
 </ul>
 <h4 id=半影尺寸估算>半影尺寸估算</h4>
 <p>
@@ -232,7 +232,7 @@ post-container">
 </ul>
 <h3 id=vsmvariance-shadow-mapping>VSM（Variance Shadow Mapping）</h3>
 <ul>
-<li>PCF 中，计算接收点的阴影时，需要对阴影图的多个样本点进行采样，来得到接收点的光照量，即非阴影的占比。然而，当使用较大范围的采样区域和较多的样本点，对一个接收点进行处理时，会有较大的性能压力。</li>
+<li>PCF 中，计算着色点的阴影时，需要对阴影图的多个样本点进行采样，来得到着色点的光照量，即非阴影的占比。然而，当使用较大范围的采样区域和较多的样本点，对一个着色点进行处理时，会有较大的性能压力。</li>
 </ul>
 <h4 id=切比雪夫不等式>切比雪夫不等式</h4>
 <ul>
@@ -252,7 +252,7 @@ post-container">
 </ul>
 <h4 id=阴影应用>阴影应用</h4>
 <ul>
-<li>对应到 PCF 中，X 即为阴影图上滤波区域的深度值，a 即为接收点在光源下的深度值，P 即为未被遮挡（a ≤ X）的占比，也就是 PCF 计算需要的结果。</li>
+<li>对应到 PCF 中，X 即为阴影图上滤波区域的深度值，a 即为着色点在光源下的深度值，P 即为未被遮挡（a ≤ X）的占比，也就是 PCF 计算需要的结果。</li>
 <li>然而，P 是一个上界，而 PCF 需要得到一个具体值，当满足某些条件时，可以取最大值为最终结果。</li>
 <li>当光源通过一个深度为 d1 的平面遮挡物，在深度为 d2 的平面接收物上产生阴影，设 p 为未被遮挡的概率，由于遮挡物只有一个，且为平面，因此在小范围内，遮挡的区域深度都为 d1 ，未被遮挡的区域都为 d2 ，则期望 μ 为
 <img src="/img/Render/Graphics/Shadow/Math_Shadow_5.png?raw=true" alt=Math_Shadow_5.png>
@@ -307,7 +307,7 @@ post-container">
 <li>在 PCSS 中，第三步使用 PCF 计算，可以使用 VSM 来优化计算，然而第一步查找遮挡物，同样需要采样阴影图中的一个区域，来找到被遮挡部分的平均深度。定义
 <ul>
 <li>X ：阴影图上滤波区域的深度值。</li>
-<li>a ：接收点在光源下的深度值。</li>
+<li>a ：着色点在光源下的深度值。</li>
 <li>z_unocc ：滤波区域中 X ≥ a 的所有样本点的平均深度。</li>
 <li>z_occ ：滤波区域中 X ＜ a 的所有样本点的平均深度。</li>
 <li>z_avg ：滤波区域所有样本点的平均深度。</li>
@@ -323,12 +323,12 @@ post-container">
 <li>可以得到 z_occ 的表示
 <img src="/img/Render/Graphics/Shadow/Math_Shadow_11.png?raw=true" alt=Math_Shadow_11.png>
 </li>
-<li>同样假设遮挡物和接收物都为平面，则未被遮挡的平均深度 z_unocc 即为接收点深度 a ，通过 VSM 可以得到阴影图的平均深度 z_avg ，以及未被遮挡的区域占比 P ，因此平均深度同样可以在 O(1) 时间内得到，从而计算效率得到较大的提升。</li>
+<li>同样假设遮挡物和接收物都为平面，则未被遮挡的平均深度 z_unocc 即为着色点深度 a ，通过 VSM 可以得到阴影图的平均深度 z_avg ，以及未被遮挡的区域占比 P ，因此平均深度同样可以在 O(1) 时间内得到，从而计算效率得到较大的提升。</li>
 </ul>
 <h4 id=非平面性问题>非平面性问题</h4>
 <ul>
 <li>单边切比雪夫不等式中要求，a' = a - μ ＞ 0 ，即 a ＞ z_avg ，不等式才能成立。当遮挡物和接收物都为一个平面时，能满足这个关系。然而当出现非平面性的问题，即有多个遮挡物、多个接收物等情况，出现 a ≤ z_avg 时，会出现漏光的问题，即在本应该无光照的区域出现了光照效果。尽管通过在更小范围内使用更多采样点，能解决这个问题，但就会回到 PCF 计算带来的性能问题。因此，需要引入滤波器内核细分方案来处理非平面性问题。</li>
-<li>当 a ≤ z_avg 时，表示接收点没有被遮挡，即光照计算结果为 1 。当滤波内核 w 较小时，即滤波区域较小时，阴影图区域内的绝大部分像素深度值都比接收点深度大，因此能认为都没有被遮挡。随着内核 w 逐渐增大，平均深度的误差会越来越大，因此会出现错误的结果。因此需要使用较小的滤波内核，即解决步骤为：
+<li>当 a ≤ z_avg 时，表示着色点没有被遮挡，即光照计算结果为 1 。当滤波内核 w 较小时，即滤波区域较小时，阴影图区域内的绝大部分像素深度值都比着色点深度大，因此能认为都没有被遮挡。随着内核 w 逐渐增大，平均深度的误差会越来越大，因此会出现错误的结果。因此需要使用较小的滤波内核，即解决步骤为：
 <ul>
 <li>将滤波内核划分成更小的子内核 w'。</li>
 <li>子区域中，如果 a ＞ z'_avg ，则可以使用单边切比雪夫不等式计算。</li>
@@ -354,12 +354,49 @@ post-container">
 <ul>
 <li>当数据出现多个峰值时，用正态分布来描述数据会不准确，此时使用 VSM 或 VSSM 进行阴影估计时，得到的结果则不准确。可以使用 MSM（Moment Shadow Mapping）来改善，即使用更高阶的矩（moment）。VSM 和 VSSM 使用二阶矩（方差）来描述数据的分布情况，对正态分布的数据则能得到较好的结果。对于其他数据情况，使用越高的矩则越能准确描述出数据的分布情况。通常情况下，使用四阶矩就足够近似得到数据分布情况。</li>
 </ul>
+<h3 id=dfssdistance-field-soft-shadow>DFSS（Distance Field Soft Shadow）</h3>
+<ul>
+<li>DFSS 不是基于 Shadow Mapping 的方法，而是在着色点和光源的连线上，通过 SDF 查找每个点与遮挡物的最小距离，得到安全角度，从而计算出着色点的光照量。</li>
+</ul>
+<h4 id=sdf>SDF</h4>
+<ul>
+<li>SDF（Signed Distance Filed），有向距离场，即场景中所有点都有一个距离值，表示到最近的物体表面的距离。其中，物体表面外的点为正数，物体内部的点为负数，物体表面上的点则为 0 。
+<img src="/img/Render/Graphics/Shadow/DFSS_1.png?raw=true" alt=DFSS_1.png>
+</li>
+<li>如上图所示，在 2D 平面上，边长为 1 红色正方形边框为场景物体，红色格子为物体内部，则到表面的最小距离为 -1 ，绿色格子在物体表面，则距离为 0 ，黄色格子在物体外面，则距离为正。3D 场景类似。</li>
+<li>关于如何构建 SDF ，可以参考 <a href=https://fallingxun.github.io/post/algorithm/algorithm_edt/>算法篇 — EDT 欧式距离变换</a> 。</li>
+<li>场景中的单个物体同样可以用 SDF 来表示，如圆心为 O 、半径为 r 的圆距离函数可以表示为：
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_12.png?raw=true" alt=Math_Shadow_12.png>
+</li>
+<li>其中，P 为任意一点，则距离为 P 到 O 的距离与半径的差值（圆内为负数，圆上为 0 ，圆外为正数）。</li>
+<li>每个物体（刚体）都可以具有各自的 SDF 距离函数，因此如果要知道场景中某个点距离最近的物体，只需要以该点查找所有物体的 SDF 函数，其中距离最小对应的物体即为目标物体。</li>
+</ul>
+<h4 id=ray-marchingsphere-tracing>Ray marching(Sphere tracing)</h4>
+<ul>
+<li>步进式光线追踪，即从某个点出发，通过查找 SDF 得到该点离物体的最小距离，以该点为圆心可以构建出一个圆，这个圆代表安全范围，即圆内不会有其他物体。沿着光源的方向，与圆有一个交点，将交点作为新的起点，重复前面的步骤，直到抵达物体表面。
+<img src="/img/Render/Graphics/Shadow/DFSS_2.png?raw=true" alt=DFSS_2.png>
+</li>
+</ul>
+<h4 id=应用>应用</h4>
+<p>
+<img src="/img/Render/Graphics/Shadow/DFSS_3.png?raw=true" alt=DFSS_3.png>
+</p>
+<ul>
+<li>在 Ray marching 过程中，每一步都会产生一个安全范围圆，从着色点 o 出发，找到与圆的切线，得到一个安全角度 θ ，即光源面到着色点不被遮挡的角度。如果最后不能达到光源，则说明被遮挡了。如果到达光源了，则所有安全角度中，最小的角度即为着色点对光源最终的安全角度，即在这个角度内的所有光照都不会被遮挡，如果超过这个角度，则会有部分光照被遮挡。安全角度可以表示为
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_13.png?raw=true" alt=Math_Shadow_13.png>
+</li>
+<li>在 shader 中反三角函数的计算比较复杂，Inigo Quilez 指出，从着色点朝光源发出的阴影射线与遮挡物的最近交点，如果越靠近阴影射线，或者越靠近着色点，则着色点的阴影越深，因此提出了着色点的光照计算公式：
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_14.png?raw=true" alt=Math_Shadow_14.png>
+</li>
+<li>其中，k 用于控制半影区域的大小，当 k 越大时，则被完全照亮的区域越大，即半影区域越小。其他参数都可以在 Ray marching 过程中得到，因此通过此方法计算阴影可以有非常高的效率。</li>
+</ul>
 <h3 id=参考文献>参考文献</h3>
 <ul>
 <li><a href=https://http.download.nvidia.com/developer/presentations/2005/SIGGRAPH/Percentage_Closer_Soft_Shadows.pdf>Percentage Closer Soft Shadows</a></li>
 <li><a href=http://igm.univ-mlv.fr/~biri/Enseignement/MII2/Donnees/variance_shadow_maps.pdf>Variance Shadow Maps</a></li>
 <li><a href=https://jankautz.com/publications/VSSM_PG2010.pdf>Variance Soft Shadow Mapping</a></li>
 <li><a href=http://www.shaderwrangler.com/publications/sat/SAT_EG2005.pdf>Fast Summed-Area Table Generation and its Applications</a></li>
+<li><a href=https://iquilezles.org/articles/rmshadows/>Soft Shadows in RayMarched SDFs-2010</a></li>
 </ul>
 <hr>
 <ul class=pager>

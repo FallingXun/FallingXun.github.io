@@ -52,3 +52,18 @@ average = \frac{RB - LB - RT + LT}{(R-L)(B-T)} =  \frac{sum[r, b] - sum[l - 1 , 
 ```math
 z_{occ} = \frac{z_{avg} - z_{unocc}P\{X \ge a\} }{1 - P\{X \ge a\}}
 ```
+
+- Math_Shadow_12
+```math
+SDF(P) = \sqrt{(x_O - x_P)^2 + (y_O - x_P)^2} - r
+```
+
+- Math_Shadow_13
+```math
+\theta = arcsin \frac{SDF(\vec p)}{\vec p - \vec o}
+```
+
+- Math_Shadow_14
+```math
+value = min(\frac{k \cdot SDF(\vec p)}{\vec p - \vec o}, 1.0)
+```
