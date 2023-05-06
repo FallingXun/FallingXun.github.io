@@ -389,7 +389,11 @@ post-container">
 <img src="/img/Render/Graphics/Shadow/Math_Shadow_14.png?raw=true" alt=Math_Shadow_14.png>
 </li>
 <li>其中，k 用于控制半影区域的大小，当 k 越大时，则被完全照亮的区域越大，即半影区域越小。其他参数都可以在 Ray marching 过程中得到，因此通过此方法计算阴影可以有非常高的效率。
-![DFSS_4.png](/img/Render/Graphics/Shadow/DFSS_4.png?raw=true 引自 <a href=https://iquilezles.org/articles/rmshadows/>https://iquilezles.org/articles/rmshadows/</a>)</li>
+<figure>
+<img src="/img/Render/Graphics/Shadow/DFSS_4.png?raw=true" alt=DFSS_4.png>
+<center><figcaption>引自 https://iquilezles.org/articles/rmshadows/</figcaption></center>
+</figure>
+</li>
 </ul>
 <h4 id=改进方案>改进方案</h4>
 <p>
@@ -415,10 +419,21 @@ post-container">
 <img src="/img/Render/Graphics/Shadow/Math_Shadow_20.png?raw=true" alt=Math_Shadow_20.png>
 其中，w 表示光源大小（立体角）。</li>
 <li>改善后的效果如下
-![DFSS_8.png](/img/Render/Graphics/Shadow/DFSS_8.png?raw=true 引自 <a href=https://iquilezles.org/articles/rmshadows/>https://iquilezles.org/articles/rmshadows/</a>)</li>
+<figure>
+<img src="/img/Render/Graphics/Shadow/DFSS_8.png?raw=true" alt=DFSS_8.png>
+<center><figcaption>引自 https://iquilezles.org/articles/rmshadows/</figcaption></center>
+</figure>
+</li>
 <li>Inigo Quilez 还提出了另外的优化方案，即步进过程，当到达物体表面时，会继续往前延伸，直到阴影真正变暗（即光照结果为 -1），通过这种调整，最终的 SDF 阴影看起来非常接近物理上正确的效果，如图所示
-![DFSS_9.png](/img/Render/Graphics/Shadow/DFSS_9.png?raw=true 引自 <a href=https://iquilezles.org/articles/rmshadows/>https://iquilezles.org/articles/rmshadows/</a>)
-![DFSS_10.png](/img/Render/Graphics/Shadow/DFSS_10.png?raw=true 引自 <a href=https://iquilezles.org/articles/rmshadows/>https://iquilezles.org/articles/rmshadows/</a>)</li>
+<figure>
+<img src="/img/Render/Graphics/Shadow/DFSS_9.png?raw=true" alt=DFSS_9.png>
+<center><figcaption>引自 https://iquilezles.org/articles/rmshadows/</figcaption></center>
+</figure>
+<figure>
+<img src="/img/Render/Graphics/Shadow/DFSS_10.png?raw=true" alt=DFSS_10.png>
+<center><figcaption>引自 https://iquilezles.org/articles/rmshadows/</figcaption></center>
+</figure>
+</li>
 </ul>
 <h3 id=总结>总结</h3>
 <ul>

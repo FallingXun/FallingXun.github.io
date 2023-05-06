@@ -65,5 +65,35 @@ SDF(P) = \sqrt{(x_O - x_P)^2 + (y_O - x_P)^2} - r
 
 - Math_Shadow_14
 ```math
-value = min(\frac{k \cdot SDF(\vec p)}{\vec p - \vec o}, 1.0)
+value = \min(\frac{k \cdot SDF(\vec p)}{\vec p - \vec o}, 1.0)
+```
+
+- Math_Shadow_15
+```math
+r_1 ^ 2 - (y - r_1) ^ 2 = r_2 ^ 2 - y ^ 2
+```
+
+- Math_Shadow_16
+```math
+y = \frac{r_2 ^ 2 }{2 r_1}
+```
+
+- Math_Shadow_17
+```math
+d = \sqrt{r_2 ^ 2 - y ^ 2}
+```
+
+- Math_Shadow_18
+```math
+value = \min(\frac{d}{w \max((\vec p_i - \vec o) - y)}, 1.0)
+```
+
+- Math_Shadow_19
+```math
+y = \frac{SDF(\vec p_i) ^ 2 }{2 \cdot SDF(\vec p_{i-1})}
+```
+
+- Math_Shadow_20
+```math
+d = \sqrt{SDF(\vec p_i) ^ 2 - (\frac{SDF(\vec p_i) ^ 2 }{2 \cdot SDF(\vec p_{i-1})}) ^ 2}
 ```
