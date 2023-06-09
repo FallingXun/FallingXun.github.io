@@ -1,0 +1,330 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="空间数据结构 — Bounding Volume Hierarchiy">
+<meta property="og:title" content="空间数据结构 — Bounding Volume Hierarchiy">
+<meta property="twitter:title" content="空间数据结构 — Bounding Volume Hierarchiy">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>空间数据结构 — Bounding Volume Hierarchiy-</title>
+<link rel=canonical href=/post/algorithm/spatialdatastructures/spatialdatastructures_bvh/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+<li>
+<a href=/categories/googleplay%E7%B3%BB%E5%88%97>googleplay系列</a>
+</li>
+<li>
+<a href=/categories/lua%E7%B3%BB%E5%88%97>lua系列</a>
+</li>
+<li>
+<a href=/categories/tmp%E7%B3%BB%E5%88%97>tmp系列</a>
+</li>
+<li>
+<a href=/categories/unity%E7%B3%BB%E5%88%97>unity系列</a>
+</li>
+<li>
+<a href=/categories/%E5%9B%BE%E5%BD%A2%E5%AD%A6%E7%B3%BB%E5%88%97>图形学系列</a>
+</li>
+<li>
+<a href=/categories/%E6%B8%B2%E6%9F%93%E7%B3%BB%E5%88%97>渲染系列</a>
+</li>
+<li>
+<a href=/categories/%E7%AE%97%E6%B3%95%E7%B3%BB%E5%88%97>算法系列</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/algorithm title=Algorithm>
+Algorithm
+</a>
+</div>
+<h1>空间数据结构 — Bounding Volume Hierarchiy</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Thursday, June 1, 2023
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>BVH（Bounding Volume Hierarchiy）是基于边界体积 (BV) 的结构，通过使用简单的几何形状，代替各种复杂的对象，从而加速检测效率。</p>
+<h3 id=简介>简介</h3>
+<ul>
+<li>BV（Bounding Volume），边界体积，即一个包含了一些物体的几何结构。由于场景的物体存在各种样式，做一些检测工作时，如相交性测试，需要对每种复杂的结构进行特殊处理，对复杂结构的计算成本也相对较高。然而很多时候经常没有出现相交，甚至和物体有较大的距离，此时仍然使用复杂的计算会导致整体效率低下。BVH 的基本思路是，使用简单的包围盒结构，代替原有的复杂结构，并对物体进行分组，从而简化计算过程，提升效率。</li>
+</ul>
+<h3 id=包围盒>包围盒</h3>
+<ul>
+<li>常见的包围盒有：
+<ul>
+<li>球（sphere）</li>
+<li>轴对齐包围盒（AABB，axis-aligned bounding box）</li>
+<li>离散定向多面体（k-DOP，discrete oriented polytopes)</li>
+<li>定向包围盒（OBB，oriented bounding box）</li>
+<li>&mldr;
+<img src="/img/Algorithm/SpatialDataStructures/BVH/BVH_1.png?raw=true" alt=BVH_1.png>
+</li>
+</ul>
+</li>
+<li>越是复杂的包围盒，能有更好的近似效果，当然代价就是更高的构建和更新成本。为了达到加速计算的效果，通常需要选择计算量较小的结构。由于 AABB 包围盒的轴与坐标轴相同，便于进行计算，因此通常会使用 AABB 包围盒来作为加速结构。</li>
+</ul>
+<h3 id=目标>目标</h3>
+<ul>
+<li>使用 BVH ，是为了减少检测的过程中的检查次数，从而提高效率，因此需要最终构建出来的 BVH 达到以下目标：
+<ul>
+<li>平衡树。</li>
+<li>所有包围盒都是紧凑的。</li>
+<li>具有最小的冗余（即在树的每一层，对象分布在一个以上的包围盒中）。</li>
+</ul>
+</li>
+</ul>
+<h3 id=层级构建>层级构建</h3>
+<ul>
+<li>构建层级的方案有：
+<ul>
+<li>自底向上</li>
+<li>自顶向下</li>
+<li>插入式</li>
+</ul>
+</li>
+</ul>
+<h4 id=自底向上>自底向上</h4>
+<ul>
+<li>自底向上的构建流程为：
+<ul>
+<li>对每个对象创建其包围盒。</li>
+<li>将一定数量的包围盒组合起来，创建一个新的包围盒。</li>
+<li>递归对新的包围盒和原始包围盒进行分组，重复上一步。</li>
+<li>当层级只有一个包围盒时，完成构建。</li>
+</ul>
+</li>
+<li>为了得到高质量的 BVH 结构，通常使用层次聚类算法（Agglomerative Clustering），主要步骤为：
+<ul>
+<li>分别计算每个包围盒与其他所有包围盒的距离。</li>
+<li>比较所有的距离，找出其中最小距离的两个包围盒。</li>
+<li>将最小距离的包围盒组成一个新的包围盒，重复上面的步骤。</li>
+</ul>
+</li>
+<li>上述实现方式为 O(N^3)，该算法同样有 O(N^2) 的实现，但核心思路是一致的。</li>
+</ul>
+<h4 id=自顶向下>自顶向下</h4>
+<ul>
+<li>自顶向下的构建流程为：
+<ul>
+<li>对整体对象创建包围盒。</li>
+<li>根据启发式方法，递归分离对象和创建包围盒。</li>
+<li>当所有包围盒在当前层级只包含小于 n 个对象时，完成构建。</li>
+</ul>
+</li>
+<li>划分子节点，通常根据包围盒最长的边来划分，对于 AABB ，找到包围盒的距离最长一对平面，经过包围盒的中心且平行于这对平面进行划分。尽管这个方法看起来非常简单，但该方法已经被证明，它是高效的，并且能生产平衡树，仅仅一秒钟可以完成包含数千个多边形对象的完整层次设置，同时允许将对象动态添加到场景中。</li>
+</ul>
+<h4 id=插入式>插入式</h4>
+<ul>
+<li>插入式的构建流程为：
+<ul>
+<li>为新插入的叶子节点，找到最好的兄弟节点。</li>
+<li>创建新的父节点。</li>
+<li>沿着树往回重新调整包围盒。</li>
+</ul>
+</li>
+</ul>
+<h5 id=表面积启发式surface-area-heuristicsah>表面积启发式（Surface Area Heuristic，SAH）</h5>
+<ul>
+<li>表面积启发式是一个有力的指标，用于构建 BVH ，核心思想是，光线击中物体的概率与物体的表面成比例，也就是说，当包围盒越紧凑，其表面积越小，光线相交的概率就越小，检测过程就越不容易出现假相交。因此 BVH 的构建过程中，当插入一个新的节点时，需要选择一个节点，使得增加的新的包围盒表面积是最小的，即整棵树的代价是最小的。</li>
+<li>对于相同的叶节点，构成的 BVH 树的根节点也是一样的，但是内部节点可以有不同的组合。
+<img src="/img/Algorithm/SpatialDataStructures/BVH/BVH_2.png?raw=true" alt=BVH_2.png>
+</li>
+<li>如上图所示，尽管根节点和叶节点相同，但是两棵树的代价是不一样的，也就是说，相同叶节点组成的树，其差别主要由内部节点决定，和叶节点的代价无关，因此树的代价 C(T) 可以定义为
+<img src="/img/Algorithm/SpatialDataStructures/BVH/Math_BVH_1.png?raw=true" alt=Math_BVH_1.png>
+其中，SA(node) 代表内部节点 node 的代价，以 AABB 为例，即为 AABB 的表面积。
+<img src="/img/Algorithm/SpatialDataStructures/BVH/BVH_3.png?raw=true" alt=BVH_3.png>
+</li>
+<li>如上图所示，当插入一个节点 E 时，需要找到插入到各个位置中最小的代价。而插入节点后的新树，增加的代价为每一层的内部节点表面积的增量和。假设节点 E 插入到节点 4，则增加的代价为
+<img src="/img/Algorithm/SpatialDataStructures/BVH/Math_BVH_2.png?raw=true" alt=Math_BVH_2.png>
+其中，△SA(node) 即内部节点表面积的增量，为原节点和新节点组成的新的包围盒，与原节点包围盒相比的表面积增量。
+<img src="/img/Algorithm/SpatialDataStructures/BVH/Math_BVH_3.png?raw=true" alt=Math_BVH_3.png>
+</li>
+<li>然而，对于具有 n 个叶节点的树，节点数量为 2n - 1 。如果要插入一个新节点，就要计算 2n - 1 个节点的增加代价，从中找出代价最小的节点进行插入。显然，计算所有节点的插入方式成本较高，因此引入一种更快的全局搜索方式，分支边界算法。</li>
+</ul>
+<h5 id=分支边界算法branch-and-bound-algorithm>分支边界算法（Branch and Bound Algorithm）</h5>
+<ul>
+<li>插入到某个节点产生的代价，分为两部分：
+<ul>
+<li>直接代价：对找到的兄弟节点创建父节点，产生新的内部节点的表面积，即 SA(4 ∪ E) 。</li>
+<li>继承代价：由于调整各个祖先节点的包围盒而增加的表面积，即 △SA(3) ＋ △SA(1) 。
+<img src="/img/Algorithm/SpatialDataStructures/BVH/BVH_4.png?raw=true" alt=BVH_4.png>
+</li>
+</ul>
+</li>
+<li>如上图所示，插入节点 E ，假如插入位置为节点 1 ，则产生的代价为
+<img src="/img/Algorithm/SpatialDataStructures/BVH/Math_BVH_4.png?raw=true" alt=Math_BVH_4.png>
+</li>
+<li>此时需要递归向下检查子节点 2 和节点 3 ，假如插入位置为节点 2 ，则
+<ul>
+<li>当节点 E 的包围盒在节点 2 的包围盒内时，新的内部节点的包围盒即为节点 2 的包围盒。</li>
+<li>当节点 2 的包围盒在节点 E 的包围盒内时，新的内部节点的包围盒即为节点 E 的包围盒。</li>
+<li>当节点 2 的包围盒与节点 E 的包围盒相交时，新的内部节点的包围盒即为节点 E 和节点 2组合的包围盒。</li>
+</ul>
+</li>
+<li>因此可以看出，节点 E 的表面积即为新内部节点的最小表面积，即插入的直接代价下限为 SA(E) ，因此子节点代价的下限值为
+<img src="/img/Algorithm/SpatialDataStructures/BVH/Math_BVH_5.png?raw=true" alt=Math_BVH_5.png>
+</li>
+<li>而对于子节点的子节点，直接代价的下限同样是 SA(E) ，而继承代价则会增加子节点包围盒修改增加的表面积，因此子节点代价的下限值即为下层节点的代价下限值。</li>
+<li>如果子节点代价的下限值，小于当前最小代价，则记录当前最小代价，并将子节点加入检查队列，继续向下检查。</li>
+<li>然而，如果当前最小代价，小于子节点代价的下限值，那么子节点则不需要再继续检查，从而可以减少多余的检查。</li>
+</ul>
+<h5 id=移动物体策略>移动物体策略</h5>
+<ul>
+<li>对于移动物体，有几种处理方式
+<ul>
+<li>修改祖先包围盒。</li>
+<li>重建子树。
+<ul>
+<li>代价很高，就像垃圾回收一样。</li>
+</ul>
+</li>
+<li>移除并重新插入。
+<ul>
+<li>代价同样很高，但是是分散的。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>其中，修改祖先包围盒会导致树的质量边低。重建子树的代价很高，就像垃圾回收一样。移除并重新插入的代价同样很高，但是是分散的，因此通常选择这种方式。</li>
+<li>由于物体并不经常每帧都移动较大的距离，因此可以采用扩大的 AABB ，只有当物体贴紧的 AABB 超出扩大的 AABB 时，才更新叶节点。生成扩大的 AABB 方式有很多种，可以根据实际情况自行选择。</li>
+</ul>
+<h3 id=树旋转>树旋转</h3>
+<ul>
+<li>树旋转用于 AVL 树以保持它们的平衡，也可以用于 BVH 以减少表面积并减少排序输入引入的不平衡问题。
+<img src="/img/Algorithm/SpatialDataStructures/BVH/BVH_5.png?raw=true" alt=BVH_5.png>
+</li>
+<li>树旋转主要是与其父节点的兄弟节点交换，交换完成后，不会对上层和下层节点产生影响。
+<img src="/img/Algorithm/SpatialDataStructures/BVH/BVH_6.png?raw=true" alt=BVH_6.png>
+</li>
+<li>如图所示，节点 2 和节点 E 交换后，上层节点 1 以及下层节点 A 、B 、C 、D 都不会发生变化。旋转前，树的代价为
+<img src="/img/Algorithm/SpatialDataStructures/BVH/Math_BVH_6.png?raw=true" alt=Math_BVH_6.png>
+旋转后，树的代价为
+<img src="/img/Algorithm/SpatialDataStructures/BVH/Math_BVH_7.png?raw=true" alt=Math_BVH_7.png>
+当旋转后的代价比原来小时，则可以改善树的结构。
+<img src="/img/Algorithm/SpatialDataStructures/BVH/BVH_7.png?raw=true" alt=BVH_7.png>
+</li>
+<li>如上图对象 A 、B 、C 、D 是从左到右排序好的，当逐一插入时，就会出现链表的结构，失去了 BVH 加速的作用。
+<img src="/img/Algorithm/SpatialDataStructures/BVH/BVH_8.png?raw=true" alt=BVH_8.png>
+</li>
+<li>当插入节点 D 后，对插入位置 3 的父节点的兄弟节点，进行树旋转检查，发现代价减小，从而调整了树的结构，保持了 BVH 的树平衡性。</li>
+</ul>
+<h3 id=参考>参考</h3>
+<ul>
+<li><a href=https://inria.hal.science/inria-00537446/file/bounding_volume_hierarchies.pdf>Real-Time Collision Detection for Dynamic Virtual Environments</a></li>
+<li><a href=https://box2d.org/files/ErinCatto_DynamicBVH_GDC2019.pdf>Dynamic Bounding Volume Hierarchies</a></li>
+<li><a href=https://www.cs.cmu.edu/~blelloch/papers/GHFB13.pdf>Efficient BVH Construction via Approximate Agglomerative Clustering</a></li>
+<li><a href=http://wscg.zcu.cz/wscg2003/Papers_2003/G97.pdf>Hierarchical Techniques in Collision Detection for Cloth Animation</a></li>
+<li><a href=https://core.ac.uk/download/pdf/276277615.pdf>Fast, Effective BVH Updates for Dynamic Ray-Traced Scenes Using Tree Rotations</a></li>
+</ul>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/render/graphics/graphics_shadow/ data-toggle=tooltip data-placement=top title="图形学篇 — 阴影">&larr;
+Previous Post</a>
+</li>
+<li class=next>
+<a href=/post/algorithm/spatialdatastructures/spatialdatastructures_bsp/ data-toggle=tooltip data-placement=top title="空间数据结构 — Binary Space Partitioning">Next
+Post &rarr;</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2023
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>

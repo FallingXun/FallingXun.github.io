@@ -7,17 +7,17 @@
 <meta property="og:type" content="article">
 <meta property="og:image" content="https://fallingxun.github.io//">
 <meta property="twitter:image" content="https://fallingxun.github.io//">
-<meta name=title content="算法系列">
-<meta property="og:title" content="算法系列">
-<meta property="twitter:title" content="算法系列">
+<meta name=title content="空间数据结构 — Binary Space Partitioning">
+<meta property="og:title" content="空间数据结构 — Binary Space Partitioning">
+<meta property="twitter:title" content="空间数据结构 — Binary Space Partitioning">
 <meta name=description content>
 <meta property="og:description" content>
 <meta property="twitter:description" content>
 <meta property="twitter:card" content="summary">
 <meta name=keyword content>
 <link rel="shortcut icon" href=/img/favicon.ico>
-<title>算法系列-</title>
-<link rel=canonical href=/categories/%E7%AE%97%E6%B3%95%E7%B3%BB%E5%88%97/>
+<title>空间数据结构 — Binary Space Partitioning-</title>
+<link rel=canonical href=/post/algorithm/spatialdatastructures/spatialdatastructures_bsp/>
 <link rel=stylesheet href=/css/iDisqus.min.css>
 <link rel=stylesheet href=/css/bootstrap.min.css>
 <link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
@@ -71,169 +71,68 @@
 </div>
 </nav>
 <script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
-<header class=intro-header style="background-image:url('/')">
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
 <div class=container>
 <div class=row>
 <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
-<div class=site-heading>
-<h1>Xun's Blog </h1>
-<span class=subheading></span>
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/algorithm title=Algorithm>
+Algorithm
+</a>
+</div>
+<h1>空间数据结构 — Binary Space Partitioning</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Friday, June 2, 2023
+</span>
 </div>
 </div>
 </div>
 </div>
 </header>
+<article>
 <div class=container>
 <div class=row>
-<div class="col-lg-8 col-lg-offset-1
-col-md-8 col-md-offset-1
-col-sm-12
-col-xs-12
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
 post-container">
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/spatialdatastructures/spatialdatastructures_k-d/>
-<h2 class=post-title>
-空间数据结构 — k-Dimensional Tree
-</h2>
-<div class=post-content-preview>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, June 5, 2023
-</p>
-</div>
 <hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/spatialdatastructures/spatialdatastructures_scenegraphs/>
-<h2 class=post-title>
-空间数据结构 — Scene Graphs
-</h2>
-<div class=post-content-preview>
+<ul class=pager>
+<li class=previous>
+<a href=/post/algorithm/spatialdatastructures/spatialdatastructures_bvh/ data-toggle=tooltip data-placement=top title="空间数据结构 — Bounding Volume Hierarchiy">&larr;
+Previous Post</a>
+</li>
+<li class=next>
+<a href=/post/algorithm/spatialdatastructures/spatialdatastructures_quadtree/ data-toggle=tooltip data-placement=top title="空间数据结构 — QuadTree">Next
+Post &rarr;</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
 </div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, June 5, 2023
-</p>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
 </div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/spatialdatastructures/spatialdatastructures_octree/>
-<h2 class=post-title>
-空间数据结构 — Octree
-</h2>
-<div class=post-content-preview>
 </div>
-</a>
-<p class=post-meta>
-Posted byXun Sunday, June 4, 2023
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/spatialdatastructures/spatialdatastructures_quadtree/>
-<h2 class=post-title>
-空间数据结构 — QuadTree
-</h2>
-<div class=post-content-preview>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Saturday, June 3, 2023
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/spatialdatastructures/spatialdatastructures_bsp/>
-<h2 class=post-title>
-空间数据结构 — Binary Space Partitioning
-</h2>
-<div class=post-content-preview>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Friday, June 2, 2023
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/spatialdatastructures/spatialdatastructures_bvh/>
-<h2 class=post-title>
-空间数据结构 — Bounding Volume Hierarchiy
-</h2>
-<div class=post-content-preview>
-<p>BVH（Bounding Volume Hierarchiy）是基于边界体积 (BV) 的结构，通过使用简单的几何形状，代替各种复杂的对象，从而加速检测效率。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Thursday, June 1, 2023
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/algorithm_kmp/>
-<h2 class=post-title>
-算法篇 — KMP 字符串匹配
-</h2>
-<div class=post-content-preview>
-<p>字符串匹配，通常会使用暴力匹配算法来进行。而KMP算法是一种改进的字符串匹配算法，在字符串的匹配上通常有较好的表现。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Sunday, September 25, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/algorithm_meshsubdivision/>
-<h2 class=post-title>
-算法篇 — 曲面细分（Mesh Subdivision）
-</h2>
-<div class=post-content-preview>
-<p>出于性能考虑，模型的面数一般都会有一定限制。然而，当靠近观察时，就能明显看到有很多不光滑的地方。曲面细分方法，通过将原来的面进行调整，可以使原来的面变得平滑，从而提升表现效果。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, June 20, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/algorithm_edt/>
-<h2 class=post-title>
-算法篇 — EDT 欧式距离变换
-</h2>
-<div class=post-content-preview>
-<p>距离变换是计算并标识空间点（对目标点）距离的过程，其中 EDT（Euclidean Distance Transform），欧式距离变换精度高，与实际距离相符，应用更广泛。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, May 23, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/algorithm/algorithm_jps/>
-<h2 class=post-title>
-算法篇 — JPS 寻路
-</h2>
-<div class=post-content-preview>
-<p>A* 寻路算法是常用的寻路方法，JPS寻路在A* 的基础上，进行跳点剪枝优化，提升了寻路性能。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Thursday, April 7, 2022
-</p>
-</div>
-<hr>
-</div>
-<div class="col-lg-3 col-lg-offset-0
-col-md-3 col-md-offset-0
-col-sm-12
-col-xs-12
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
 sidebar-container">
 </div>
 </div>
 </div>
+</article>
 <footer>
 <div class=container>
 <div class=row>
