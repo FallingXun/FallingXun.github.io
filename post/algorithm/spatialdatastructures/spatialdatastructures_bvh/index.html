@@ -246,7 +246,7 @@ post-container">
 <li>其中，修改祖先包围盒会导致树的质量边低。重建子树的代价很高，就像垃圾回收一样。移除并重新插入的代价同样很高，但是是分散的，因此通常选择这种方式。</li>
 <li>由于物体并不经常每帧都移动较大的距离，因此可以采用扩大的 AABB ，只有当物体贴紧的 AABB 超出扩大的 AABB 时，才更新叶节点。生成扩大的 AABB 方式有很多种，可以根据实际情况自行选择。</li>
 </ul>
-<h3 id=树旋转>树旋转</h3>
+<h5 id=树旋转>树旋转</h5>
 <ul>
 <li>树旋转用于 AVL 树以保持它们的平衡，也可以用于 BVH 以减少表面积并减少排序输入引入的不平衡问题。
 <img src="/img/Algorithm/SpatialDataStructures/BVH/BVH_5.png?raw=true" alt=BVH_5.png>
@@ -266,6 +266,10 @@ post-container">
 </li>
 <li>当插入节点 D 后，对插入位置 3 的父节点的兄弟节点，进行树旋转检查，发现代价减小，从而调整了树的结构，保持了 BVH 的树平衡性。</li>
 </ul>
+<h3 id=应用>应用</h3>
+<ul>
+<li>BVH 通过是用体积近似、几何特征简单的包围盒，来近似描述复杂的几何对象，并通过构造树状层次结构，逐层接近真实的几何对象，从而减少了中间大量的复杂计算，通常用于光线追踪、视锥裁减等，在三维场景的渲染中，是非常常用的结构。</li>
+</ul>
 <h3 id=参考>参考</h3>
 <ul>
 <li><a href=https://inria.hal.science/inria-00537446/file/bounding_volume_hierarchies.pdf>Real-Time Collision Detection for Dynamic Virtual Environments</a></li>
@@ -273,6 +277,7 @@ post-container">
 <li><a href=https://www.cs.cmu.edu/~blelloch/papers/GHFB13.pdf>Efficient BVH Construction via Approximate Agglomerative Clustering</a></li>
 <li><a href=http://wscg.zcu.cz/wscg2003/Papers_2003/G97.pdf>Hierarchical Techniques in Collision Detection for Cloth Animation</a></li>
 <li><a href=https://core.ac.uk/download/pdf/276277615.pdf>Fast, Effective BVH Updates for Dynamic Ray-Traced Scenes Using Tree Rotations</a></li>
+<li><a href=https://en.wikipedia.org/wiki/Bounding_volume_hierarchy>wikipedia - Bounding volume hierarchy</a></li>
 </ul>
 <hr>
 <ul class=pager>
