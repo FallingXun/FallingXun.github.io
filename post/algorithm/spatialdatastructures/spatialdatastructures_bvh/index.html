@@ -270,6 +270,40 @@ post-container">
 <ul>
 <li>BVH 通过是用体积近似、几何特征简单的包围盒，来近似描述复杂的几何对象，并通过构造树状层次结构，逐层接近真实的几何对象，从而减少了中间大量的复杂计算，通常用于光线追踪、视锥裁减等，在三维场景的渲染中，是非常常用的结构。</li>
 </ul>
+<h4 id=光线追踪>光线追踪</h4>
+<ul>
+<li>对于场景中的对象，如果要求光线是否与物体相交，则需要对场景中的对象逐一遍历，当场景的对象比较复杂，并且数量较多时，显然效率低下。
+<img src="/img/Algorithm/SpatialDataStructures/BVH/BVH_9.png?raw=true" alt=BVH_9.png>
+</li>
+<li>通过构建 BVH ，从每个物体开始，生成 AABB 包围盒，并逐层构建，最终组成一棵树。
+<img src="/img/Algorithm/SpatialDataStructures/BVH/BVH_10.png?raw=true" alt=BVH_10.png>
+</li>
+<li>此时，求光线与物体是否相交，如上图所示，步骤为：
+<ul>
+<li>检查光线与包围盒 1 是否相交。</li>
+<li>光线与包围盒 1 相交，检查包围盒 2 、包围盒 3 是否与光线相交。</li>
+<li>光线与包围盒 2 不相交，与包围盒 3 相交，检查包围盒 G 、包围盒 6 是否与光线相交。</li>
+<li>光线与包围盒 G 相交，与包围盒 6 相交，检查物体 G 是否与光线相交。</li>
+<li>光线与物体 G 相交。</li>
+</ul>
+</li>
+<li>整个过程，进行了 4 次光线与 AABB 包围盒求交，和 1 次光线与几何物体求交。不采用 BVH 结构时，则需要进行 9 次光线与几何物体求交。因此 BVH 通常能得到较好的加速效果。</li>
+</ul>
+<h4 id=视锥裁剪>视锥裁剪</h4>
+<ul>
+<li>相比光线和物体求交，视锥裁剪需要检查哪些物体在视锥体范围内，即需要对几何体和几何体求交，复杂度会更高。同样，如果需要逐一检查，计算量会非常大。
+<img src="/img/Algorithm/SpatialDataStructures/BVH/BVH_11.png?raw=true" alt=BVH_11.png>
+</li>
+<li>如上图所示，视锥体灰色部分为可见范围，构建包围盒后，检查步骤为：
+<ul>
+<li>检查视锥体和红色圆是否相交。</li>
+<li>视锥体和红色圆相交，分别检查绿色圆、黄色圆、蓝色圆与视锥体是否相交。</li>
+<li>绿色圆、黄色圆与视锥体相交，且在视锥体内部，则 A 、B 、C 、D 都在视锥体内部，蓝色圆与视锥体相交，检查 E 、F 是否与视锥体相交。</li>
+<li>E 与视锥体相交，F 在视锥体外。</li>
+</ul>
+</li>
+<li>可以看到，当包围盒在视锥体内部时，后续的子节点则不需要再进行计算。包围盒在视锥体外部时，也不再需要计算视锥体和真实物体的复杂几何求交。只有包围盒部分在视锥体内时，才需要对物体的真实范围进行求交计算。同样，可以看到 BVH 能得到很好的表现。</li>
+</ul>
 <h3 id=参考>参考</h3>
 <ul>
 <li><a href=https://inria.hal.science/inria-00537446/file/bounding_volume_hierarchies.pdf>Real-Time Collision Detection for Dynamic Virtual Environments</a></li>
@@ -278,6 +312,7 @@ post-container">
 <li><a href=http://wscg.zcu.cz/wscg2003/Papers_2003/G97.pdf>Hierarchical Techniques in Collision Detection for Cloth Animation</a></li>
 <li><a href=https://core.ac.uk/download/pdf/276277615.pdf>Fast, Effective BVH Updates for Dynamic Ray-Traced Scenes Using Tree Rotations</a></li>
 <li><a href=https://en.wikipedia.org/wiki/Bounding_volume_hierarchy>wikipedia - Bounding volume hierarchy</a></li>
+<li><a href>Real-Time Rendering 4th Edition</a></li>
 </ul>
 <hr>
 <ul class=pager>
