@@ -1,0 +1,745 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="Lua篇 — string">
+<meta property="og:title" content="Lua篇 — string">
+<meta property="twitter:title" content="Lua篇 — string">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>Lua篇 — string-</title>
+<link rel=canonical href=/post/lua/lua_string/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+<li>
+<a href=/categories/googleplay%E7%B3%BB%E5%88%97>googleplay系列</a>
+</li>
+<li>
+<a href=/categories/lua%E7%B3%BB%E5%88%97>lua系列</a>
+</li>
+<li>
+<a href=/categories/tmp%E7%B3%BB%E5%88%97>tmp系列</a>
+</li>
+<li>
+<a href=/categories/unity%E7%B3%BB%E5%88%97>unity系列</a>
+</li>
+<li>
+<a href=/categories/%E5%9B%BE%E5%BD%A2%E5%AD%A6%E7%B3%BB%E5%88%97>图形学系列</a>
+</li>
+<li>
+<a href=/categories/%E6%B8%B2%E6%9F%93%E7%B3%BB%E5%88%97>渲染系列</a>
+</li>
+<li>
+<a href=/categories/%E7%AE%97%E6%B3%95%E7%B3%BB%E5%88%97>算法系列</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/lua title=Lua>
+Lua
+</a>
+</div>
+<h1>Lua篇 — string</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Wednesday, August 2, 2023
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>lua 字符串是 lua 中的一种基本类型，本文将以 lua-5.4 版本进行源码解析。</p>
+<h3 id=简介>简介</h3>
+<ul>
+<li>在 lua 中，使用字符串的方式和其他编程语言相似，如：</li>
+</ul>
+<pre tabindex=0><code>  local str = &quot;Hello World&quot;
+  print(str)
+</code></pre><ul>
+<li>然而，lua 中的 string ，实现上并非直接为 c 中的 char* 或者 char[] ，而是使用了封装的类型。本文将以 lua-5.4.1 版本进行源码解析。</li>
+<li>从 xlua 或 tolua 中可以知道，当 lua 侧访问 C# 侧的字符串变量时，C# 侧会通过调用 lua_pushstring/lua_pushlstring 方法将字符串传输到 lua 虚拟机的栈上，而 C# 侧访问 lua 侧的字符串变量时，则是通过调用 lua_tolstring 方法，从栈上读取字符串。</li>
+</ul>
+<h3 id=字符串压栈>字符串压栈</h3>
+<ul>
+<li>lua_pushstring 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// lapi.c
+
+LUA_API const char *lua_pushstring (lua_State *L, const char *s) {
+  lua_lock(L);
+  if (s == NULL)
+    setnilvalue(s2v(L-&gt;top));
+  else {
+    TString *ts;
+    ts = luaS_new(L, s);
+    setsvalue2s(L, L-&gt;top, ts);
+    s = getstr(ts);  /* internal copy's address */
+  }
+  api_incr_top(L);
+  luaC_checkGC(L);
+  lua_unlock(L);
+  return s;
+}
+</code></pre><ul>
+<li>可以看到，lua_pushstring 通过调用 luaS_new 方法，创建了一个 TString * 类型的变量，然后将其设置到栈上。</li>
+<li>TString 结构为：</li>
+</ul>
+<pre tabindex=0><code>// lobject.h
+
+typedef struct TString {
+  CommonHeader;
+  lu_byte extra;  /* reserved words for short strings; &quot;has hash&quot; for longs */
+  lu_byte shrlen;  /* length for short strings */
+  unsigned int hash;
+  union {
+    size_t lnglen;  /* length for long strings */
+    struct TString *hnext;  /* linked list for hash table */
+  } u;
+  char contents[1];
+} TString;
+
+</code></pre><ul>
+<li>TString 结构变量意义分别为：
+<ul>
+<li>CommonHeader ：需要 gc 的对象的公共头部。</li>
+<li>extra ：长短字符串有不同的含义。
+<ul>
+<li>短字符串（len &lt;= 40）：大于 0 表示被持有，即不会被 gc 回收（lstring.h 的 isreserved 方法）。</li>
+<li>长字符串（len > 40）：为 0 表示字符串没有经过 hash 计算，经过 hash 计算后则为 1 （lstring.c 的 luaS_hashlongstr 方法）。</li>
+</ul>
+</li>
+<li>shrlen ：短字符串的长度。</li>
+<li>hash ：字符串经过 hash 计算后的结果。</li>
+<li>u ：union 结构，有两个字段。
+<ul>
+<li>lnglen ：长字符串的长度。</li>
+<li>hnext ：TString 链表，存放下一个 hash 值对 G(L)->strt.size 取模结果相同的 TString。</li>
+</ul>
+</li>
+<li>contents[1] ：用来标记字符串的起始位置，创建 TString 对象时会根据字符串的长度和起始位置来确定需要申请的内存大小。</li>
+</ul>
+</li>
+</ul>
+<h3 id=创建-lua-字符串>创建 lua 字符串</h3>
+<ul>
+<li>再看 luaS_new 方法的代码：</li>
+</ul>
+<pre tabindex=0><code>// lstring.c
+
+TString *luaS_new (lua_State *L, const char *str) {
+  unsigned int i = point2uint(str) % STRCACHE_N;  /* hash */
+  int j;
+  TString **p = G(L)-&gt;strcache[i];
+  for (j = 0; j &lt; STRCACHE_M; j++) {
+    if (strcmp(str, getstr(p[j])) == 0)  /* hit? */
+      return p[j];  /* that is it */
+  }
+  /* normal route */
+  for (j = STRCACHE_M - 1; j &gt; 0; j--)
+    p[j] = p[j - 1];  /* move out last element */
+  /* new element is first in the list */
+  p[0] = luaS_newlstr(L, str, strlen(str));
+  return p[0];
+}
+</code></pre><ul>
+<li>为一个字符串创建 TString 对象时，首先通过查找 G(L)->strcache 的 TString 缓存中是否存在相同的字符串。其中，strcache 为二维数组，先通过字符串的长度对 STRCACHE_N （STRCACHE_N = 53）取模得到第一维索引 i，再对 strcache[i] 进行遍历。
+<ul>
+<li>存在 ：直接返回对应 TString 对象。</li>
+<li>不存在 ：通过调用 luaS_newlstr 方法创建一个新的 TString 对象，插入到 strcache[i][0] 中，strcache[i] 最多保存 STRCACHE_M + 1 （STRCACHE_M = 2）个对象。</li>
+</ul>
+</li>
+<li>strcache 为 lua 的 TString 缓存机制，gc 过程会对其进行检查，如果 TString 对象可以回收，则会 strcache[i][j] 替换为一个不会被回收的 lua 字符串 memerrmsg ，原有的对象则进行回收（lstring.c 的 luaS_clearcache 方法）。</li>
+<li>luaS_newlstr 用来创建新的 TString 对象，其代码如下：</li>
+</ul>
+<pre tabindex=0><code>// lstring.c
+
+TString *luaS_newlstr (lua_State *L, const char *str, size_t l) {
+  if (l &lt;= LUAI_MAXSHORTLEN)  /* short string? */
+    return internshrstr(L, str, l);
+  else {
+    TString *ts;
+    if (unlikely(l &gt;= (MAX_SIZE - sizeof(TString))/sizeof(char)))
+      luaM_toobig(L);
+    ts = luaS_createlngstrobj(L, l);
+    memcpy(getstr(ts), str, l * sizeof(char));
+    return ts;
+  }
+}
+
+</code></pre><ul>
+<li>可以看到，在这里字符串分成了两类处理，长度在 LUAI_MAXSHORTLEN（LUAI_MAXSHORTLEN = 40）以内的为短字符串，超过 LUAI_MAXSHORTLEN 的为长字符串。</li>
+</ul>
+<h3 id=lua-短字符串>lua 短字符串</h3>
+<ul>
+<li>短字符串，调用了 internshrstr 方法进行处理，其代码如下：</li>
+</ul>
+<pre tabindex=0><code>// lstring.c
+
+static TString *internshrstr (lua_State *L, const char *str, size_t l) {
+  TString *ts;
+  global_State *g = G(L);
+  stringtable *tb = &amp;g-&gt;strt;
+  unsigned int h = luaS_hash(str, l, g-&gt;seed, 1);
+  TString **list = &amp;tb-&gt;hash[lmod(h, tb-&gt;size)];
+  lua_assert(str != NULL);  /* otherwise 'memcmp'/'memcpy' are undefined */
+  for (ts = *list; ts != NULL; ts = ts-&gt;u.hnext) {
+    if (l == ts-&gt;shrlen &amp;&amp; (memcmp(str, getstr(ts), l * sizeof(char)) == 0)) {
+      /* found! */
+      if (isdead(g, ts))  /* dead (but not collected yet)? */
+        changewhite(ts);  /* resurrect it */
+      return ts;
+    }
+  }
+  /* else must create a new string */
+  if (tb-&gt;nuse &gt;= tb-&gt;size) {  /* need to grow string table? */
+    growstrtab(L, tb);
+    list = &amp;tb-&gt;hash[lmod(h, tb-&gt;size)];  /* rehash with new size */
+  }
+  ts = createstrobj(L, l, LUA_VSHRSTR, h);
+  memcpy(getstr(ts), str, l * sizeof(char));
+  ts-&gt;shrlen = cast_byte(l);
+  ts-&gt;u.hnext = *list;
+  *list = ts;
+  tb-&gt;nuse++;
+  return ts;
+}
+</code></pre><ul>
+<li>首先，获取了 G(L) 中的 strt , 是一个 stringtable 类型，其代码为：</li>
+</ul>
+<pre tabindex=0><code>// lstate.h
+
+typedef struct stringtable {
+  TString **hash;
+  int nuse;  /* number of elements */
+  int size;
+} stringtable;
+</code></pre><ul>
+<li>strt 是一个全局的字符串表，其中的字段含义为：
+<ul>
+<li>hash ：所有<strong>短字符串</strong> TString 的链表数组，根据 hash 计算结果对 size 取模得到数组索引，相同索引的 TString 则存入数组下的链表中。</li>
+<li>nuse ：当前 TString 的数量。</li>
+<li>size ：字符串表的大小，即数量上限。</li>
+</ul>
+</li>
+<li>取模计算方法为：</li>
+</ul>
+<pre tabindex=0><code>// lobject.h
+
+#define lmod(s,size) \
+	(check_exp((size&amp;(size-1))==0, (cast(int, (s) &amp; ((size)-1)))))
+</code></pre><ul>
+<li>由于 size 为 2 的指数次幂，假设 size 为 2 ^ n ，size - 1 即为 0 ~ n - 1 位都为 1 的值，如 2 ^ 3 = 00001000，那 2 ^ 3 - 1 = 00000111，则位与运算，就能得到 0 ~ n - 1 位的值，也就是取模运算。</li>
+<li>获取全局字符串表后，就对字符串进行 hash 计算，计算方法为：</li>
+</ul>
+<pre tabindex=0><code>// lstring.c
+
+unsigned int luaS_hash (const char *str, size_t l, unsigned int seed,
+                        size_t step) {
+  unsigned int h = seed ^ cast_uint(l);
+  for (; l &gt;= step; l -= step)
+    h ^= ((h&lt;&lt;5) + (h&gt;&gt;2) + cast_byte(str[l - 1]));
+  return h;
+}
+</code></pre><ul>
+<li>hash 计算的流程为：
+<ul>
+<li>通过一个种子 seed ，和字符串长度做异或计算，得到基础 hash 值。</li>
+<li>根据步进长度 step ，对字符串的对应字符，和当前 hash 值移位后相加。</li>
+<li>当前 hash 值和字符相加后的结果再进行异或计算。</li>
+</ul>
+</li>
+<li>这里的 seed ，是在创建 lua 虚拟机的时候进行设置的，其代码为：</li>
+</ul>
+<pre tabindex=0><code>// lstate.c
+
+static unsigned int luai_makeseed (lua_State *L) {
+  char buff[3 * sizeof(size_t)];
+  unsigned int h = cast_uint(time(NULL));
+  int p = 0;
+  addbuff(buff, p, L);  /* heap variable */
+  addbuff(buff, p, &amp;h);  /* local variable */
+  addbuff(buff, p, &amp;lua_newstate);  /* public function */
+  lua_assert(p == sizeof(buff));
+  return luaS_hash(buff, p, h, 1);
+}
+</code></pre><ul>
+<li>可以看到，seed 的值和当前时间、虚拟机地址等多个随机值进行 hash 计算得到的，因此具有比较强的随机性，不容易被直接获取。</li>
+<li>计算出 hash 值后，就可以通过取模计算找到当前字符串应该进入哪个链表。通过查找链表，检查是否已经为相同字符串创建过 TString 对象，如果是则直接返回。如果没有找到，则申请新的内存创建新的对象。</li>
+</ul>
+<pre tabindex=0><code>// lstring.c
+
+static TString *createstrobj (lua_State *L, size_t l, int tag, unsigned int h) {
+  TString *ts;
+  GCObject *o;
+  size_t totalsize;  /* total size of TString object */
+  totalsize = sizelstring(l);
+  o = luaC_newobj(L, tag, totalsize);
+  ts = gco2ts(o);
+  ts-&gt;hash = h;
+  ts-&gt;extra = 0;
+  getstr(ts)[l] = '\0';  /* ending 0 */
+  return ts;
+}
+</code></pre><pre tabindex=0><code>// lstring.h
+
+#define sizelstring(l)  (offsetof(TString, contents) + ((l) + 1) * sizeof(char))
+</code></pre><ul>
+<li>可以看到，计算新对象所需大小时，是通过获取 contents 字段在 TString 结构中的偏移量，加上字符串长度，以及字符串结尾的 &lsquo;\0&rsquo; 一个字符长度。这也就解释了前面提到的，TString 中的 contents[1] ，只是用来标记起始值，不是真实的数组大小，因为最终需要的内存大小会按需申请。</li>
+<li>在创建新对象前，会检查当前的 strt 是否已经达到上限，如果达到上限，就调用 growstrtab 方法进行扩容，上限大小翻倍，并且全部对象都要以新的 size ，重新进行取模计算，设置到新的数组链表中。</li>
+</ul>
+<pre tabindex=0><code>// lstring.c
+
+static void growstrtab (lua_State *L, stringtable *tb) {
+  if (l_unlikely(tb-&gt;nuse == MAX_INT)) {  /* too many strings? */
+    luaC_fullgc(L, 1);  /* try to free some... */
+    if (tb-&gt;nuse == MAX_INT)  /* still too many? */
+      luaM_error(L);  /* cannot even create a message... */
+  }
+  if (tb-&gt;size &lt;= MAXSTRTB / 2)  /* can grow string table? */
+    luaS_resize(L, tb-&gt;size * 2);
+}
+</code></pre><ul>
+<li>可以看到，扩容的上限为 2^31 ，当达到这个上限时，会尝试进行一次 gc 回收。如果 gc 后还是达到上限，则不能再继续创建。</li>
+<li>luaS_resize 不仅可以进行扩容，也可以进行缩小，gc 回收 strt 的过程，就会尝试进行缩小。</li>
+</ul>
+<pre tabindex=0><code>// lgc.c
+
+static void checkSizes (lua_State *L, global_State *g) {
+  if (!g-&gt;gcemergency) {
+    if (g-&gt;strt.nuse &lt; g-&gt;strt.size / 4) {  /* string table too big? */
+      l_mem olddebt = g-&gt;GCdebt;
+      luaS_resize(L, g-&gt;strt.size / 2);
+      g-&gt;GCestimate += g-&gt;GCdebt - olddebt;  /* correct estimate */
+    }
+  }
+}
+</code></pre><ul>
+<li>可以看到，当 strt 中实际的对象数量小于上限的 1/4 时，则会将 strt 的上限缩小为原来的 1/2 。</li>
+</ul>
+<h3 id=lua-长字符串>lua 长字符串</h3>
+<ul>
+<li>长字符串，使用 luaS_createlngstrobj 方法进行创建。</li>
+</ul>
+<pre tabindex=0><code>// lstring.c
+
+TString *luaS_createlngstrobj (lua_State *L, size_t l) {
+  TString *ts = createstrobj(L, l, LUA_VLNGSTR, G(L)-&gt;seed);
+  ts-&gt;u.lnglen = l;
+  return ts;
+}
+</code></pre><ul>
+<li>长字符串的创建则很简单，直接创建新的对象，也不进行 hash 计算，hash 值设置为 G(L)->seed 。在这种机制下，长字符串对内存的需求会很大，如果频繁创建不同的长字符串，就会有较大的内存占用，也就容易频繁触发 gc 回收。</li>
+<li>长字符串的 hash 计算方法为</li>
+</ul>
+<pre tabindex=0><code>// lstring.c
+
+unsigned int luaS_hashlongstr (TString *ts) {
+  lua_assert(ts-&gt;tt == LUA_VLNGSTR);
+  if (ts-&gt;extra == 0) {  /* no hash? */
+    size_t len = ts-&gt;u.lnglen;
+    size_t step = (len &gt;&gt; LUAI_HASHLIMIT) + 1;
+    ts-&gt;hash = luaS_hash(getstr(ts), len, ts-&gt;hash, step);
+    ts-&gt;extra = 1;  /* now it has its hash */
+  }
+  return ts-&gt;hash;
+}
+</code></pre><ul>
+<li>可以看到，长字符的 hash 计算并不是每个字符都进行计算，步进 step 是 len &#187; LUAI_HASHLIMIT + 1 ，即字符串长度除以 32（2 ^ LUAI_HASHLIMIT），也就是说，如果字符串长度小于 32，则每一个字符都进行 hash 计算，否则会跳过某些字符进行 hash 计算。</li>
+<li>由于长字符串的长度最大可以达到 INT_MAX（2 ^ 31），如果大量长字符串都进行全字符 hash 计算，显然效率会比较低。因此长字符串只有在需要的时候才进行 hash 计算，并且字符串越长，计算的步进间隔也会越大，减少 hash 计算压力。</li>
+</ul>
+<h3 id=lua-字符串缓存>lua 字符串缓存</h3>
+<ul>
+<li>前面分析了 lua 短字符串和长字符串的创建流程，可以看到，lua 字符串总共有两个缓存机制：
+<ul>
+<li>G(L)->strcache</li>
+<li>G(L)->strt</li>
+</ul>
+</li>
+</ul>
+<h4 id=strcache>strcache</h4>
+<ul>
+<li>strcache 适用于短字符串和长字符串，根据字符串长度取模计算结果进行缓存，但不会扩容。</li>
+<li>当 strcache[i] 的数量达到上限后，新插入的就会替换掉最早缓存的值，因此如果多个长度取模结果相同的长字符串，反复调用创建时，由于缓存上限只有 3 个（STRCACHE_N），此时缓存机制就会失效，即基本上每一个新字符串的调用都会申请创建新的字符串对象。</li>
+<li>因此，对于需要拼接参数的字符串，如使用 string.format ，尽量少使用长字符串，优先选择使用短字符串进行拼接。如果需要使用长字符串拼接时，则应该尽量避免频繁更改拼接的参数。</li>
+<li>然而，也正是由于缓存数量少，查找的效率会很高，通过取模计算能直接定位到 strcache[i] ，遍历 strcache[i] 也最多需要进行 3 次即可完成，对已经创建好 TString 的字符串，查找效率相对较高。</li>
+<li>global_State 中，定义了 strcache 的大小。</li>
+</ul>
+<pre tabindex=0><code>// lstate.h
+
+typedef struct global_State {
+  ...
+  TString *strcache[STRCACHE_N][STRCACHE_M];  /* cache for strings in API */
+  ...
+} global_State;
+
+</code></pre><ul>
+<li>strcache 在 lua 虚拟机创建的时候进行初始化，代码如下：</li>
+</ul>
+<pre tabindex=0><code>// lstring.c
+
+void luaS_init (lua_State *L) {
+  global_State *g = G(L);
+  int i, j;
+
+  ...
+
+  /* pre-create memory-error message */
+  g-&gt;memerrmsg = luaS_newliteral(L, MEMERRMSG);
+  luaC_fix(L, obj2gco(g-&gt;memerrmsg));  /* it should never be collected */
+  for (i = 0; i &lt; STRCACHE_N; i++)  /* fill cache with valid strings */
+    for (j = 0; j &lt; STRCACHE_M; j++)
+      g-&gt;strcache[i][j] = g-&gt;memerrmsg;
+}
+</code></pre><ul>
+<li>通过调用 luaS_newliteral 方法创建了一个 TString ，赋值到 G(L)->memerrmsg ，并设置这个对象不会被 gc 回收，然后对 strcache 进行初始化赋值，设置为 memerrmsg 。</li>
+<li>gc 触发时，调用 luaS_clearcache 方法，将需要回收字符串的索引值设置为 memerrmsg ，进而后续流程回收字符串。</li>
+</ul>
+<pre tabindex=0><code>// lstring.c
+
+void luaS_clearcache (global_State *g) {
+  int i, j;
+  for (i = 0; i &lt; STRCACHE_N; i++)
+    for (j = 0; j &lt; STRCACHE_M; j++) {
+      if (iswhite(g-&gt;strcache[i][j]))  /* will entry be collected? */
+        g-&gt;strcache[i][j] = g-&gt;memerrmsg;  /* replace it with something fixed */
+    }
+}
+</code></pre><h4 id=strt>strt</h4>
+<ul>
+<li>strt 只适用于短字符串，因此短字符串其实有双重缓存。短字符串通过对 hash 结果取模后，结果相同的保存到同一个链表中。和 strcache 不同，随着保存的短字符串增加，strt 会进行扩容，因此申请新内存的频率比 strcache 小得多。</li>
+<li>因此，lua 中尽量使用短字符串，尤其在移动设备的应用中，对内存大小要求比较高，相比于频繁申请内存的长字符串，短字符串对内存大小的控制会更加有效。</li>
+<li>然而，由于相同取模结果的字符串保存在一个链表中，所以查找效率相比 strcache 较低，尤其当取模结果集中到某个值时，查找效率会退化到 O(n) ，即需要对每一个 TString 进行检查。</li>
+<li>为了尽量避免这种情况，在数量达到上限后，strt 扩容时会重新对所有对象重新进行取模计算，原来集中到同一个值的会被重新分到多个链表中去，提升查找效率。</li>
+<li>同样，strt 在 lua 虚拟机创建时进行初始化，代码如下：</li>
+</ul>
+<pre tabindex=0><code>// lstring.c
+
+void luaS_init (lua_State *L) {
+  global_State *g = G(L);
+  int i, j;
+  stringtable *tb = &amp;G(L)-&gt;strt;
+  tb-&gt;hash = luaM_newvector(L, MINSTRTABSIZE, TString*);
+  tablerehash(tb-&gt;hash, 0, MINSTRTABSIZE);  /* clear array */
+  tb-&gt;size = MINSTRTABSIZE;
+  ...
+}
+</code></pre><ul>
+<li>strt 初始大小设置为 128（MINSTRTABSIZE），达到上限后会进行扩容。当触发 gc 时，也会对 strt 进行检查，根据字符串对象数量来确定是否进行缩小。</li>
+</ul>
+<h3 id=hash-dos>Hash Dos</h3>
+<ul>
+<li>在 lua 5.2.0 以前，luaS_new 方法不区分长短字符串，也没有 strcache，所有字符串都会进入 strt 中缓存，其中 hash 计算方法为</li>
+</ul>
+<pre tabindex=0><code>// lstring.c
+
+  unsigned int h = cast(unsigned int, l);  /* seed */
+  size_t step = (l&gt;&gt;5)+1;  /* if string is too long, don't hash all its chars */
+  size_t l1;
+  for (l1=l; l1&gt;=step; l1-=step)  /* compute hash */
+    h = h ^ ((h&lt;&lt;5)+(h&gt;&gt;2)+cast(unsigned char, str[l1-1]));
+</code></pre><ul>
+<li>对字符串长度大于 32 的字符串，步进间隔增大来降低计算耗时，同时所有字符串都统一进入 strt 缓存管理，对内存压力较小。然而，在 lua 5.2.0 发布后不久，有人提出这个设计会给予 Hash Dos 攻击的机会，因为攻击者可以轻易构造出上千万拥有相同 hash 计算结果的不同字符串，如：
+<ul>
+<li>&ldquo;<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1&rdquo;</li>
+<li>&ldquo;<strong>a</strong>2<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1&rdquo;</li>
+<li>&ldquo;<strong>a</strong>3<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1<strong>a</strong>1&rdquo;</li>
+</ul>
+</li>
+<li>可以看到，上面几个字符串，长度都为 32，hash 计算步进长度都为 2，也就是说，最终进行 hash 计算的都是加粗的字符 a ，因此最终的 hash 结果也是相同的。当大量输入这类字符串到 lua 中， strt 的缓存链表就会非常长，频繁进行字符串处理时，效率就会变得非常低。在用于如 http 服务等大量依赖字符串处理的场景下，lua 的输入字符串不可控制，也就很容易被人恶意利用进行攻击。</li>
+<li>因此，从 lua 5.2.1 开始，则开始划分长短字符串，长字符串不再进入全局字符串表中缓存，同时使用了随机种子 seed ，使得攻击者无法轻易构造出拥有相同 hash 计算结果的不同字符串，从而避免 Hash Dos 攻击风险。</li>
+<li>然而，由于长字符串的特殊处理，所以长字符串的内存需求会变大。尤其在内存较小的移动设备上，对长字符串的使用需要进行把控，避免产生大量临时长字符串引发频繁 gc 。</li>
+</ul>
+<h3 id=string-方法>string 方法</h3>
+<ul>
+<li>lua 虚拟机创建的时候，会调用 luaL_openlibs 方法，将各个模块方法进行注册到全局表中。</li>
+</ul>
+<pre tabindex=0><code>// linit.c
+
+static const luaL_Reg loadedlibs[] = {
+  {LUA_GNAME, luaopen_base},
+  {LUA_LOADLIBNAME, luaopen_package},
+  {LUA_COLIBNAME, luaopen_coroutine},
+  {LUA_TABLIBNAME, luaopen_table},
+  {LUA_IOLIBNAME, luaopen_io},
+  {LUA_OSLIBNAME, luaopen_os},
+  {LUA_STRLIBNAME, luaopen_string},
+  {LUA_MATHLIBNAME, luaopen_math},
+  {LUA_UTF8LIBNAME, luaopen_utf8},
+  {LUA_DBLIBNAME, luaopen_debug},
+  {NULL, NULL}
+};
+
+LUALIB_API void luaL_openlibs (lua_State *L) {
+  const luaL_Reg *lib;
+  /* &quot;require&quot; functions from 'loadedlibs' and set results to global table */
+  for (lib = loadedlibs; lib-&gt;func; lib++) {
+    luaL_requiref(L, lib-&gt;name, lib-&gt;func, 1);
+    lua_pop(L, 1);  /* remove lib */
+  }
+}
+</code></pre><pre tabindex=0><code>// lauxlib.c
+
+LUALIB_API void luaL_requiref (lua_State *L, const char *modname,
+                               lua_CFunction openf, int glb) {
+  luaL_getsubtable(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
+  lua_getfield(L, -1, modname);  /* LOADED[modname] */
+  if (!lua_toboolean(L, -1)) {  /* package not already loaded? */
+    lua_pop(L, 1);  /* remove field */
+    lua_pushcfunction(L, openf);
+    lua_pushstring(L, modname);  /* argument to open function */
+    lua_call(L, 1, 1);  /* call 'openf' to open module */
+    lua_pushvalue(L, -1);  /* make copy of module (call result) */
+    lua_setfield(L, -3, modname);  /* LOADED[modname] = module */
+  }
+  lua_remove(L, -2);  /* remove LOADED table */
+  if (glb) {
+    lua_pushvalue(L, -1);  /* copy of module */
+    lua_setglobal(L, modname);  /* _G[modname] = module */
+  }
+}
+</code></pre><ul>
+<li>而字符串对应的模块，则通过 luaopen_string 方法，注册到 _G[&ldquo;string&rdquo;] 中，其中的方法有：</li>
+</ul>
+<pre tabindex=0><code>// lstrlib.c
+
+static const luaL_Reg strlib[] = {
+  {&quot;byte&quot;, str_byte},
+  {&quot;char&quot;, str_char},
+  {&quot;dump&quot;, str_dump},
+  {&quot;find&quot;, str_find},
+  {&quot;format&quot;, str_format},
+  {&quot;gmatch&quot;, gmatch},
+  {&quot;gsub&quot;, str_gsub},
+  {&quot;len&quot;, str_len},
+  {&quot;lower&quot;, str_lower},
+  {&quot;match&quot;, str_match},
+  {&quot;rep&quot;, str_rep},
+  {&quot;reverse&quot;, str_reverse},
+  {&quot;sub&quot;, str_sub},
+  {&quot;upper&quot;, str_upper},
+  {&quot;pack&quot;, str_pack},
+  {&quot;packsize&quot;, str_packsize},
+  {&quot;unpack&quot;, str_unpack},
+  {NULL, NULL}
+};
+</code></pre><h4 id=stringformat>string.format</h4>
+<ul>
+<li>string.format 方法是常用的字符串工具方法，经常会有需求需要往某个字符串中的某个位置填入参数，往往就需要使用这个方法。</li>
+</ul>
+<pre tabindex=0><code>// lstrlib.c
+
+static int str_format (lua_State *L) {
+  int top = lua_gettop(L);
+  int arg = 1;
+  size_t sfl;
+  const char *strfrmt = luaL_checklstring(L, arg, &amp;sfl);
+  const char *strfrmt_end = strfrmt+sfl;
+  luaL_Buffer b;
+  luaL_buffinit(L, &amp;b);
+  while (strfrmt &lt; strfrmt_end) {
+    if (*strfrmt != L_ESC)
+      luaL_addchar(&amp;b, *strfrmt++);
+    else if (*++strfrmt == L_ESC)
+      luaL_addchar(&amp;b, *strfrmt++);  /* %% */
+    else { /* format item */
+      char form[MAX_FORMAT];  /* to store the format ('%...') */
+      int maxitem = MAX_ITEM;
+      char *buff = luaL_prepbuffsize(&amp;b, maxitem);  /* to put formatted item */
+      int nb = 0;  /* number of bytes in added item */
+      if (++arg &gt; top)
+        return luaL_argerror(L, arg, &quot;no value&quot;);
+      strfrmt = scanformat(L, strfrmt, form);
+      switch (*strfrmt++) {
+        case 'c': {
+          nb = l_sprintf(buff, maxitem, form, (int)luaL_checkinteger(L, arg));
+          break;
+        }
+        case 'd': case 'i':
+        case 'o': case 'u': case 'x': case 'X': {
+          lua_Integer n = luaL_checkinteger(L, arg);
+          addlenmod(form, LUA_INTEGER_FRMLEN);
+          nb = l_sprintf(buff, maxitem, form, (LUAI_UACINT)n);
+          break;
+        }
+        case 'a': case 'A':
+          addlenmod(form, LUA_NUMBER_FRMLEN);
+          nb = lua_number2strx(L, buff, maxitem, form,
+                                  luaL_checknumber(L, arg));
+          break;
+        case 'f':
+          maxitem = MAX_ITEMF;  /* extra space for '%f' */
+          buff = luaL_prepbuffsize(&amp;b, maxitem);
+          /* FALLTHROUGH */
+        case 'e': case 'E': case 'g': case 'G': {
+          lua_Number n = luaL_checknumber(L, arg);
+          addlenmod(form, LUA_NUMBER_FRMLEN);
+          nb = l_sprintf(buff, maxitem, form, (LUAI_UACNUMBER)n);
+          break;
+        }
+        case 'p': {
+          const void *p = lua_topointer(L, arg);
+          if (p == NULL) {  /* avoid calling 'printf' with argument NULL */
+            p = &quot;(null)&quot;;  /* result */
+            form[strlen(form) - 1] = 's';  /* format it as a string */
+          }
+          nb = l_sprintf(buff, maxitem, form, p);
+          break;
+        }
+        case 'q': {
+          if (form[2] != '\0')  /* modifiers? */
+            return luaL_error(L, &quot;specifier '%%q' cannot have modifiers&quot;);
+          addliteral(L, &amp;b, arg);
+          break;
+        }
+        case 's': {
+          size_t l;
+          const char *s = luaL_tolstring(L, arg, &amp;l);
+          if (form[2] == '\0')  /* no modifiers? */
+            luaL_addvalue(&amp;b);  /* keep entire string */
+          else {
+            luaL_argcheck(L, l == strlen(s), arg, &quot;string contains zeros&quot;);
+            if (!strchr(form, '.') &amp;&amp; l &gt;= 100) {
+              /* no precision and string is too long to be formatted */
+              luaL_addvalue(&amp;b);  /* keep entire string */
+            }
+            else {  /* format the string into 'buff' */
+              nb = l_sprintf(buff, maxitem, form, s);
+              lua_pop(L, 1);  /* remove result from 'luaL_tolstring' */
+            }
+          }
+          break;
+        }
+        default: {  /* also treat cases 'pnLlh' */
+          return luaL_error(L, &quot;invalid conversion '%s' to 'format'&quot;, form);
+        }
+      }
+      lua_assert(nb &lt; maxitem);
+      luaL_addsize(&amp;b, nb);
+    }
+  }
+  luaL_pushresult(&amp;b);
+  return 1;
+}
+</code></pre><ul>
+<li>string.format 的流程为：
+<ul>
+<li>从栈上读取字符串，得到字符串的起止地址。</li>
+<li>创建一个 buffer ，用于存放新的字符串。</li>
+<li>从字符串的起始地址开始，处理每个字符。
+<ul>
+<li>如果字符不为 % ，则写入 buffer 中。</li>
+<li>如果字符为 % ：
+<ul>
+<li>下一个字符也为 %，即 %%（转义字符），则写入一个 % ，并跳过下一个字符。</li>
+<li>根据下一个字符的字母类型，将参数进行格式检查后，写入 buffer 中。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>将 buffer 字符串创建一个 TString 对象，并压入栈上。</li>
+</ul>
+</li>
+</ul>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/algorithm/spatialdatastructures/spatialdatastructures_k-d/ data-toggle=tooltip data-placement=top title="空间数据结构 — k-D Tree">&larr;
+Previous Post</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2023
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>
