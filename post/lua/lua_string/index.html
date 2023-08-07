@@ -101,7 +101,7 @@ Wednesday, August 2, 2023
 <div class="col-lg-8 col-lg-offset-2
 col-md-10 col-md-offset-1
 post-container">
-<p>lua 字符串是 lua 中的一种基本类型，本文将以 lua-5.4 版本进行源码解析。</p>
+<p>lua 字符串是 lua 中的一种基本类型，本文将以 lua-5.4.1 版本进行源码解析。</p>
 <h3 id=简介>简介</h3>
 <ul>
 <li>在 lua 中，使用字符串的方式和其他编程语言相似，如：</li>
@@ -109,7 +109,7 @@ post-container">
 <pre tabindex=0><code>  local str = &quot;Hello World&quot;
   print(str)
 </code></pre><ul>
-<li>然而，lua 中的 string ，实现上并非直接为 c 中的 char* 或者 char[] ，而是使用了封装的类型。本文将以 lua-5.4.1 版本进行源码解析。</li>
+<li>然而，lua 中的 string ，实现上并非直接为 c 中的 char* 或者 char[] ，而是使用了封装的类型。</li>
 <li>从 xlua 或 tolua 中可以知道，当 lua 侧访问 C# 侧的字符串变量时，C# 侧会通过调用 lua_pushstring/lua_pushlstring 方法将字符串传输到 lua 虚拟机的栈上，而 C# 侧访问 lua 侧的字符串变量时，则是通过调用 lua_tolstring 方法，从栈上读取字符串。</li>
 </ul>
 <h3 id=字符串压栈>字符串压栈</h3>
