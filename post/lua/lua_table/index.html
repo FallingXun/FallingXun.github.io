@@ -853,9 +853,73 @@ n += nx;
 - 根据得到的索引值，获取该位置对应的值，如果对应的值为空，则会返回 nil 。
 
 ### 迭代器访问 table
-- 迭代器访问 table ，有两种访问形式，pairs 和 ipairs 。
+- 迭代器访问 table ，即 for 遍历，代码结构如下：
+</code></pre><p>for val_1, val_2, &mldr; , val_n in explist do
+block
+end</p>
+<pre tabindex=0><code>- 上述代码等价于
+</code></pre><p>do
+local func, state, val = explist
+while true do
+local val_1, val_2, &mldr; , val_n = func(state, val)
+if val_1 == nil then
+break
+end
+val = val_1
+block
+end</p>
+<pre tabindex=0><code>- 其中，explist 为迭代器，只执行一次，返回迭代器函数 func 、状态 state 、迭代器初始值 val 。遍历过程即执行 func ，将返回的第一个参数 val_1 作为新的 val ，执行完 block 代码块后，再继续执行 func ，直到返回的第一个参数为空时停止。
+- table 的迭代器有两种，pairs 和 ipairs 。
 #### pairs
-#### ipairs</code></pre>
+- pairs 方法的代码如下：
+</code></pre><p>// lbaselib.c</p>
+<p>static int luaB_pairs (lua_State <em>L) {
+luaL_checkany(L, 1);
+if (luaL_getmetafield(L, 1, &ldquo;__pairs&rdquo;) == LUA_TNIL) { /</em> no metamethod? <em>/
+lua_pushcfunction(L, luaB_next); /</em> will return generator, <em>/
+lua_pushvalue(L, 1); /</em> state, <em>/
+lua_pushnil(L); /</em> and initial value <em>/
+}
+else {
+lua_pushvalue(L, 1); /</em> argument &lsquo;self&rsquo; to metamethod <em>/
+lua_call(L, 1, 3); /</em> get 3 values from metamethod */
+}
+return 3;
+}</p>
+<pre tabindex=0><code>- 根据是否有元方法，pairs 会执行不同的流程。
+  - 如果当前 table 没有元表，或元表没有元方法 __pairs ，则迭代器函数为 luaB_next ，状态为 table ，初始值为 nil ，即使用 next 方法来完成迭代访问过程。
+  - 如果当前 table 有元表，并且有元方法 __pairs ，则将 table 作为参数，调用 __pairs 方法，并返回三个参数，对应迭代器函数、状态、初始值，从而完成迭代过程。
+- __pairs 的方法大致为：
+</code></pre><p>__pairs = function(table)
+local func = function(table, key)
+local nextKey = findNextKey()
+local nextValue = table[nextKey]
+return nextKey, nextValue
+end
+return func, table, nil
+end</p>
+<pre tabindex=0><code>#### ipairs
+- ipairs 方法的代码如下：
+</code></pre><p>// lbaselib.c</p>
+<p>static int luaB_ipairs (lua_State <em>L) {
+luaL_checkany(L, 1);
+lua_pushcfunction(L, ipairsaux); /</em> iteration function <em>/
+lua_pushvalue(L, 1); /</em> state <em>/
+lua_pushinteger(L, 0); /</em> initial value */
+return 3;
+}</p>
+<pre tabindex=0><code>- ipairs 的迭代器方法为 ipairsaux ，其代码为：
+</code></pre><p>// lbaselib.c</p>
+<p>static int ipairsaux (lua_State *L) {
+lua_Integer i = luaL_checkinteger(L, 2) + 1;
+lua_pushinteger(L, i);
+return (lua_geti(L, 1, i) == LUA_TNIL) ? 1 : 2;
+}</p>
+<pre tabindex=0><code>- 迭代器的初始值为 0 ，迭代器函数会对传入的参数加 1 ，再获取 table 中的值并压入栈上。当 table 中存在对应 key 时，ipairs 会返回栈顶的两个值，即 key-value ，而当 table 中不存在对应 key 时，则只会返回一个值，即存放在栈顶的 value ，此时 value 为 nil 。因此，迭代器函数的返回值 val_1 即为 nil ，遍历停止。
+- 和 pairs 相比，ipairs 只能遍历 key 值为从 1 开始的连续范围，当某一个 key 值不存在时，则会中断，即只能遍历常规数组类型的 table 。
+
+### 总结
+- table 是 lua 中重要的数据结构，同时具备数组和哈希表的功能，但却不是简单的数组部分对应数组存储，哈希表部分对应哈希表存储，基于内存优化做了一系列的处理。了解其中的实现细节，有助于更好地使用这种类型。</code></pre>
 <hr>
 <ul class=pager>
 <li class=previous>
