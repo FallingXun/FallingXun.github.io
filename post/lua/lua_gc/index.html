@@ -1,0 +1,337 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="Lua篇 — 垃圾回收">
+<meta property="og:title" content="Lua篇 — 垃圾回收">
+<meta property="twitter:title" content="Lua篇 — 垃圾回收">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>Lua篇 — 垃圾回收-</title>
+<link rel=canonical href=/post/lua/lua_gc/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+<li>
+<a href=/categories/googleplay%E7%B3%BB%E5%88%97>googleplay系列</a>
+</li>
+<li>
+<a href=/categories/lua%E7%B3%BB%E5%88%97>lua系列</a>
+</li>
+<li>
+<a href=/categories/tmp%E7%B3%BB%E5%88%97>tmp系列</a>
+</li>
+<li>
+<a href=/categories/unity%E7%B3%BB%E5%88%97>unity系列</a>
+</li>
+<li>
+<a href=/categories/%E5%9B%BE%E5%BD%A2%E5%AD%A6%E7%B3%BB%E5%88%97>图形学系列</a>
+</li>
+<li>
+<a href=/categories/%E6%B8%B2%E6%9F%93%E7%B3%BB%E5%88%97>渲染系列</a>
+</li>
+<li>
+<a href=/categories/%E7%AE%97%E6%B3%95%E7%B3%BB%E5%88%97>算法系列</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/lua title=Lua>
+Lua
+</a>
+</div>
+<h1>Lua篇 — 垃圾回收</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Tuesday, November 7, 2023
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>垃圾回收（GC）是程序运行中必不可少的一环，lua 内部则实现了一套垃圾回收流程。</p>
+<h3 id=简介>简介</h3>
+<ul>
+<li>在游戏项目中，lua 的主要优势，在于能进行热更新，能及时修复线上运行过程中出现的问题，尽可能地缩短流程时长。另一方面，对于开发者来讲，lua 的另一个优势，即其内部实现了一套垃圾回收流程，可以自动进行垃圾回收，不需要开发者进行主动管理，为开发者提供了较大的便利。</li>
+<li>尽管 lua 有垃圾回收机制，但如果不了解其内部实现，就不知道需要注意的地方。为了做好内存管理，还是需要进一步了解掌握 lua 的垃圾回收机制。</li>
+</ul>
+<h3 id=初始化>初始化</h3>
+<ul>
+<li>lua 初始化的方法如下：</li>
+</ul>
+<pre tabindex=0><code>// lstate.c
+
+LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
+  int i;
+  lua_State *L;
+  global_State *g;
+  LG *l = cast(LG *, (*f)(ud, NULL, LUA_TTHREAD, sizeof(LG)));
+  if (l == NULL) return NULL;
+  L = &amp;l-&gt;l.l;
+  g = &amp;l-&gt;g;
+  L-&gt;tt = LUA_VTHREAD;
+  g-&gt;currentwhite = bitmask(WHITE0BIT);
+  L-&gt;marked = luaC_white(g);
+  preinit_thread(L, g);
+  g-&gt;allgc = obj2gco(L);  /* by now, only object is the main thread */
+  L-&gt;next = NULL;
+  g-&gt;Cstacklimit = L-&gt;nCcalls = LUAI_MAXCSTACK + CSTACKERR;
+  incnny(L);  /* main thread is always non yieldable */
+  g-&gt;frealloc = f;
+  g-&gt;ud = ud;
+  g-&gt;warnf = NULL;
+  g-&gt;ud_warn = NULL;
+  g-&gt;mainthread = L;
+  g-&gt;seed = luai_makeseed(L);
+  g-&gt;gcrunning = 0;  /* no GC while building state */
+  g-&gt;strt.size = g-&gt;strt.nuse = 0;
+  g-&gt;strt.hash = NULL;
+  setnilvalue(&amp;g-&gt;l_registry);
+  g-&gt;panic = NULL;
+  g-&gt;gcstate = GCSpause;
+  g-&gt;gckind = KGC_INC;
+  g-&gt;gcemergency = 0;
+  g-&gt;finobj = g-&gt;tobefnz = g-&gt;fixedgc = NULL;
+  g-&gt;firstold1 = g-&gt;survival = g-&gt;old1 = g-&gt;reallyold = NULL;
+  g-&gt;finobjsur = g-&gt;finobjold1 = g-&gt;finobjrold = NULL;
+  g-&gt;sweepgc = NULL;
+  g-&gt;gray = g-&gt;grayagain = NULL;
+  g-&gt;weak = g-&gt;ephemeron = g-&gt;allweak = NULL;
+  g-&gt;twups = NULL;
+  g-&gt;totalbytes = sizeof(LG);
+  g-&gt;GCdebt = 0;
+  g-&gt;lastatomic = 0;
+  setivalue(&amp;g-&gt;nilvalue, 0);  /* to signal that state is not yet built */
+  setgcparam(g-&gt;gcpause, LUAI_GCPAUSE);
+  setgcparam(g-&gt;gcstepmul, LUAI_GCMUL);
+  g-&gt;gcstepsize = LUAI_GCSTEPSIZE;
+  setgcparam(g-&gt;genmajormul, LUAI_GENMAJORMUL);
+  g-&gt;genminormul = LUAI_GENMINORMUL;
+  for (i=0; i &lt; LUA_NUMTAGS; i++) g-&gt;mt[i] = NULL;
+  if (luaD_rawrunprotected(L, f_luaopen, NULL) != LUA_OK) {
+    /* memory allocation error: free partial state */
+    close_state(L);
+    L = NULL;
+  }
+  return L;
+}
+</code></pre><ul>
+<li>其中，gc 相关的参数也进行了初始化状态，主要参数有：
+<ul>
+<li>currentwhite
+<ul>
+<li>当前 gc 过程的白色类型，包括 WHITE0BIT 、WHITE1BIT ，通过两种类型交替使用，来表示对象是上一轮还是当前轮 gc 处理的对象。</li>
+</ul>
+</li>
+<li>allgc
+<ul>
+<li>所有需要 gc 的对象链表。</li>
+</ul>
+</li>
+<li>gcstate
+<ul>
+<li>当前 gc 过程所处的状态，有以下状态：
+<ul>
+<li>GCSpropagate ：扫描标记状态。</li>
+<li>GCSenteratomic ：准备进入原子处理的状态。</li>
+<li>GCSatomic ：原子处理状态。</li>
+<li>GCSswpallgc ：清除 allgc 列表状态。</li>
+<li>GCSswpfinobj ：清除 finobj 列表状态。</li>
+<li>GCSswptobefnz ：清除 tobefnz 列表状态。</li>
+<li>GCSswpend ：清除完成状态。</li>
+<li>GCScallfin ：执行析构方法状态。</li>
+<li>GCSpause ：暂停状态（初始化时的默认状态）。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>gckind
+<ul>
+<li>gc 类型，有两种类型：
+<ul>
+<li>KGC_INC ：增量式 gc（初始化时的默认状态）。</li>
+<li>KGC_GEN ：分代式 gc 。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>gcemergency
+<ul>
+<li>紧急 gc 标记，如果不为 0 ，则会跳过一些操作，避免某些操作（如执行析构方法、缩小数据结构等）在非预期的情况下，更改解释器状态。</li>
+</ul>
+</li>
+<li>finobj
+<ul>
+<li>带析构方法的对象列表。</li>
+</ul>
+</li>
+<li>tobefnz
+<ul>
+<li>userdata 对象列表。</li>
+</ul>
+</li>
+<li>sweepgc
+<ul>
+<li>当前清除对象列表。</li>
+</ul>
+</li>
+<li>gray
+<ul>
+<li>灰色对象列表。</li>
+</ul>
+</li>
+<li>grayagain
+<ul>
+<li>需要进行原子处理遍历的对象列表。</li>
+</ul>
+</li>
+<li>weak
+<ul>
+<li>弱值（value）类型 table 列表。</li>
+</ul>
+</li>
+<li>ephemeron
+<ul>
+<li>弱键（key）类型 table 列表。</li>
+</ul>
+</li>
+<li>allweak
+<ul>
+<li>弱键值（key-value）类型 table 列表。</li>
+</ul>
+</li>
+<li>GCdebt
+<ul>
+<li>已经申请且还没被收集器补偿的内存字节数。</li>
+</ul>
+</li>
+<li>totalbytes
+<ul>
+<li>已经申请且被收集器补偿的内存字节数。</li>
+</ul>
+</li>
+<li>gcpause
+<ul>
+<li>默认为 200（LUAI_GCPAUSE）。</li>
+</ul>
+</li>
+<li>gcstepsize
+<ul>
+<li>每一步处理的大小，以 2 为底的对数表示，默认为 13（LUAI_GCSTEPSIZE），即 8 KB 。</li>
+</ul>
+</li>
+<li>gcstepmul
+<ul>
+<li>每一步处理的大小的放大倍数，默认为 100（LUAI_GCMUL）。</li>
+</ul>
+</li>
+<li>GCestimate
+<ul>
+<li>使用中的内存估计大小。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/lua/lua_table/ data-toggle=tooltip data-placement=top title="Lua篇 — 表">&larr;
+Previous Post</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2023
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>

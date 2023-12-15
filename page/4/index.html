@@ -1,5 +1,6 @@
 <!doctype html><html lang=zh-cn>
 <head>
+<meta name=generator content="Hugo 0.89.0">
 <meta charset=utf-8>
 <meta http-equiv=x-ua-compatible content="IE=edge">
 <meta name=viewport content="width=device-width,initial-scale=1">
@@ -7,17 +8,17 @@
 <meta property="og:type" content="article">
 <meta property="og:image" content="https://fallingxun.github.io//">
 <meta property="twitter:image" content="https://fallingxun.github.io//">
-<meta name=title content="Lua系列">
-<meta property="og:title" content="Lua系列">
-<meta property="twitter:title" content="Lua系列">
+<meta name=title content>
+<meta property="og:title" content>
+<meta property="twitter:title" content>
 <meta name=description content>
 <meta property="og:description" content>
 <meta property="twitter:description" content>
 <meta property="twitter:card" content="summary">
 <meta name=keyword content>
 <link rel="shortcut icon" href=/img/favicon.ico>
-<title>Lua系列-</title>
-<link rel=canonical href=/categories/lua%E7%B3%BB%E5%88%97/>
+<title>Xun's Blog-</title>
+<link rel=canonical href=/>
 <link rel=stylesheet href=/css/iDisqus.min.css>
 <link rel=stylesheet href=/css/bootstrap.min.css>
 <link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
@@ -91,103 +92,24 @@ col-sm-12
 col-xs-12
 post-container">
 <div class=post-preview>
-<a href=https://fallingxun.github.io/post/lua/lua_gc/>
+<a href=https://fallingxun.github.io/post/tmp/textmeshprogcoptimize/>
 <h2 class=post-title>
-Lua篇 — 垃圾回收
+TMP(TextMeshPro)优化篇 — (1) 堆内存
 </h2>
 <div class=post-content-preview>
-<p>垃圾回收（GC）是程序运行中必不可少的一环，lua 内部则实现了一套垃圾回收流程。</p>
+<p>TextMeshPro(TMP)是Unity的字体插件，具有很强大的功能，然而使用的过程中会发现堆内存的申请频率和大小都不低，尤其是在UI界面的使用上，每次打开界面，都会使得界面上的TMP进行初始化，随着使用时长的增加，就容易引起GC。（当前版本 <a href=mailto:com.unity.textmeshpro@1.4.1>com.unity.textmeshpro@1.4.1</a>）。</p>
 </div>
 </a>
 <p class=post-meta>
-Posted byXun Tuesday, November 7, 2023
+Posted byXun Sunday, February 7, 2021
 </p>
 </div>
 <hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/lua/lua_table/>
-<h2 class=post-title>
-Lua篇 — 表
-</h2>
-<div class=post-content-preview>
-<p>lua 表是 lua 中的非常常用的结构，本文将以 lua-5.4.1 版本进行源码解析。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Monday, August 7, 2023
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/lua/lua_string/>
-<h2 class=post-title>
-Lua篇 — 字符串
-</h2>
-<div class=post-content-preview>
-<p>lua 字符串是 lua 中的一种基本类型，本文将以 lua-5.4.1 版本进行源码解析。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Wednesday, August 2, 2023
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/lua/lua_reload/>
-<h2 class=post-title>
-Lua篇 — Lua热重载
-</h2>
-<div class=post-content-preview>
-<p>由于lua的弱语言特性，不需要编译即可运行，因此使用lua开发的项目，如果修改lua代码，不需要等待编译的时间，如果修改完能直接重载，则开发效率会更高。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Tuesday, March 29, 2022
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/lua/lua_xlua/>
-<h2 class=post-title>
-Lua篇 — xLua
-</h2>
-<div class=post-content-preview>
-<p>由于很多旧项目是以CSharp开发的，热更时就会遇到难题。而xLua框架的出现，让很多项目能够在改动最小的情况下，支持热更新功能。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Thursday, November 4, 2021
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/lua/lua_tolua/>
-<h2 class=post-title>
-Lua篇 — ToLua
-</h2>
-<div class=post-content-preview>
-<p>ToLua是很多项目都使用的lua框架，为了更好地使用，需要对框架有比较清晰的认识。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Wednesday, November 3, 2021
-</p>
-</div>
-<hr>
-<div class=post-preview>
-<a href=https://fallingxun.github.io/post/lua/lua_main/>
-<h2 class=post-title>
-Lua篇 — Lua介绍
-</h2>
-<div class=post-content-preview>
-<p>随着游戏行业的发展，热更已经成为游戏开发不可或缺的功能。热更有很多方案，lua热更是使用较广泛，也相对稳定的方案。因此，需要对lua有一定程度的了解，对于lua热更框架才能理解得更加透彻。</p>
-</div>
-</a>
-<p class=post-meta>
-Posted byXun Saturday, October 23, 2021
-</p>
-</div>
-<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/page/3/>&larr; Newer Posts</a>
+</li>
+</ul>
 </div>
 <div class="col-lg-3 col-lg-offset-0
 col-md-3 col-md-offset-0
