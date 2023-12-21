@@ -229,7 +229,7 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
 </li>
 <li>gray
 <ul>
-<li>灰色对象列表。</li>
+<li>灰色对象列表（用于记录当前灰色对象，和对象的 gclist 组合使用）。</li>
 </ul>
 </li>
 <li>grayagain
@@ -254,12 +254,12 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
 </li>
 <li>GCdebt
 <ul>
-<li>已经申请且还没被收集器补偿的内存字节数。</li>
+<li>已经申请且还没被收集器补偿的内存字节数，用于管理 gc 启动的时机，当大于 0 时才会开启 gc 。创建新对象时增加，释放时减少。</li>
 </ul>
 </li>
 <li>totalbytes
 <ul>
-<li>已经申请且被收集器补偿的内存字节数。</li>
+<li>已经申请且被收集器补偿的内存字节数，和 GCdebt 相加表示真正申请的总内存。</li>
 </ul>
 </li>
 <li>gcpause
@@ -282,6 +282,308 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
 <li>使用中的内存估计大小。</li>
 </ul>
 </li>
+</ul>
+</li>
+</ul>
+<h1 id=gc-阶段>gc 阶段</h1>
+<ul>
+<li>初始化后，gcstate 为 GCSpause 状态，每个状态下 gc 执行步骤的代码为：</li>
+</ul>
+<pre tabindex=0><code>// lgc.c
+
+static lu_mem singlestep (lua_State *L) {
+  global_State *g = G(L);
+  switch (g-&gt;gcstate) {
+    case GCSpause: {
+      restartcollection(g);
+      g-&gt;gcstate = GCSpropagate;
+      return 1;
+    }
+    case GCSpropagate: {
+      if (g-&gt;gray == NULL) {  /* no more gray objects? */
+        g-&gt;gcstate = GCSenteratomic;  /* finish propagate phase */
+        return 0;
+      }
+      else
+        return propagatemark(g);  /* traverse one gray object */
+    }
+    case GCSenteratomic: {
+      lu_mem work = atomic(L);  /* work is what was traversed by 'atomic' */
+      entersweep(L);
+      g-&gt;GCestimate = gettotalbytes(g);  /* first estimate */;
+      return work;
+    }
+    case GCSswpallgc: {  /* sweep &quot;regular&quot; objects */
+      return sweepstep(L, g, GCSswpfinobj, &amp;g-&gt;finobj);
+    }
+    case GCSswpfinobj: {  /* sweep objects with finalizers */
+      return sweepstep(L, g, GCSswptobefnz, &amp;g-&gt;tobefnz);
+    }
+    case GCSswptobefnz: {  /* sweep objects to be finalized */
+      return sweepstep(L, g, GCSswpend, NULL);
+    }
+    case GCSswpend: {  /* finish sweeps */
+      checkSizes(L, g);
+      g-&gt;gcstate = GCScallfin;
+      return 0;
+    }
+    case GCScallfin: {  /* call remaining finalizers */
+      if (g-&gt;tobefnz &amp;&amp; !g-&gt;gcemergency) {
+        int n = runafewfinalizers(L, GCFINMAX);
+        return n * GCFINALIZECOST;
+      }
+      else {  /* emergency mode or no more finalizers */
+        g-&gt;gcstate = GCSpause;  /* finish collection */
+        return 0;
+      }
+    }
+    default: lua_assert(0); return 0;
+  }
+}
+</code></pre><h2 id=启动阶段gcspause---gcspropagate>启动阶段（GCSpause -> GCSpropagate）</h2>
+<ul>
+<li>启动阶段主要执行的代码如下：</li>
+</ul>
+<pre tabindex=0><code>// lgc.c
+
+static void restartcollection (global_State *g) {
+  cleargraylists(g);
+  markobject(g, g-&gt;mainthread);
+  markvalue(g, &amp;g-&gt;l_registry);
+  markmt(g);
+  markbeingfnz(g);  /* mark any finalizing object left from previous cycle */
+}
+</code></pre><ul>
+<li>启动阶段也是 gc 循环开始的阶段，主要是将 lua 对象引用的起点进行标记，其步骤为：
+<ul>
+<li>清除 gc 循环过程中记录的链表（g->gray 、g->grayagain 、g->weak 、g->allweak 、g->ephemeron）。</li>
+<li>将 lua 栈（g->mainthread）标记为灰色。</li>
+<li>将注册表（g->l_registry）的标记为灰色。</li>
+<li>将 lua 基础类型的元表标记为灰色。</li>
+<li>将 userdata 列表的所有对象标记为灰色。</li>
+</ul>
+</li>
+<li>其中，标记的方法具体实现为：</li>
+</ul>
+<pre tabindex=0><code>// lgc.c
+
+static void reallymarkobject (global_State *g, GCObject *o) {
+  switch (o-&gt;tt) {
+    case LUA_VSHRSTR:
+    case LUA_VLNGSTR: {
+      set2black(o);  /* nothing to visit */
+      break;
+    }
+    case LUA_VUPVAL: {
+      UpVal *uv = gco2upv(o);
+      if (upisopen(uv))
+        set2gray(uv);  /* open upvalues are kept gray */
+      else
+        set2black(o);  /* closed upvalues are visited here */
+      markvalue(g, uv-&gt;v);  /* mark its content */
+      break;
+    }
+    case LUA_VUSERDATA: {
+      Udata *u = gco2u(o);
+      if (u-&gt;nuvalue == 0) {  /* no user values? */
+        markobjectN(g, u-&gt;metatable);  /* mark its metatable */
+        set2black(o);  /* nothing else to mark */
+        break;
+      }
+      /* else... */
+    }  /* FALLTHROUGH */
+    case LUA_VLCL: case LUA_VCCL: case LUA_VTABLE:
+    case LUA_VTHREAD: case LUA_VPROTO: {
+      linkobjgclist(o, g-&gt;gray);  /* to be visited later */
+      break;
+    }
+    default: lua_assert(0); break;
+  }
+}
+
+static void linkgclist_ (GCObject *o, GCObject **pnext, GCObject **list) {
+  lua_assert(!isgray(o));  /* cannot be in a gray list */
+  *pnext = *list;
+  *list = o;
+  set2gray(o);  /* now it is */
+}
+
+
+/*
+** Link a generic collectable object 'o' into the list 'p'.
+*/
+#define linkobjgclist(o,p) linkgclist_(obj2gco(o), getgclist(o), &amp;(p))
+</code></pre><ul>
+<li>可以看到，通常情况下，标记灰色的过程为：
+<ul>
+<li>将当前对象的 gclist 指向灰色对象列表 gray 。</li>
+<li>将当前对象设置到 gray 列表。</li>
+<li>将当前对象标记为灰色（非黑非白）。</li>
+</ul>
+</li>
+<li>而对于字符串类型，则是直接将对象标记为黑色。这是因为字符串类型的对象，不会再引用其他的对象，所以不需要再向后延伸。</li>
+</ul>
+<h2 id=扩散阶段gcspropagate---gcsenteratomic>扩散阶段（GCSpropagate -> GCSenteratomic）</h2>
+<ul>
+<li>扩散阶段的代码实现为：</li>
+</ul>
+<pre tabindex=0><code>// lgc.c
+
+static lu_mem propagatemark (global_State *g) {
+  GCObject *o = g-&gt;gray;
+  nw2black(o);
+  g-&gt;gray = *getgclist(o);  /* remove from 'gray' list */
+  switch (o-&gt;tt) {
+    case LUA_VTABLE: return traversetable(g, gco2t(o));
+    case LUA_VUSERDATA: return traverseudata(g, gco2u(o));
+    case LUA_VLCL: return traverseLclosure(g, gco2lcl(o));
+    case LUA_VCCL: return traverseCclosure(g, gco2ccl(o));
+    case LUA_VPROTO: return traverseproto(g, gco2p(o));
+    case LUA_VTHREAD: return traversethread(g, gco2th(o));
+    default: lua_assert(0); return 0;
+  }
+}
+</code></pre><ul>
+<li>该阶段执行一次，会将灰色列表的当前对象移除，标记为黑色，并将此对象的 gclist 设置为灰色列表（和启动阶段的设置对应）。之后，对此对象进行遍历，获取其引用的所有对象，标记成灰色，加入灰色列表。</li>
+<li>此后，会重复上面的过程，持续标记过程，直到灰色列表的所有对象都已经标记为黑色，该阶段才算真正完成。</li>
+</ul>
+<h3 id=遍历-table>遍历 table</h3>
+<ul>
+<li>遍历检查 table 过程如下：</li>
+</ul>
+<pre tabindex=0><code>// lgc.c
+
+static lu_mem traversetable (global_State *g, Table *h) {
+  const char *weakkey, *weakvalue;
+  const TValue *mode = gfasttm(g, h-&gt;metatable, TM_MODE);
+  markobjectN(g, h-&gt;metatable);
+  if (mode &amp;&amp; ttisstring(mode) &amp;&amp;  /* is there a weak mode? */
+      (cast_void(weakkey = strchr(svalue(mode), 'k')),
+       cast_void(weakvalue = strchr(svalue(mode), 'v')),
+       (weakkey || weakvalue))) {  /* is really weak? */
+    if (!weakkey)  /* strong keys? */
+      traverseweakvalue(g, h);
+    else if (!weakvalue)  /* strong values? */
+      traverseephemeron(g, h, 0);
+    else  /* all weak */
+      linkgclist(h, g-&gt;allweak);  /* nothing to traverse now */
+  }
+  else  /* not weak */
+    traversestrongtable(g, h);
+  return 1 + h-&gt;alimit + 2 * allocsizenode(h);
+}
+</code></pre><ul>
+<li>对于 table 来说，根据 table 是否为弱表，有不同的检查方式。
+<ul>
+<li>key 为强类型，value 为弱类型。
+<ul>
+<li>遍历 table 的哈希表部分，如果 value 为空，则清除 key 值。如果 value 不为空，则将 key 值标记为灰色。</li>
+<li>如果当前是在 GCSatomic 状态，并且数组部分不为空，或者哈希表部分存在未标记的对象，则该 table 要加入到 g->weak 列表中，不然就将 table 加入到 g->grayagain 列表中。</li>
+</ul>
+</li>
+<li>key 为弱类型，value 为强类型。
+<ul>
+<li>遍历 table 的数组部分，将所有对象标记为灰色。</li>
+<li>遍历 table 的哈希表部分：
+<ul>
+<li>如果 value 为空，则清除 key 值。</li>
+<li>如果 value 不为空，key 已标记，value 未标记过，则将 value 值标记为灰色。</li>
+<li>如果当前为 GCSpropagate 状态，则将 table 加入 g->grayagain 列表。</li>
+<li>如果遍历前存在 key-value 都未标记过的，则将 table 加入 g->ephemeron 列表。</li>
+<li>如果遍历前存在 key 未标记过的，则将 table 加入 g->allweak 列表。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>key-value 都为弱类型。
+-将 table 加入 g->allweak 列表。</li>
+<li>key-value 都为强类型。
+<ul>
+<li>遍历 table 的数组部分，将所有对象标记为灰色。</li>
+<li>遍历 table 的哈希表部分：
+<ul>
+<li>如果 value 为空，则清除 key 值。</li>
+<li>将 key 值标记为灰色。</li>
+<li>将 value 值标记为灰色。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>遍历结束后，会返回处理的 TValue 对象数量，为：
+<ul>
+<li>当前 table ：1 。</li>
+<li>table 的数组部分数量： h->alimit 。</li>
+<li>table 的哈希表部分数量（每个节点有 key 和 value 两个对象）：2 * allocsizenode(h) 。</li>
+</ul>
+</li>
+</ul>
+<h3 id=遍历-thread>遍历 thread</h3>
+<h1 id=完整-gc>完整 gc</h1>
+<ul>
+<li>lua 提供了方法 collectgarbage(&ldquo;collect&rdquo;) ，开发者可以在自己想要的时候完成一次完整的 gc ，该方法最终的具体调用为：</li>
+</ul>
+<pre tabindex=0><code>// lapi.c
+
+/*
+** Garbage-collection function
+*/
+LUA_API int lua_gc (lua_State *L, int what, ...) {
+  va_list argp;
+  int res = 0;
+  global_State *g;
+  lua_lock(L);
+  g = G(L);
+  va_start(argp, what);
+  switch (what) {
+    ...
+    case LUA_GCCOLLECT: {
+      luaC_fullgc(L, 0);
+      break;
+    }
+    ...
+  }
+  va_end(argp);
+  lua_unlock(L);
+  return res;
+}
+
+</code></pre><pre tabindex=0><code>// lgc.c
+
+void luaC_fullgc (lua_State *L, int isemergency) {
+  global_State *g = G(L);
+  lua_assert(!g-&gt;gcemergency);
+  g-&gt;gcemergency = isemergency;  /* set flag */
+  if (g-&gt;gckind == KGC_INC)
+    fullinc(L, g);
+  else
+    fullgen(L, g);
+  g-&gt;gcemergency = 0;
+}
+</code></pre><ul>
+<li>最终会调用 luaC_fullgc 方法，由于 lua 初始化默认设置为增量式 gc ，因此会执行 fullinc 方法。</li>
+</ul>
+<pre tabindex=0><code>// lgc.c
+
+static void fullinc (lua_State *L, global_State *g) {
+  if (keepinvariant(g))  /* black objects? */
+    entersweep(L); /* sweep everything to turn them back to white */
+  /* finish any pending sweep phase to start a new cycle */
+  luaC_runtilstate(L, bitmask(GCSpause));
+  luaC_runtilstate(L, bitmask(GCScallfin));  /* run up to finalizers */
+  /* estimate must be correct after a full GC cycle */
+  lua_assert(g-&gt;GCestimate == gettotalbytes(g));
+  luaC_runtilstate(L, bitmask(GCSpause));  /* finish collection */
+  setpause(g);
+}
+</code></pre><ul>
+<li>可以看到，一次完整的 gc ，主要执行了以下步骤：
+<ul>
+<li>如果当前的 gc 循环还没结束，并处在 GCSatomic 状态或之前的状态，则进入到 GCSswpallgc 阶段。</li>
+<li>继续执行后续阶段，直到进入 GCSpause 状态，结束当前的 gc 循环。</li>
+<li>从 GCSpause 状态开始，执行一次完整的 gc 循环。</li>
+<li>更新 GCdebt 的值。</li>
 </ul>
 </li>
 </ul>
