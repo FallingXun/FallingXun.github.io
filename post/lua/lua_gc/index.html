@@ -423,9 +423,9 @@ static void linkgclist_ (GCObject *o, GCObject **pnext, GCObject **list) {
 </li>
 <li>而对于字符串类型，则是直接将对象标记为黑色。这是因为字符串类型的对象，不会再引用其他的对象，所以不需要再向后延伸。</li>
 </ul>
-<h2 id=扩散阶段gcspropagate---gcsenteratomic>扩散阶段（GCSpropagate -> GCSenteratomic）</h2>
+<h2 id=传播阶段gcspropagate---gcsenteratomic>传播阶段（GCSpropagate -> GCSenteratomic）</h2>
 <ul>
-<li>扩散阶段的代码实现为：</li>
+<li>传播阶段的代码实现为：</li>
 </ul>
 <pre tabindex=0><code>// lgc.c
 
@@ -520,6 +520,139 @@ static lu_mem traversetable (global_State *g, Table *h) {
 </li>
 </ul>
 <h3 id=遍历-thread>遍历 thread</h3>
+<ul>
+<li>遍历检查 thread 过程如下：</li>
+</ul>
+<pre tabindex=0><code>// lgc.c
+
+static int traversethread (global_State *g, lua_State *th) {
+  UpVal *uv;
+  StkId o = th-&gt;stack;
+  if (isold(th) || g-&gt;gcstate == GCSpropagate)
+    linkgclist(th, g-&gt;grayagain);  /* insert into 'grayagain' list */
+  if (o == NULL)
+    return 1;  /* stack not completely built yet */
+  lua_assert(g-&gt;gcstate == GCSatomic ||
+             th-&gt;openupval == NULL || isintwups(th));
+  for (; o &lt; th-&gt;top; o++)  /* mark live elements in the stack */
+    markvalue(g, s2v(o));
+  for (uv = th-&gt;openupval; uv != NULL; uv = uv-&gt;u.open.next)
+    markobject(g, uv);  /* open upvalues cannot be collected */
+  if (g-&gt;gcstate == GCSatomic) {  /* final traversal? */
+    StkId lim = th-&gt;stack + th-&gt;stacksize;  /* real end of stack */
+    for (; o &lt; lim; o++)  /* clear not-marked stack slice */
+      setnilvalue(s2v(o));
+    /* 'remarkupvals' may have removed thread from 'twups' list */
+    if (!isintwups(th) &amp;&amp; th-&gt;openupval != NULL) {
+      th-&gt;twups = g-&gt;twups;  /* link it back to the list */
+      g-&gt;twups = th;
+    }
+  }
+  else if (!g-&gt;gcemergency)
+    luaD_shrinkstack(th); /* do not change stack in emergency cycle */
+  return 1 + th-&gt;stacksize;
+}
+</code></pre><ul>
+<li>对于线程类型对象，主要操作对象为栈和 upvalue ，过程为：
+<ul>
+<li>从栈底到栈顶，把栈上的对象标记为灰色。</li>
+<li>将 openupval 列表的对象标记为灰色。</li>
+<li>如果当前是 GCSatomic 状态，从栈顶开始，到整个栈的最大值，将栈上所有对象清除。</li>
+<li>如果当前不为 GCSatomic 状态，且 g->gcemergency 不为 0（即不为紧急 gc），则对当前栈进行缩减，缩减流程为：
+<ul>
+<li>获取当前栈正在使用的大小。</li>
+<li>设置最佳大小为正在使用的大小加上 BASIC_STACK_SIZE（C 函数可用的最小 lua 栈大小的 2 倍，20）。</li>
+<li>如果当前正在使用的大小没有超过 LUAI_MAXSTACK - EXTRA_STACK，并且最佳大小也小于当前栈的大小，才以最佳大小进行栈缩小。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>遍历结束后，返回处理的大小为：
+<ul>
+<li>当前 thread 对象 ：1 。</li>
+<li>当前栈的大小：th->stacksize 。</li>
+</ul>
+</li>
+</ul>
+<h2 id=原子阶段gcspropagate---gcsenteratomic>原子阶段（GCSpropagate -> GCSenteratomic）</h2>
+<ul>
+<li>原子阶段主要从头开始，对所有未标记过的对象进行检查标记，再执行一次清扫过程。</li>
+<li>该阶段的标记方法为：</li>
+</ul>
+<pre tabindex=0><code>// lgc.c
+
+static lu_mem atomic (lua_State *L) {
+  global_State *g = G(L);
+  lu_mem work = 0;
+  GCObject *origweak, *origall;
+  GCObject *grayagain = g-&gt;grayagain;  /* save original list */
+  g-&gt;grayagain = NULL;
+  lua_assert(g-&gt;ephemeron == NULL &amp;&amp; g-&gt;weak == NULL);
+  lua_assert(!iswhite(g-&gt;mainthread));
+  g-&gt;gcstate = GCSatomic;
+  markobject(g, L);  /* mark running thread */
+  /* registry and global metatables may be changed by API */
+  markvalue(g, &amp;g-&gt;l_registry);
+  markmt(g);  /* mark global metatables */
+  work += propagateall(g);  /* empties 'gray' list */
+  /* remark occasional upvalues of (maybe) dead threads */
+  work += remarkupvals(g);
+  work += propagateall(g);  /* propagate changes */
+  g-&gt;gray = grayagain;
+  work += propagateall(g);  /* traverse 'grayagain' list */
+  convergeephemerons(g);
+  /* at this point, all strongly accessible objects are marked. */
+  /* Clear values from weak tables, before checking finalizers */
+  clearbyvalues(g, g-&gt;weak, NULL);
+  clearbyvalues(g, g-&gt;allweak, NULL);
+  origweak = g-&gt;weak; origall = g-&gt;allweak;
+  separatetobefnz(g, 0);  /* separate objects to be finalized */
+  work += markbeingfnz(g);  /* mark objects that will be finalized */
+  work += propagateall(g);  /* remark, to propagate 'resurrection' */
+  convergeephemerons(g);
+  /* at this point, all resurrected objects are marked. */
+  /* remove dead objects from weak tables */
+  clearbykeys(g, g-&gt;ephemeron);  /* clear keys from all ephemeron tables */
+  clearbykeys(g, g-&gt;allweak);  /* clear keys from all 'allweak' tables */
+  /* clear values from resurrected weak tables */
+  clearbyvalues(g, g-&gt;weak, origweak);
+  clearbyvalues(g, g-&gt;allweak, origall);
+  luaS_clearcache(g);
+  g-&gt;currentwhite = cast_byte(otherwhite(g));  /* flip current white */
+  lua_assert(g-&gt;gray == NULL);
+  return work;  /* estimate of slots marked by 'atomic' */
+}
+</code></pre><ul>
+<li>可以看到，该阶段的标记过程，还是从 lua 栈、注册表、基础类型元表为起点进行检查标记。传播阶段中的 g->grayagain 、g->ephemeron 会在这个全部进行遍历标记，g->weak 、g->allweak 弱表列表，也会在这个阶段进行清除。</li>
+<li>完成所有标记操作后，会将 g->currentwhite 切换为另一种白色，在这之后新建的对象，则不会在这轮 gc 中处理。</li>
+<li>和传播阶段相比，原子阶段的标记操作是一步到位的，需要将所有对象都标记完成，才会执行其他操作，这个过程不能中断。</li>
+<li>完成标记后，会执行清除阶段的准备过程。</li>
+</ul>
+<pre tabindex=0><code>// lgc.c
+
+static void entersweep (lua_State *L) {
+  global_State *g = G(L);
+  g-&gt;gcstate = GCSswpallgc;
+  lua_assert(g-&gt;sweepgc == NULL);
+  g-&gt;sweepgc = sweeptolive(L, &amp;g-&gt;allgc);
+}
+
+static GCObject **sweeptolive (lua_State *L, GCObject **p) {
+  GCObject **old = p;
+  do {
+    p = sweeplist(L, p, 1, NULL);
+  } while (p == old);
+  return p;
+}
+</code></pre><ul>
+<li>进入清除阶段前，会对 g->allgc 进行清除处理，直到找到第一个还有引用的对象，转为白色后，将其下一个对象设置到 g->sweepgc 上，清除阶段就能直接对 g->sweepgc 进行处理，而不需要都从 g->allgc 开始，也不会影响 g->allgc 的值。</li>
+</ul>
+<h2 id=清除阶段>清除阶段</h2>
+<h1 id=问题>问题</h1>
+<ul>
+<li>分步</li>
+<li>原子阶段</li>
+</ul>
 <h1 id=完整-gc>完整 gc</h1>
 <ul>
 <li>lua 提供了方法 collectgarbage(&ldquo;collect&rdquo;) ，开发者可以在自己想要的时候完成一次完整的 gc ，该方法最终的具体调用为：</li>
