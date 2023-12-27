@@ -285,7 +285,28 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
 </ul>
 </li>
 </ul>
-<h1 id=gc-阶段>gc 阶段</h1>
+<h3 id=算法流程>算法流程</h3>
+<ul>
+<li>标记清除算法的主要流程为：
+<ul>
+<li>所有对象创建的时候标记为白色。</li>
+<li>gc 开始后，遍历检查所有对象，如果还有引用的，就标记为黑色。</li>
+<li>标记完成后，所有标记为白色的对象，表示对象没有引用，直接清除。</li>
+<li>清除完成后，将所有黑色的对象重新标记为白色，等待下一次 gc 。</li>
+</ul>
+</li>
+<li>由于需要检查完所有对象进行标记，再对所有对象进行处理，执行一次 gc 的耗时相对较长。因此，lua 的 gc 加入了分步的概念，每次处理都有上限数量，将整个过程切分成多个小步骤循环执行，主要流程为：
+<ul>
+<li>设置当前白色为白色 1 ，所有对象创建的时候标记为白色 1 。</li>
+<li>gc 开始后，遍历检查所有对象，如果还有引用的，就标记为灰色，加入灰色列表。</li>
+<li>取出灰色列表的对象，将其标记为黑色，并将其引用的所有对象标记为灰色，加入灰色列表。</li>
+<li>所有对象标记完成后，设置当前白色为白色 2 。</li>
+<li>遍历所有需要 gc 的对象，如果为白色 1 ，则该对象没有引用，直接清除。如果不为白色 1 ，则将该对象标记为白色 2 。</li>
+<li>所有对象清除完成后，本轮 gc 结束。下轮 gc 则对白色 2 对象进行处理，两种白色交替使用。</li>
+</ul>
+</li>
+</ul>
+<h3 id=gc-阶段>gc 阶段</h3>
 <ul>
 <li>初始化后，gcstate 为 GCSpause 状态，每个状态下 gc 执行步骤的代码为：</li>
 </ul>
@@ -340,7 +361,7 @@ static lu_mem singlestep (lua_State *L) {
     default: lua_assert(0); return 0;
   }
 }
-</code></pre><h2 id=启动阶段gcspause---gcspropagate>启动阶段（GCSpause -> GCSpropagate）</h2>
+</code></pre><h4 id=启动阶段gcspause---gcspropagate>启动阶段（GCSpause -> GCSpropagate）</h4>
 <ul>
 <li>启动阶段主要执行的代码如下：</li>
 </ul>
@@ -423,7 +444,7 @@ static void linkgclist_ (GCObject *o, GCObject **pnext, GCObject **list) {
 </li>
 <li>而对于字符串类型，则是直接将对象标记为黑色。这是因为字符串类型的对象，不会再引用其他的对象，所以不需要再向后延伸。</li>
 </ul>
-<h2 id=传播阶段gcspropagate---gcsenteratomic>传播阶段（GCSpropagate -> GCSenteratomic）</h2>
+<h4 id=传播阶段gcspropagate---gcsenteratomic>传播阶段（GCSpropagate -> GCSenteratomic）</h4>
 <ul>
 <li>传播阶段的代码实现为：</li>
 </ul>
@@ -447,7 +468,7 @@ static lu_mem propagatemark (global_State *g) {
 <li>该阶段执行一次，会将灰色列表的当前对象移除，标记为黑色，并将此对象的 gclist 设置为灰色列表（和启动阶段的设置对应）。之后，对此对象进行遍历，获取其引用的所有对象，标记成灰色，加入灰色列表。</li>
 <li>此后，会重复上面的过程，持续标记过程，直到灰色列表的所有对象都已经标记为黑色，该阶段才算真正完成。</li>
 </ul>
-<h3 id=遍历-table>遍历 table</h3>
+<h5 id=遍历-table>遍历 table</h5>
 <ul>
 <li>遍历检查 table 过程如下：</li>
 </ul>
@@ -519,7 +540,7 @@ static lu_mem traversetable (global_State *g, Table *h) {
 </ul>
 </li>
 </ul>
-<h3 id=遍历-thread>遍历 thread</h3>
+<h5 id=遍历-thread>遍历 thread</h5>
 <ul>
 <li>遍历检查 thread 过程如下：</li>
 </ul>
@@ -574,7 +595,7 @@ static int traversethread (global_State *g, lua_State *th) {
 </ul>
 </li>
 </ul>
-<h2 id=原子阶段gcspropagate---gcsenteratomic>原子阶段（GCSpropagate -> GCSenteratomic）</h2>
+<h4 id=原子阶段gcspropagate---gcsenteratomic>原子阶段（GCSpropagate -> GCSenteratomic）</h4>
 <ul>
 <li>原子阶段主要从头开始，对所有未标记过的对象进行检查标记，再执行一次清扫过程。</li>
 <li>该阶段的标记方法为：</li>
@@ -647,79 +668,80 @@ static GCObject **sweeptolive (lua_State *L, GCObject **p) {
 </code></pre><ul>
 <li>进入清除阶段前，会对 g->allgc 进行清除处理，直到找到第一个还有引用的对象，转为白色后，将其下一个对象设置到 g->sweepgc 上，清除阶段就能直接对 g->sweepgc 进行处理，而不需要都从 g->allgc 开始，也不会影响 g->allgc 的值。</li>
 </ul>
-<h2 id=清除阶段>清除阶段</h2>
-<h1 id=问题>问题</h1>
+<h4 id=清除阶段gcsswpallgc---gcsswpfinobj---gcsswptobefnz---gcsswpend>清除阶段（GCSswpallgc -> GCSswpfinobj -> GCSswptobefnz -> GCSswpend）</h4>
 <ul>
-<li>分步</li>
-<li>原子阶段</li>
-</ul>
-<h1 id=完整-gc>完整 gc</h1>
-<ul>
-<li>lua 提供了方法 collectgarbage(&ldquo;collect&rdquo;) ，开发者可以在自己想要的时候完成一次完整的 gc ，该方法最终的具体调用为：</li>
-</ul>
-<pre tabindex=0><code>// lapi.c
-
-/*
-** Garbage-collection function
-*/
-LUA_API int lua_gc (lua_State *L, int what, ...) {
-  va_list argp;
-  int res = 0;
-  global_State *g;
-  lua_lock(L);
-  g = G(L);
-  va_start(argp, what);
-  switch (what) {
-    ...
-    case LUA_GCCOLLECT: {
-      luaC_fullgc(L, 0);
-      break;
-    }
-    ...
-  }
-  va_end(argp);
-  lua_unlock(L);
-  return res;
-}
-
-</code></pre><pre tabindex=0><code>// lgc.c
-
-void luaC_fullgc (lua_State *L, int isemergency) {
-  global_State *g = G(L);
-  lua_assert(!g-&gt;gcemergency);
-  g-&gt;gcemergency = isemergency;  /* set flag */
-  if (g-&gt;gckind == KGC_INC)
-    fullinc(L, g);
-  else
-    fullgen(L, g);
-  g-&gt;gcemergency = 0;
-}
-</code></pre><ul>
-<li>最终会调用 luaC_fullgc 方法，由于 lua 初始化默认设置为增量式 gc ，因此会执行 fullinc 方法。</li>
+<li>清除阶段主要对几个列表处理，包括 g->allgc 、g->finobj 、g->tobefnz。对 g->sweepgc 进行清除后，再依次将下一个列表设置到 g->sweepgc ，继续处理。清除的代码如下：</li>
 </ul>
 <pre tabindex=0><code>// lgc.c
 
-static void fullinc (lua_State *L, global_State *g) {
-  if (keepinvariant(g))  /* black objects? */
-    entersweep(L); /* sweep everything to turn them back to white */
-  /* finish any pending sweep phase to start a new cycle */
-  luaC_runtilstate(L, bitmask(GCSpause));
-  luaC_runtilstate(L, bitmask(GCScallfin));  /* run up to finalizers */
-  /* estimate must be correct after a full GC cycle */
-  lua_assert(g-&gt;GCestimate == gettotalbytes(g));
-  luaC_runtilstate(L, bitmask(GCSpause));  /* finish collection */
-  setpause(g);
+static int sweepstep (lua_State *L, global_State *g,
+                      int nextstate, GCObject **nextlist) {
+  if (g-&gt;sweepgc) {
+    l_mem olddebt = g-&gt;GCdebt;
+    int count;
+    g-&gt;sweepgc = sweeplist(L, g-&gt;sweepgc, GCSWEEPMAX, &amp;count);
+    g-&gt;GCestimate += g-&gt;GCdebt - olddebt;  /* update estimate */
+    return count;
+  }
+  else {  /* enter next state */
+    g-&gt;gcstate = nextstate;
+    g-&gt;sweepgc = nextlist;
+    return 0;  /* no work done */
+  }
+}
+
+static GCObject **sweeplist (lua_State *L, GCObject **p, int countin,
+                             int *countout) {
+  global_State *g = G(L);
+  int ow = otherwhite(g);
+  int i;
+  int white = luaC_white(g);  /* current white */
+  for (i = 0; *p != NULL &amp;&amp; i &lt; countin; i++) {
+    GCObject *curr = *p;
+    int marked = curr-&gt;marked;
+    if (isdeadm(ow, marked)) {  /* is 'curr' dead? */
+      *p = curr-&gt;next;  /* remove 'curr' from list */
+      freeobj(L, curr);  /* erase 'curr' */
+    }
+    else {  /* change mark to 'white' */
+      curr-&gt;marked = cast_byte((marked &amp; ~maskgcbits) | white);
+      p = &amp;curr-&gt;next;  /* go to next element */
+    }
+  }
+  if (countout)
+    *countout = i;  /* number of elements traversed */
+  return (*p == NULL) ? NULL : p;
 }
 </code></pre><ul>
-<li>可以看到，一次完整的 gc ，主要执行了以下步骤：
+<li>清除的步骤为，检查每个对象的标记：
 <ul>
-<li>如果当前的 gc 循环还没结束，并处在 GCSatomic 状态或之前的状态，则进入到 GCSswpallgc 阶段。</li>
-<li>继续执行后续阶段，直到进入 GCSpause 状态，结束当前的 gc 循环。</li>
-<li>从 GCSpause 状态开始，执行一次完整的 gc 循环。</li>
-<li>更新 GCdebt 的值。</li>
+<li>如果为白色，则表示该对象已经没有引用，将对象释放，并将 g->GCdebt 减去该对象释放的大小。</li>
+<li>如果不为白色，则将该对象的标记设置为新的白色。</li>
 </ul>
 </li>
+<li>每次清除的最大数量为 100 （GCSWEEPMAX）个对象，当前列表完全清除后，才会进入下一个状态清除下一个列表。</li>
+<li>所有列表清除完成后，就切换到 GCSswpend 状态，此时会进行字符串缓存的检查。</li>
 </ul>
+<pre tabindex=0><code>// lgc.c 
+
+static void checkSizes (lua_State *L, global_State *g) {
+  if (!g-&gt;gcemergency) {
+    if (g-&gt;strt.nuse &lt; g-&gt;strt.size / 4) {  /* string table too big? */
+      l_mem olddebt = g-&gt;GCdebt;
+      luaS_resize(L, g-&gt;strt.size / 2);
+      g-&gt;GCestimate += g-&gt;GCdebt - olddebt;  /* correct estimate */
+    }
+  }
+}
+</code></pre><ul>
+<li>常规 gc 时，g->strt.nuse 为字符串缓存表当前 TString 的数量，如果小于当前大小的 1/4 ，则需要将 strt 缩小为当前大小的 1/2 ，</li>
+</ul>
+<h4 id=析构阶段gcsswpend---gcscallfin---gcspause>析构阶段（GCSswpend -> GCScallfin -> GCSpause）</h4>
+<ul>
+<li>析构阶段主要是对 g->tobefnz 列表的 userdata 对象，执行析构函数，每个析构函数等价于 50（GCFINALIZECOST）个 TValue 处理对象。</li>
+<li>处理完成后，就切换到 GCSpause 状态，本次 gc 循环结束。</li>
+</ul>
+<h3 id=图示>图示</h3>
 <hr>
 <ul class=pager>
 <li class=previous>
