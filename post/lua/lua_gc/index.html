@@ -284,6 +284,23 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
 </li>
 </ul>
 </li>
+<li>所有需要 gc 的对象，最终都通过 luaC_newobj 方法创建。</li>
+</ul>
+<pre tabindex=0><code>// lgc.c
+
+GCObject *luaC_newobj (lua_State *L, int tt, size_t sz) {
+  global_State *g = G(L);
+  GCObject *o = cast(GCObject *, luaM_newobject(L, novariant(tt), sz));
+  o-&gt;marked = luaC_white(g);
+  o-&gt;tt = tt;
+  o-&gt;next = g-&gt;allgc;
+  g-&gt;allgc = o;
+  return o;
+}
+</code></pre><ul>
+<li>创建一个新对象，会将其标记为当前的白色，并且会将该对象设置到 g->allgc 列表上，用于后续 gc 处理时进行遍历。
+<img src="/img/Lua/GC/allgc.png?raw=true" alt=allgc.png>
+</li>
 </ul>
 <h3 id=算法流程>算法流程</h3>
 <ul>
@@ -302,9 +319,14 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
 <li>取出灰色列表的对象，将其标记为黑色，并将其引用的所有对象标记为灰色，加入灰色列表。</li>
 <li>所有对象标记完成后，设置当前白色为白色 2 。</li>
 <li>遍历所有需要 gc 的对象，如果为白色 1 ，则该对象没有引用，直接清除。如果不为白色 1 ，则将该对象标记为白色 2 。</li>
-<li>所有对象清除完成后，本轮 gc 结束。下轮 gc 则对白色 2 对象进行处理，两种白色交替使用。</li>
+<li>所有对象清除完成后，本轮 gc 结束。下轮 gc 则对白色 2 对象进行处理，两种白色交替使用。
+<img src="/img/Lua/GC/GC_1.gif?raw=true" alt=GC_1.gif>
+</li>
 </ul>
 </li>
+<li>如上图所示，检查引用从栈和全局表开始，红色箭头表示栈引用的对象，黄色箭头表示全局表引用的对象，绿色箭头表示对象引用的其他对象。</li>
+<li>标记开始时，引用的对象会被标记为灰色，然后下一步处理时变成黑色，并将其引用的对象标记为灰色。循环上面过程，直到将所有引用的对象标记完成。然后遍历 allgc 列表，白色的对象清除，其他对象则重新设置为白色。</li>
+<li>简单来说，lua 的 gc 流程就如图中所示。实际上，lua 的 gc 过程分为几个阶段，具体实现中有许多细节内容。</li>
 </ul>
 <h3 id=gc-阶段>gc 阶段</h3>
 <ul>
@@ -741,7 +763,83 @@ static void checkSizes (lua_State *L, global_State *g) {
 <li>析构阶段主要是对 g->tobefnz 列表的 userdata 对象，执行析构函数，每个析构函数等价于 50（GCFINALIZECOST）个 TValue 处理对象。</li>
 <li>处理完成后，就切换到 GCSpause 状态，本次 gc 循环结束。</li>
 </ul>
-<h3 id=图示>图示</h3>
+<h3 id=单步-gc>单步 GC</h3>
+<ul>
+<li>lua gc 的各个阶段，每次执行都是一次单步 gc 的操作，单步 gc 通过调用 luaC_step 方法实现。单步 gc 的触发方式有：
+<ul>
+<li>lua 中调用 collectgarbage(&ldquo;step&rdquo;) 方法。</li>
+<li>部分操作完成后，调用 luaC_condGC 方法，尝试进行 gc 。相关的操作主要有：
+<ul>
+<li>lua_tolstring ：将栈上的 lua 值转为 c 字符串。</li>
+<li>lua_pushlstring ：将指针指向的指定长度的字符串，转为 lua 字符串后入栈。</li>
+<li>lua_pushstring ：将指针指向的以'\0&rsquo;结尾的字符串，转为 lua 字符串后入栈。</li>
+<li>lua_pushvfstring/lua_pushfstring ：将格式化后的字符串，转为 lua 字符串后入栈。</li>
+<li>lua_pushcclosure ：创建一个 lua 闭包后入栈。</li>
+<li>lua_createtable ：创建一个空表后入栈。</li>
+<li>lua_concat ：字符串拼接。</li>
+<li>lua_newuserdatauv ：创建 userdata 后入栈。</li>
+<li>&mldr;</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>可以看到，在 lua 中创建需要 gc 的对象时，就会尝试进行一次单步 gc 。因此，在整个 lua 运行过程，gc 的过程基本上是一直在背后不断进行的，通常不需要手动调用 collectgarbage(&ldquo;collect&rdquo;) 来进行垃圾回收。</li>
+</ul>
+<h4 id=触发条件>触发条件</h4>
+<ul>
+<li>luaC_condGC 的代码实现如下：</li>
+</ul>
+<pre tabindex=0><code>// lgc.h
+
+#define luaC_condGC(L,pre,pos) \
+	{ if (G(L)-&gt;GCdebt &gt; 0) { pre; luaC_step(L); pos;}; \
+	  condchangemem(L,pre,pos); }
+</code></pre><ul>
+<li>调用 luaC_condGC 方法时，并不是每次都会触发 luaC_step 方法进行单步 gc ，只有当 GCdebt > 0 时，gc 才会继续进行。而 GCdebt 的修改方式有：
+<ul>
+<li>创建新对象的时候，GCdebt 加上新增对象的大小。</li>
+<li>释放对象的时候，GCdebt 会减去释放对象的大小。</li>
+<li>执行 luaC_step 后，如果本轮 gc 没完成，则会修改 GCdebt 的值。</li>
+</ul>
+</li>
+<li>GCdebt 修改的代码如下：</li>
+</ul>
+<pre tabindex=0><code>// lgc.c
+
+static void incstep (lua_State *L, global_State *g) {
+  int stepmul = (getgcparam(g-&gt;gcstepmul) | 1);  /* avoid division by 0 */
+  l_mem debt = (g-&gt;GCdebt / WORK2MEM) * stepmul;
+  l_mem stepsize = (g-&gt;gcstepsize &lt;= log2maxs(l_mem))
+                 ? ((cast(l_mem, 1) &lt;&lt; g-&gt;gcstepsize) / WORK2MEM) * stepmul
+                 : MAX_LMEM;  /* overflow; keep maximum value */
+  do {  /* repeat until pause or enough &quot;credit&quot; (negative debt) */
+    lu_mem work = singlestep(L);  /* perform one single step */
+    debt -= work;
+  } while (debt &gt; -stepsize &amp;&amp; g-&gt;gcstate != GCSpause);
+  if (g-&gt;gcstate == GCSpause)
+    setpause(g);  /* pause until next cycle */
+  else {
+    debt = (debt / stepmul) * WORK2MEM;  /* convert 'work units' to bytes */
+    luaE_setdebt(g, debt);
+  }
+}
+
+/*
+** performs a basic GC step if collector is running
+*/
+void luaC_step (lua_State *L) {
+  global_State *g = G(L);
+  lua_assert(!g-&gt;gcemergency);
+  if (g-&gt;gcrunning) {  /* running? */
+    if(isdecGCmodegen(g))
+      genstep(L, g);
+    else
+      incstep(L, g);
+  }
+}
+</code></pre><ul>
+<li></li>
+</ul>
 <hr>
 <ul class=pager>
 <li class=previous>
