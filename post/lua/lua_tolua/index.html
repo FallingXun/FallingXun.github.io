@@ -1275,8 +1275,20 @@ CSharp侧
 	end
 </code></pre><ul>
 <li>由于这里使用反射获取，会有装拆箱问题，所以最好调用一次后将结果缓存起来。</li>
+<li>对于反射CSharp侧的方法、属性、字段、构造函数，则流程如下：</li>
 </ul>
-<h3 id=64位整型>64位整型</h3>
+<pre tabindex=0><code>	-- 初始化调用一次，注册反射相关Wrap
+	package.preload['tolua.reflection']()
+
+	local type = tolua.findtype(&quot;xxxx类名&quot;)
+	-- 方法调用
+	local method = tolua.gettypemethod(type, &quot;xxxx方法名&quot;)
+	LuaInterface.LuaMethod.Call(method,nil)
+
+	-- 属性调用
+	local property = tolua.getproperty(type, &quot;xxx属性名&quot;)
+    local instance = LuaInterface.LuaProperty.Get(property,nil,nil)
+</code></pre><h3 id=64位整型>64位整型</h3>
 <ul>
 <li>前面提到，在CSharp的 OpenToLuaLibs 方法中，调用了lua侧的 tolua_openlibs 进行初始化库，其中对lua侧的int64和uint64进行了初始化。
 <ul>
@@ -1596,7 +1608,7 @@ sidebar-container">
 <ul class="list-inline text-center">
 </ul>
 <p class="copyright text-muted">
-Copyright &copy; Xun's Blog 2023
+Copyright &copy; Xun's Blog 2024
 <br>
 <a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
 <iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
