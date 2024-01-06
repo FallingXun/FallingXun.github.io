@@ -219,7 +219,7 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
 </li>
 <li>tobefnz
 <ul>
-<li>userdata 对象列表。</li>
+<li>将要执行析构方法的对象列表。</li>
 </ul>
 </li>
 <li>sweepgc
@@ -264,7 +264,7 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
 </li>
 <li>gcpause
 <ul>
-<li>默认为 200（LUAI_GCPAUSE）。</li>
+<li>下一轮 gc 开启时内存需要达到的倍数 * 100 ，默认为 200（LUAI_GCPAUSE）。</li>
 </ul>
 </li>
 <li>gcstepsize
@@ -403,7 +403,7 @@ static void restartcollection (global_State *g) {
 <li>将 lua 栈（g->mainthread）标记为灰色。</li>
 <li>将注册表（g->l_registry）的标记为灰色。</li>
 <li>将 lua 基础类型的元表标记为灰色。</li>
-<li>将 userdata 列表的所有对象标记为灰色。</li>
+<li>将要执行析构方法的列表（g->tobefnz）的所有对象标记为灰色。</li>
 </ul>
 </li>
 <li>其中，标记的方法具体实现为：</li>
@@ -760,8 +760,7 @@ static void checkSizes (lua_State *L, global_State *g) {
 </ul>
 <h3 id=析构阶段gcsswpend---gcscallfin---gcspause>析构阶段（GCSswpend -> GCScallfin -> GCSpause）</h3>
 <ul>
-<li>析构阶段主要是对 g->tobefnz 列表的 userdata 对象，执行析构函数，每个析构函数等价于 50（GCFINALIZECOST）个 TValue 处理对象。</li>
-<li>在这个阶段，还会检查对象是否存在元表，如果存在元表并且存在 __gc 方法，则会调用 __gc 方法。</li>
+<li>析构阶段主要是对 g->tobefnz 列表的，执行析构函数（即元表的 __gc 方法），每个析构函数等价于 50（GCFINALIZECOST）个 TValue 处理对象。</li>
 <li>处理完成后，就切换到 GCSpause 状态，本次 gc 循环结束。</li>
 </ul>
 <h2 id=完整-gc>完整 GC</h2>
@@ -973,6 +972,9 @@ void luaC_barrierback_ (lua_State *L, GCObject *o) {
 <ul>
 <li>总体来说，lua 的 gc 是优化版的标记清除算法，将一个庞大的 gc 过程拆分成多个小步骤，穿插在新对象创建的过程中处理，从而保证了 gc 在尽可能少占用主线程资源的情况下持续推进，实现较好的内存管理。然而，即便是再好的机制，也需要开发者遵循良好的使用规则，例如：尽量不要频繁创建大量的对象，全局表的对象不需要使用的时候进行删除（设置为 nil）等。</li>
 </ul>
+<p>
+<img src="/img/Lua/GC/Lua_GC_xmind.png?raw=true" alt=Lua_GC_xmind.png>
+</p>
 <hr>
 <ul class=pager>
 <li class=previous>
