@@ -259,7 +259,7 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
 </li>
 <li>totalbytes
 <ul>
-<li>已经申请且被收集器补偿的内存字节数，和 GCdebt 相加表示真正申请的总内存。</li>
+<li>已经申请且被收集器补偿的内存字节数，和 GCdebt 相加表示未释放的总内存。</li>
 </ul>
 </li>
 <li>gcpause
@@ -274,12 +274,12 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
 </li>
 <li>gcstepmul
 <ul>
-<li>每一步处理的大小的放大倍数，默认为 100（LUAI_GCMUL）。</li>
+<li>每一步处理的大小的放大倍数，可近似为每单位新增内存需要 gc 处理的内存大小，默认为 100（LUAI_GCMUL）。</li>
 </ul>
 </li>
 <li>GCestimate
 <ul>
-<li>使用中的内存估计大小。</li>
+<li>使用中的内存估计大小，通常为当前未释放的总内存大小，和 gettotalbytes(g) 的值一致。</li>
 </ul>
 </li>
 </ul>
@@ -617,7 +617,7 @@ static int traversethread (global_State *g, lua_State *th) {
 </ul>
 </li>
 </ul>
-<h4 id=原子阶段gcspropagate---gcsenteratomic>原子阶段（GCSpropagate -> GCSenteratomic）</h4>
+<h4 id=原子阶段gcsenteratomic---gcsswpallgc>原子阶段（GCSenteratomic -> GCSswpallgc）</h4>
 <ul>
 <li>原子阶段主要从头开始，对所有未标记过的对象进行检查标记，再执行一次清扫过程。</li>
 <li>该阶段的标记方法为：</li>
@@ -688,7 +688,7 @@ static GCObject **sweeptolive (lua_State *L, GCObject **p) {
   return p;
 }
 </code></pre><ul>
-<li>进入清除阶段前，会对 g->allgc 进行清除处理，直到找到第一个还有引用的对象，转为白色后，将其下一个对象设置到 g->sweepgc 上，清除阶段就能直接对 g->sweepgc 进行处理，而不需要都从 g->allgc 开始，也不会影响 g->allgc 的值。</li>
+<li>进入清除阶段前，会对 g->allgc 进行清除处理，直到找到第一个还有引用的对象，转为白色后，将其下一个对象设置到 g->sweepgc 上。经过一次清除处理后到进入清除阶段之间创建的新对象，就能直接跳过，因为这些在标记结束后的新对象需要在下一轮 gc 中才会处理，避免占用本轮 gc 处理的对象数量。</li>
 </ul>
 <h4 id=清除阶段gcsswpallgc---gcsswpfinobj---gcsswptobefnz---gcsswpend>清除阶段（GCSswpallgc -> GCSswpfinobj -> GCSswptobefnz -> GCSswpend）</h4>
 <ul>
@@ -761,7 +761,35 @@ static void checkSizes (lua_State *L, global_State *g) {
 <h4 id=析构阶段gcsswpend---gcscallfin---gcspause>析构阶段（GCSswpend -> GCScallfin -> GCSpause）</h4>
 <ul>
 <li>析构阶段主要是对 g->tobefnz 列表的 userdata 对象，执行析构函数，每个析构函数等价于 50（GCFINALIZECOST）个 TValue 处理对象。</li>
+<li>在这个阶段，还会检查对象是否存在元表，如果存在元表并且存在 __gc 方法，则会调用 __gc 方法。</li>
 <li>处理完成后，就切换到 GCSpause 状态，本次 gc 循环结束。</li>
+</ul>
+<h3 id=完整-gc>完整 GC</h3>
+<ul>
+<li>一次完整的 GC ，可以通过调用 lua 提供的 collectgarbage(&ldquo;collect&rdquo;) 方法实现。</li>
+</ul>
+<pre tabindex=0><code>// lgc.c 
+
+static void fullinc (lua_State *L, global_State *g) {
+  if (keepinvariant(g))  /* black objects? */
+    entersweep(L); /* sweep everything to turn them back to white */
+  /* finish any pending sweep phase to start a new cycle */
+  luaC_runtilstate(L, bitmask(GCSpause));
+  luaC_runtilstate(L, bitmask(GCScallfin));  /* run up to finalizers */
+  /* estimate must be correct after a full GC cycle */
+  lua_assert(g-&gt;GCestimate == gettotalbytes(g));
+  luaC_runtilstate(L, bitmask(GCSpause));  /* finish collection */
+  setpause(g);
+}
+</code></pre><ul>
+<li>当调用一次完整 GC 时，操作流程如下：
+<ul>
+<li>如果当前状态在 GCSatomic 之前，即还未开始原子阶段的清除操作，则会进行原子阶段的清除操作。</li>
+<li>将当前 gc 持续执行，直到当前状态为 GCSpause ，即完成上一轮未结束的 gc 。</li>
+<li>再重新触发 gc ，同样执行到这一轮 gc 结束。</li>
+</ul>
+</li>
+<li>可以看到，一次完整的 GC ，需要不间断地完成上一轮和新的一轮操作，这个过程耗时将会随着内存增大而增大。如果在使用过程中，每次 gc 都需要占用较长的一段时间，则会经常出现主线程卡住的情况。因此，lua 中采用了单步 GC ，来优化这种情况。</li>
 </ul>
 <h3 id=单步-gc>单步 GC</h3>
 <ul>
@@ -838,7 +866,112 @@ void luaC_step (lua_State *L) {
   }
 }
 </code></pre><ul>
-<li></li>
+<li>修改的过程为：
+<ul>
+<li>通过 g->GCdebt / WORK2MEM ，将当前的 GCdebt 值转化为 TValue 的数量，表示本轮 gc 需要处理的数量 debt 。</li>
+<li>将上一步得到的 TValue 的个数，乘上 g->gcstepmul 倍数值，即将本轮 gc 处理的数量进行放大。</li>
+<li>通过 cast(l_mem, 1) &#171; g->gcstepsize 得到单步需要处理的大小，同样转化为 TValue 数量后再乘上倍数，表示单步 gc 处理的数量 stepsize。</li>
+<li>执行 singlestep 方法，得到处理的 TValue 数量 work ，将 debt 减去 work ，重复执行，结束循环条件有两个：
+<ul>
+<li>当前状态为 GCSpause ，即本轮 gc 已经完成。</li>
+<li>当前状态不为 GCSpause ，本次 gc 处理的对象已经达到上限，需要等下一次触发。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>gc 完成时，会调用 setpause 方法修改 g->GCdebt 的值，从而调整下一次 gc 触发的所需新增的内存值。</li>
+</ul>
+<pre tabindex=0><code>// lgc.c
+
+static void setpause (global_State *g) {
+  l_mem threshold, debt;
+  int pause = getgcparam(g-&gt;gcpause);
+  l_mem estimate = g-&gt;GCestimate / PAUSEADJ;  /* adjust 'estimate' */
+  lua_assert(estimate &gt; 0);
+  threshold = (pause &lt; MAX_LMEM / estimate)  /* overflow? */
+            ? estimate * pause  /* no overflow */
+            : MAX_LMEM;  /* overflow; truncate to maximum */
+  debt = gettotalbytes(g) - threshold;
+  if (debt &gt; 0) debt = 0;
+  luaE_setdebt(g, debt);
+}
+</code></pre><ul>
+<li>新的 g->GCdebt 值为当前未释放的总大小减去阈值， 而阈值为 g->GCestimate / PAUSEADJ * pause ，其中：
+<ul>
+<li>g->GCestimate 和 gettotalbytes(g) 一样，表示当前未释放的总内存。</li>
+<li>PAUSEADJ 默认值为 100 。</li>
+<li>pause 为 LUAI_GCPAUSE ，默认值为 200 。</li>
+</ul>
+</li>
+<li>因此，阈值为当前未释放总内存的两倍，则 g->GCdebt 会为当前未释放总内存的负数值，也就是说，下一次 gc 开始需要等到内存值达到当前的 2 倍。</li>
+<li>当内存值较小时，单步 gc 通常能完成所有阶段。随着内存慢慢增大，单步 gc 只能处理一部分阶段，甚至只能处理一个阶段里的一部分对象。此时，每一步能处理的大小为 debt + stepsize ，其中：
+<ul>
+<li>debt 为当前 g->GCdebt 转化为 TValue 个数后，放大 g->gcstepmul 的结果。</li>
+<li>stepsize 为 g->gcstepsize 转化为 TValue 个数后，放大 g->gcstepmul 的结果。</li>
+</ul>
+</li>
+<li>由于 g->GCdebt 是增加到正数时，就会触发 gc ，因此，此时的 g->GCdebt 通常为 1 个 TValue 大小的值，而 g->gcstepsize 为 8 KB 。相比较于 g->gcstepsize ，g->GCdebt 可以近似为 0，也就是说，每一步能处理的大小近似为 g->gcstepsize 放大 g->gcstepmul ，即 8KB * 100 。</li>
+<li>当单步 gc 达到上限值后，同样会修改 g->GCdebt 的值，此时 debt 同样近似 -stepsize ，因此，g->GCdebt 会设置为近似 -8 KB ，即下一次 gc 开始需要等到内存值增加超过 8 KB。</li>
+<li>可以看到，当单步 gc 无法完成一次完整 gc 时，可以近似认为，内存每增加 8 KB，就会处理 800 KB 的对象，也就是说，g->gcstepmul 代表了每单位新增内存需要 gc 处理的内存大小。</li>
+<li>然而，当未释放的内存大小超过上限值的一半时，阈值会设置为内存上限值大小，从而 debt 会慢慢接近 0 ，即下次 gc 触发所需的内存增加值会越来越小，也就是说，gc 会越来越频繁。</li>
+<li>总体来说，如果本轮 gc 未结束，则每次内存新增 8KB 就会触发一次 gc ，直到本轮 gc 结束，则等到内存值达到当前的 2 倍时，会开启新的一轮 gc 。</li>
+</ul>
+<h4 id=存在问题>存在问题</h4>
+<ul>
+<li>一次完整的 gc ，其耗时会随着内存增大而增大，因为内存增大代表需要遍历处理的对象增多，为了避免 gc 引起阻塞，lua 中将 gc 设计成分步 gc 的形式。然而，分步同样也带来了新的问题。由于传播过程是分步执行的，每一步执行过后，都有可能会创建新的对象，并被某些对象引用，此时新对象会设置为白色。如果引用的对象为黑色，表示该对象已经标记完成，子对象也已经加入灰色列表，因此新对象将不会再被标记，在清除阶段，则会被当作不再引用的对象清掉。</li>
+<li>为了避免出现这种问题，lua 提供了设置屏障的方法，来阻挡 gc 过程，保证新对象能够被正确处理，有两种屏障设置方法：
+<ul>
+<li>luaC_barrier_</li>
+<li>luaC_barrierback_</li>
+</ul>
+</li>
+</ul>
+<pre tabindex=0><code>// lgc.c
+
+void luaC_barrier_ (lua_State *L, GCObject *o, GCObject *v) {
+  global_State *g = G(L);
+  lua_assert(isblack(o) &amp;&amp; iswhite(v) &amp;&amp; !isdead(g, v) &amp;&amp; !isdead(g, o));
+  if (keepinvariant(g)) {  /* must keep invariant? */
+    reallymarkobject(g, v);  /* restore invariant */
+    if (isold(o)) {
+      lua_assert(!isold(v));  /* white object could not be old */
+      setage(v, G_OLD0);  /* restore generational invariant */
+    }
+  }
+  else {  /* sweep phase */
+    lua_assert(issweepphase(g));
+    if (g-&gt;gckind == KGC_INC)  /* incremental mode? */
+      makewhite(g, o);  /* mark 'o' as white to avoid other barriers */
+  }
+}
+
+void luaC_barrierback_ (lua_State *L, GCObject *o) {
+  global_State *g = G(L);
+  lua_assert(isblack(o) &amp;&amp; !isdead(g, o));
+  lua_assert((g-&gt;gckind == KGC_GEN) == (isold(o) &amp;&amp; getage(o) != G_TOUCHED1));
+  if (getage(o) == G_TOUCHED2)  /* already in gray list? */
+    set2gray(o);  /* make it gray to become touched1 */
+  else  /* link it in 'grayagain' and paint it gray */
+    linkobjgclist(o, g-&gt;grayagain);
+  if (isold(o))  /* generational mode? */
+    setage(o, G_TOUCHED1);  /* touched in current cycle */
+}
+</code></pre><ul>
+<li>其中，新对象 v 为白色，父对象 o 为黑色。
+<ul>
+<li>luaC_barrier_ 方法，如果当前 gc 状态在 GCSatomic 之前，则将新对象标记为灰色，加入到 g->gray 列表中。如果已经进入清除阶段，则将父对象设置为白色。通常用于引用关系变化较少的情况，如： metatable 的创建和设置。</li>
+<li>luaC_barrierback_ 方法，则将父对象标记为灰色，加入到 g->grayagain 列表中。通常用于引用欢喜变化频繁的情况，如：table 的 key-value 对象创建修改。</li>
+</ul>
+</li>
+<li>当父对象已经为黑色时，为了避免新对象被清除，就需要通过 luaC_barrier_ 方法，将新对象也标记为灰色，进入到本轮 gc 标记处理过程。然而，这个新对象从灰色列表取出前，可能已经不被父对象引用，那这个新对象都不需要修改标记，只要保持白色等待被清除即可。</li>
+<li>以 table 为例，当 table 被标记为黑色后，创建了一个新的对象 value1 ，设置到 table[key] 上，之后又创建了一个新对象 value2 ，设置到 table[key] 上。当这个过程非常频繁时，就会出现大量的对象加入到 g->gray 列表，增加了标记过程的持续时间。</li>
+<li>为了避免这种情况，可以把新对象的父对象，即把 table 标记为灰色，加入到 g->gray 列表中，这样就只需要对 table 重新标记。然而，这种情况下，仍可能出现，table 刚从灰色标记为黑色，又因为引用关系修改，再标记为灰色，而后再标记为黑色，又因为引用关系修改，在黑色和灰色之间频繁变化。</li>
+<li>基于这种情况，luaC_barrierback_ 方法将对象加入到 g->grayagain 列表中，而 g->grayagain 在原子阶段中，会将所有对象都处理完成后才会结束。g->grayagain 列表存放的对象表示会频繁变换标记颜色，如果对 g->grayagain 列表中的对象进行分步处理，则 g->grayagain 列表就会变成和 g->gray 列表一样，对象会反复在黑色和灰色之间变换，从而造成处理周期增长，影响性能。</li>
+<li>因此，原子阶段是必不可少的。传播阶段尽可能将对象标记过程分摊成多次 gc 步骤，再由原子阶段不中断地将剩下所有对象标记完成，才能顺利过渡到清除阶段。</li>
+</ul>
+<h3 id=总结>总结</h3>
+<ul>
+<li>总体来说，lua 的 gc 是优化版的标记清除算法，将一个庞大的 gc 过程拆分成多个小步骤，穿插在新对象创建的过程中处理，从而保证了 gc 在尽可能少占用主线程资源的情况下持续推进，实现较好的内存管理。然而，即便是再好的机制，也需要开发者遵循良好的使用规则，例如：尽量不要频繁创建大量的对象，全局表的对象不需要使用的时候进行删除（设置为 nil）等。</li>
 </ul>
 <hr>
 <ul class=pager>
