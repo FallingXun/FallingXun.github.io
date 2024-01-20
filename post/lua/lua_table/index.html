@@ -1117,6 +1117,77 @@ static int luaB_pairs (lua_State *L) {
     end
     return func, table, nil
   end
+</code></pre><ul>
+<li>没有 __pairs 方法时，则使用 luaB_next 返回，其实现为：</li>
+</ul>
+<pre tabindex=0><code>// lbaselib.c
+
+static int luaB_next (lua_State *L) {
+  luaL_checktype(L, 1, LUA_TTABLE);
+  lua_settop(L, 2);  /* create a 2nd argument if there isn't one */
+  if (lua_next(L, 1))
+    return 2;
+  else {
+    lua_pushnil(L);
+    return 1;
+  }
+}
+</code></pre><pre tabindex=0><code>// lapi.c
+
+LUA_API int lua_next (lua_State *L, int idx) {
+  Table *t;
+  int more;
+  lua_lock(L);
+  api_checknelems(L, 1);
+  t = gettable(L, idx);
+  more = luaH_next(L, t, L-&gt;top - 1);
+  if (more) {
+    api_incr_top(L);
+  }
+  else  /* no more elements */
+    L-&gt;top -= 1;  /* remove key */
+  lua_unlock(L);
+  return more;
+}
+</code></pre><pre tabindex=0><code>// ltable.c
+
+int luaH_next (lua_State *L, Table *t, StkId key) {
+  unsigned int asize = luaH_realasize(t);
+  unsigned int i = findindex(L, t, s2v(key), asize);  /* find original key */
+  for (; i &lt; asize; i++) {  /* try first array part */
+    if (!isempty(&amp;t-&gt;array[i])) {  /* a non-empty entry? */
+      setivalue(s2v(key), i + 1);
+      setobj2s(L, key + 1, &amp;t-&gt;array[i]);
+      return 1;
+    }
+  }
+  for (i -= asize; cast_int(i) &lt; sizenode(t); i++) {  /* hash part */
+    if (!isempty(gval(gnode(t, i)))) {  /* a non-empty entry? */
+      Node *n = gnode(t, i);
+      getnodekey(L, s2v(key), n);
+      setobj2s(L, key + 1, gval(n));
+      return 1;
+    }
+  }
+  return 0;  /* no more elements */
+}
+
+static unsigned int findindex (lua_State *L, Table *t, TValue *key,
+                               unsigned int asize) {
+  unsigned int i;
+  if (ttisnil(key)) return 0;  /* first iteration */
+  i = ttisinteger(key) ? arrayindex(ivalue(key)) : 0;
+  if (i - 1u &lt; asize)  /* is 'key' inside array part? */
+    return i;  /* yes; that's the index */
+  else {
+    const TValue *n = getgeneric(t, key);
+    if (unlikely(isabstkey(n)))
+      luaG_runerror(L, &quot;invalid key to 'next'&quot;);  /* key not found */
+    i = cast_int(nodefromval(n) - gnode(t, 0));  /* key index in hash table */
+    /* hash elements are numbered after array ones */
+    return (i + 1) + asize;
+  }
+}
 </code></pre><h4 id=ipairs>ipairs</h4>
 <ul>
 <li>ipairs 方法的代码如下：</li>
