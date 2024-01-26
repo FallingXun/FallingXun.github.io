@@ -141,6 +141,9 @@ post-container">
 <li>因此，需要得到模型空间到顶点绑定的关节空间的变换矩阵，即关节空间到模型空间的变换矩阵的逆矩阵，因此关节中会直接存储逆矩阵数据，从而减少求逆计算过程，则蒙皮矩阵可以表示为：
 <img src="/img/Render/Animation/Math_GPUSkinning_1.png?raw=true" alt=Math_GPUSkinning_1.png>
 </li>
+<li>如果将模型导入到游戏引擎 Unity 后，根关节的信息即为世界空间下的信息，由于 Unity 中的每个 Transform 都已经提供了局部空间变换到世界空间的变换矩阵（localToWorldMatrix），因此绑定姿势逆矩阵变换后得到的关节局部空间，可以直接变换到世界空间，省去了中间逐级转换的过程，则蒙皮矩阵可以表示为：
+<img src="/img/Render/Animation/Math_GPUSkinning_3.png?raw=true" alt=Math_GPUSkinning_3.png>
+</li>
 </ul>
 <h4 id=权重>权重</h4>
 <ul>
@@ -177,12 +180,13 @@ post-container">
 <ul>
 <li>CPU 将当前需要播放的动作起止帧索引，以及当前时间需要播放第几帧，传到 GPU 中。</li>
 <li>通过顶点 uv 读取当前顶点绑定的所有关节索引及对应权重。</li>
-<li>计算当前需要采样的纹理 uv 。</li>
+<li>计算当前动作当前帧需要采样的纹理 uv 。</li>
 <li>采样离线生成的矩阵纹理，得到蒙皮矩阵信息。</li>
 <li>使用蒙皮矩阵对顶点坐标、法线、切线进行变换，得到当前空间下的对应信息。</li>
 <li>将变换后的信息传到像素着色器中，采样模型纹理并输出最终颜色。</li>
 </ul>
 </li>
+<li>如果使用了实时阴影，生成 ShadowMap 时，需要对应的顶点、法线数据，所以需要在另一个 Pass 中进行采样计算，因此采样次数会翻倍。由于阴影不需要有那么多显示细节，所以可以选择使用简化后的网格，从而可以减少采样次数。而骨骼可以沿用，因此矩阵纹理可以共用。</li>
 </ul>
 <h3 id=参考>参考</h3>
 <ul>
