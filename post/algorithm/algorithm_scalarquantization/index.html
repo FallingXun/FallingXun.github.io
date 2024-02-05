@@ -1,0 +1,334 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="算法篇 — Scalar Quantization">
+<meta property="og:title" content="算法篇 — Scalar Quantization">
+<meta property="twitter:title" content="算法篇 — Scalar Quantization">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>算法篇 — Scalar Quantization-</title>
+<link rel=canonical href=/post/algorithm/algorithm_scalarquantization/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+<li>
+<a href=/categories/googleplay%E7%B3%BB%E5%88%97>googleplay系列</a>
+</li>
+<li>
+<a href=/categories/lua%E7%B3%BB%E5%88%97>lua系列</a>
+</li>
+<li>
+<a href=/categories/tmp%E7%B3%BB%E5%88%97>tmp系列</a>
+</li>
+<li>
+<a href=/categories/unity%E7%B3%BB%E5%88%97>unity系列</a>
+</li>
+<li>
+<a href=/categories/%E5%9B%BE%E5%BD%A2%E5%AD%A6%E7%B3%BB%E5%88%97>图形学系列</a>
+</li>
+<li>
+<a href=/categories/%E6%B8%B2%E6%9F%93%E7%B3%BB%E5%88%97>渲染系列</a>
+</li>
+<li>
+<a href=/categories/%E7%AE%97%E6%B3%95%E7%B3%BB%E5%88%97>算法系列</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/algorithm title=Algorithm>
+Algorithm
+</a>
+</div>
+<h1>算法篇 — Scalar Quantization</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Friday, February 2, 2024
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>标量量化（Scalar Quantization）是数字信号处理中一个基本而重要的概念，它在数据压缩和信号表示方面发挥着关键作用。</p>
+<h2 id=简介>简介</h2>
+<ul>
+<li>游戏开发过程中，数据读取和存储必不可少的环节，通常会要求读取的速度要快。然而，对于数据量较大的情况，还会对数据大小进行考量。尤其是在移动设备上，数据文件大小不仅影响安装包的大小，同时还会影响内存的占用大小。因此，开发者通常会对数据进行一定程度的调整，增加量化的过程，将多个数据合并成一个，读取时再对其进行解码，从而实现对数据的压缩。</li>
+<li>将一组连续的实数映射到一组整数，这个过程称为量化。通过一组间隔将数据进行划分，并为每个间隔分配一个整数值来进行量化。而当需要解码时，将每个整数映射回表示间隔的标量值。</li>
+</ul>
+<h2 id=整数量化>整数量化</h2>
+<ul>
+<li>整型数据在内存中的表示为：
+<img src="/img/Algorithm/ScalarQuantization/ScalarQuantization_3.png?raw=true" alt=ScalarQuantization_3.png>
+</li>
+<li>对整数进行量化往往比较简单，通常会以二进制或十进制格式进行处理。例如：
+<ul>
+<li>有个大小为 1024 x 1024 的地图，每个格子有 2 种加成效果，每种加成效果有不同的数值。
+<ul>
+<li>1-攻击加成 ：0 ~ 99</li>
+<li>2-防御加成 ：0 ~ 99</li>
+<li>3-速度加成 ：0 ~ 99</li>
+<li>4-生命加成 ：0 ~ 99</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>为了存储整个地图的每种加成数据，需要一个二维数组，即：</li>
+</ul>
+<pre tabindex=0><code>    uint[][] buff1 = new uint[1024][1024];
+    uint[][] buff2 = new uint[1024][1024];
+    uint[][] buff3 = new uint[1024][1024];
+    uint[][] buff4 = new uint[1024][1024];
+    for(int y = 0; y &lt; 1024; y++)
+    {
+        for(int x = 0; x &lt; 1024; x++)
+        {
+            buff1[x][y] = 90;
+            buff2[x][y] = 80;
+            buff3[x][y] = 70;
+            buff4[x][y] = 60;
+        }
+    }
+</code></pre><ul>
+<li>可以看到，整个地图的加成数据，使用的 uint 大小为 1024 * 1024 * 4 * 4 / 1024 / 1024 = 16 MB 。为了对数据进行压缩，可以进行量化，量化方式可以以十进制或者二进制方式进行。</li>
+</ul>
+<h3 id=十进制>十进制</h3>
+<ul>
+<li>以十进制量化，相对比较直观，由于加成值为 0 ~ 99 ，可以使用每 2 位作为保存，即
+<img src="/img/Algorithm/ScalarQuantization/ScalarQuantization_1.png?raw=true" alt=ScalarQuantization_1.png>
+</li>
+</ul>
+<pre tabindex=0><code>    uint[][] buff = new uint[1024][1024];
+    for(int y = 0; y &lt; 1024; y++)
+    {
+        for(int x = 0; x &lt; 1024; x++)
+        {
+            buff[x][y] = buff1[x][y] * 100 ^ 0 + buff2[x][y] * 100 ^ 1 + buff3[x][y] * 100 ^ 2 + buff4[x][y] * 100 ^ 3
+        }
+    }
+</code></pre><ul>
+<li>十进制的每两位用于保存一个 buff 加成数据，读取的时候再根据 buff 所在的位进行读取，例如，buff2 使用百位和千位记录，则读取方式为：</li>
+</ul>
+<pre tabindex=0><code>    int x = 100;
+    int y = 100;
+    uint buff2_100_100 = buff[100][100] % 10000 / 100;
+</code></pre><h3 id=二进制>二进制</h3>
+<ul>
+<li>二进制量化，和十进制量化类似，也是按位进行划分，使用每 8 位保存一个数据，即
+<img src="/img/Algorithm/ScalarQuantization/ScalarQuantization_2.png?raw=true" alt=ScalarQuantization_2.png>
+</li>
+</ul>
+<pre tabindex=0><code>    uint[][] buff = new uint[1024][1024];
+    for(int y = 0; y &lt; 1024; y++)
+    {
+        for(int x = 0; x &lt; 1024; x++)
+        {
+            buff[x][y] = buff1[x][y] | (buff2[x][y] &lt;&lt; 8) | (buff3[x][y] &lt;&lt; 16) | (buff4[x][y] &lt;&lt; 24)
+        }
+    }
+</code></pre><ul>
+<li>二进制的每八位用于保存一个 buff 加成数据，范围为 0 ~ 127，读取方式为：</li>
+</ul>
+<pre tabindex=0><code>    int x = 100;
+    int y = 100;
+    uint buff2_100_100 = buff[100][100] &amp; (127 &lt;&lt; 8);
+</code></pre><h2 id=浮点数量化>浮点数量化</h2>
+<h3 id=内存表示>内存表示</h3>
+<ul>
+<li>浮点型数据的在内存中的表示为：
+<img src="/img/Algorithm/ScalarQuantization/ScalarQuantization_4.png?raw=true" alt=ScalarQuantization_4.png>
+<img src="/img/Algorithm/ScalarQuantization/ScalarQuantization_5.png?raw=true" alt=ScalarQuantization_5.png>
+</li>
+<li>相比与整型，浮点型将值分为指数部分和有效数字部分。
+<ul>
+<li>指数有正负，采用 The Biased exponent（有偏指数），根据 IEEE754 规定，2 ^ (e - 1) - 1 对应的的值为 0 ，其中 e 为指数的位数。大于这个值的为正数（即小数点左移），小于这个值的为负数（即小数点右移）。
+<ul>
+<li>对于单精度浮点数，2 ^ (8 - 1) - 1 = 127 为 0 。</li>
+<li>对于双精度浮点数，2 ^ (11 - 1) - 1 = 1023 为 0 。</li>
+</ul>
+</li>
+<li>有效数字（significand）部分，IEEE754 规定，在二进制数中，将小数点前面的值固定为 1，因此可以省略不存，只存小数点后的数，而可以多存 1 位，这种形式的浮点数为规范化浮点数。例如：
+<ul>
+<li>十进制数 ： 0.625</li>
+<li>二进制数 ： 0.101
+<ul>
+<li>十进制小数部分 * 2，大于 1 则当前位为 1 ，否则为 0 。继续取小数部分计算，直到小数部分为 0 。</li>
+<li>转为十进制时，即每一位使用 2 ^ n 表示后进行累加，其中小数点后的 n 为负数。</li>
+</ul>
+</li>
+<li>内存中 ： 0 0111 1110 0100 0000 0000 0000 0000 000
+<ul>
+<li>正数，符号位为 0。</li>
+<li>小数点右移 1 位，小数点前为 1 ，指数部分为 127 - 1 = 126 ，即 0111 1110 。</li>
+<li>有效数字部分，即小数点移动后，小数点后的数，即 0100 0000 0000 0000 0000 000 。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>当数字较小时，小数部分的后面几位对整体的影响较大，随着数字的逐渐增大，影响会越来越小，有效数字中代表小数部分的位数也会越来越小，这种情况下的精度误差通常也符合实际使用需求，也能被接受。</li>
+</ul>
+<h3 id=误差>误差</h3>
+<ul>
+<li>根据浮点数的二进制转化规则，可以发现，一个简单的十进制数，在内存中不一定能准确表示，如：
+<ul>
+<li>十进制数 ： 0.1</li>
+<li>二进制数 ： 0.0001 1001 1001 1001 1001 1001 1001 1001 &mldr;</li>
+<li>内存中 ： 0 0111 1011 1001 1001 1001 1001 1001 101 （即 0.1000 0000 1490 1161 19）</li>
+</ul>
+</li>
+<li>可以看到，0.1 在二进制中的表示，是一个无限循环的数，而内存中的位数是有限的，所以超出的位数只能舍去。这也是浮点数计算中总会出现误差的根本原因。</li>
+<li>假设小数部分的存储方式和整数部分一样，n 也为非负数，小数点后有限位数为 3 ，则对应二进制位数需要为 10 ，其中最后一位为 0 ，则：
+<ul>
+<li>十进制数 ： 0.1</li>
+<li>二进制数 ： 0.0001 1001 00</li>
+<li>内存中 ： 0 0111 1011 0000 0000 0000 0000 0000 000</li>
+</ul>
+</li>
+<li>可以发现，在这种方式下，大部分小数都能够没有误差地表示，因为使用了乘法替代了除法，从而使得有限位数的小数部分得以连续表示，某种程度上来说，更加便于开发者理解和使用。</li>
+<li>然而，随着数字的增大，当有效数字部分仅剩最后一位代表小数部分时，则有：
+<ul>
+<li>内存中 ： 0 1001 0101 0000 0000 0000 0000 0000 000
+<ul>
+<li>二进制范围 ：1000 0000 0000 0000 0000 000.0000 0000 00 ~ 1000 0000 0000 0000 0000 000.0111 1111 11</li>
+<li>十进制范围 ： 4194304.0 ~ 4194304.511</li>
+</ul>
+</li>
+<li>内存中 ： 0 1001 0101 0000 0000 0000 0000 0000 001
+<ul>
+<li>二进制范围 ：1000 0000 0000 0000 0000 000.0111 1111 11 ~ 1000 0000 0000 0000 0000 000.1111 1001 11</li>
+<li>十进制范围 ： 4194304.512 ~ 4194304.999</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>此时，内存中连续的两个值，代表了不同范围的区间，所以这种方式可能会导致其他更糟糕的误差情况出现。然而，如果使用浮点数的方式，则
+<ul>
+<li>内存中 ： 0 1001 0101 0000 0000 0000 0000 0000 000
+<ul>
+<li>二进制范围 ：1000 0000 0000 0000 0000 000.0000 0000 &mldr; ~ 1000 0000 0000 0000 0000 000.0111 1111 &mldr;</li>
+<li>十进制范围 ： 4194304.0 ~ 4194304.499&mldr;</li>
+</ul>
+</li>
+<li>内存中 ： 0 1001 0101 0000 0000 0000 0000 0000 001
+<ul>
+<li>二进制范围 ：1000 0000 0000 0000 0000 000.1000 0000 &mldr; ~ 1000 0000 0000 0000 0000 000.1111 1111 &mldr;</li>
+<li>十进制范围 ： 4194304.5 ~ 4194304.999&mldr;</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>因此，对于单精度浮点数来说，有效数字最大能表示 2 ^ (23 + 1) = 16777216 ，即只能保证 7 位有效数字，双精度浮点数最大能 2 ^ (52 + 1) = 9007199254740992 ，即能保证 16 位有效数字。</li>
+</ul>
+<h3 id=量化方式>量化方式</h3>
+<h4 id=tl>TL</h4>
+<h4 id=tc>TC</h4>
+<h4 id=rl>RL</h4>
+<h4 id=rc>RC</h4>
+<h2 id=参考>参考</h2>
+<ul>
+<li><a href=https://en.wikipedia.org/wiki/IEEE_754#cite_note-10>WIKIPEDIA IEEE754</a></li>
+<li><a href=http://number-none.com/product/Scalar%20Quantization/index.html>Scalar Quantization</a></li>
+</ul>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/render/animation/animation_gpuskinning/ data-toggle=tooltip data-placement=top title="动画篇 — GPU Skinning">&larr;
+Previous Post</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2024
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>
