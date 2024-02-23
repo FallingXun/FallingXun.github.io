@@ -273,10 +273,416 @@ post-container">
 <li>因此，对于单精度浮点数来说，有效数字最大能表示 2 ^ (23 + 1) = 16777216 ，即只能保证 7 位有效数字，双精度浮点数最大能 2 ^ (52 + 1) = 9007199254740992 ，即能保证 16 位有效数字。</li>
 </ul>
 <h3 id=量化方式>量化方式</h3>
+<ul>
+<li>浮点数量化的编码方式有：
+<ul>
+<li>T ：截断，即把输入值乘以缩放因子，截断结果的小数部分，得到整数值。</li>
+<li>R ：四舍五入，即把输入值乘以缩放因子，对结果四舍五入，得到整数值。</li>
+</ul>
+</li>
+<li>解码方式有：
+<ul>
+<li>L ：左重建，即把编码后的整数值，除以缩放因子，得到浮点数值。</li>
+<li>C ：中心重建，即把编码后的整数值，加上 0.5 后，再除以缩放因子，得到浮点数值。</li>
+</ul>
+</li>
+</ul>
 <h4 id=tl>TL</h4>
+<ul>
+<li>TL 的实现大致如下：</li>
+</ul>
+<pre tabindex=0><code>    const int NSTEPS = 64;
+    int encoded = (int)(input * NSTEPS);
+    if (encoded &gt; NSTEPS - 1)
+    {
+        encoded = NSTEPS - 1;
+    }
+</code></pre><pre tabindex=0><code>    const float STEP_SIZE = (1.0f / NSTEPS);
+    float decoded = encoded * STEP_SIZE;
+</code></pre><ul>
+<li>其中，NSTEPS 为缩放因子，input 为 [0 , 1] 区间的输入值，encoded 为编码后的值，decoded 为解码后的值。</li>
+<li>示例数据如下：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style=text-align:center>输入值（input）</th>
+<th style=text-align:center>编码值（encoded）</th>
+<th style=text-align:center>解码值（decoded）</th>
+<th style=text-align:center>偏差值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style=text-align:center>0.0</td>
+<td style=text-align:center>0</td>
+<td style=text-align:center>0.0</td>
+<td style=text-align:center>0.0</td>
+</tr>
+<tr>
+<td style=text-align:center>0.1</td>
+<td style=text-align:center>6</td>
+<td style=text-align:center>0.09375</td>
+<td style=text-align:center>-0.00625</td>
+</tr>
+<tr>
+<td style=text-align:center>0.2</td>
+<td style=text-align:center>12</td>
+<td style=text-align:center>0.1875</td>
+<td style=text-align:center>-0.0125</td>
+</tr>
+<tr>
+<td style=text-align:center>0.3</td>
+<td style=text-align:center>19</td>
+<td style=text-align:center>0.296875</td>
+<td style=text-align:center>-0.003125</td>
+</tr>
+<tr>
+<td style=text-align:center>0.4</td>
+<td style=text-align:center>25</td>
+<td style=text-align:center>0.390625</td>
+<td style=text-align:center>-0.009375</td>
+</tr>
+<tr>
+<td style=text-align:center>0.5</td>
+<td style=text-align:center>32</td>
+<td style=text-align:center>0.5</td>
+<td style=text-align:center>0</td>
+</tr>
+<tr>
+<td style=text-align:center>0.6</td>
+<td style=text-align:center>38</td>
+<td style=text-align:center>0.59375</td>
+<td style=text-align:center>-0.00625</td>
+</tr>
+<tr>
+<td style=text-align:center>0.7</td>
+<td style=text-align:center>44</td>
+<td style=text-align:center>0.6875</td>
+<td style=text-align:center>-0.0125</td>
+</tr>
+<tr>
+<td style=text-align:center>0.8</td>
+<td style=text-align:center>51</td>
+<td style=text-align:center>0.796875</td>
+<td style=text-align:center>-0.003125</td>
+</tr>
+<tr>
+<td style=text-align:center>0.9</td>
+<td style=text-align:center>57</td>
+<td style=text-align:center>0.890625</td>
+<td style=text-align:center>-0.009375</td>
+</tr>
+<tr>
+<td style=text-align:center>1.0</td>
+<td style=text-align:center>63</td>
+<td style=text-align:center>0.984375</td>
+<td style=text-align:center>-0.015625</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>从表中数据可以看到，对输入值执行 TL 过程的最终结果是将它们分流到原始值的左侧。然而，这种向左偏移在大多数应用场景中都是不好的，主要有两个原因：
+<ul>
+<li>结果通常会向 0 偏移，代表这个过程会偏向于能量损失。</li>
+<li>最终浪费了存储空间（或带宽）。</li>
+</ul>
+</li>
+</ul>
 <h4 id=tc>TC</h4>
+<ul>
+<li>TC 的实现大致如下：</li>
+</ul>
+<pre tabindex=0><code>    const int NSTEPS = 64;
+    int encoded = (int)(input * NSTEPS);
+    if (encoded &gt; NSTEPS - 1)
+    {
+        encoded = NSTEPS - 1;
+    }
+</code></pre><pre tabindex=0><code>    const float STEP_SIZE = (1.0f / NSTEPS);
+    float decoded = (encoded + 0.5f) * STEP_SIZE;
+</code></pre><ul>
+<li>其中，NSTEPS 为缩放因子，input 为 [0 , 1] 区间的输入值，encoded 为编码后的值，decoded 为解码后的值。</li>
+<li>示例数据如下：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style=text-align:center>输入值（input）</th>
+<th style=text-align:center>编码值（encoded）</th>
+<th style=text-align:center>解码值（decoded）</th>
+<th style=text-align:center>偏差值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style=text-align:center>0.0</td>
+<td style=text-align:center>0</td>
+<td style=text-align:center>0.0078125</td>
+<td style=text-align:center>0.0078125</td>
+</tr>
+<tr>
+<td style=text-align:center>0.1</td>
+<td style=text-align:center>6</td>
+<td style=text-align:center>0.1015625</td>
+<td style=text-align:center>0.0015625</td>
+</tr>
+<tr>
+<td style=text-align:center>0.2</td>
+<td style=text-align:center>12</td>
+<td style=text-align:center>0.1953125</td>
+<td style=text-align:center>-0.0046875</td>
+</tr>
+<tr>
+<td style=text-align:center>0.3</td>
+<td style=text-align:center>19</td>
+<td style=text-align:center>0.3046875</td>
+<td style=text-align:center>0.0046875</td>
+</tr>
+<tr>
+<td style=text-align:center>0.4</td>
+<td style=text-align:center>25</td>
+<td style=text-align:center>0.3984375</td>
+<td style=text-align:center>-0.0015625</td>
+</tr>
+<tr>
+<td style=text-align:center>0.5</td>
+<td style=text-align:center>32</td>
+<td style=text-align:center>0.5078125</td>
+<td style=text-align:center>0.0078125</td>
+</tr>
+<tr>
+<td style=text-align:center>0.6</td>
+<td style=text-align:center>38</td>
+<td style=text-align:center>0.6015625</td>
+<td style=text-align:center>0.0015625</td>
+</tr>
+<tr>
+<td style=text-align:center>0.7</td>
+<td style=text-align:center>44</td>
+<td style=text-align:center>0.6953125</td>
+<td style=text-align:center>-0.0046875</td>
+</tr>
+<tr>
+<td style=text-align:center>0.8</td>
+<td style=text-align:center>51</td>
+<td style=text-align:center>0.8046875</td>
+<td style=text-align:center>0.0046875</td>
+</tr>
+<tr>
+<td style=text-align:center>0.9</td>
+<td style=text-align:center>57</td>
+<td style=text-align:center>0.8984375</td>
+<td style=text-align:center>-0.0015625</td>
+</tr>
+<tr>
+<td style=text-align:center>1.0</td>
+<td style=text-align:center>63</td>
+<td style=text-align:center>0.9921875</td>
+<td style=text-align:center>-0.0078125</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>可以看到，TC 会增大一部分输入值，也会减小一部分输入值，但如果对很多随机值进行编码，这些编码值解码后的平均值，会趋于输入值的平均值，即总能量基本不变。</li>
+<li>然而，TC 有一个明显的问题，可能会比 TC 更糟糕，即无法表示 0 。也就是说，当输入值为 0 时，会得到一个很小的正数。如果用于表示速度，当对静止的对象的数据进行保存和加载时，静止的对象就变成在慢慢移动，会造成错误的结果。</li>
+</ul>
 <h4 id=rl>RL</h4>
+<ul>
+<li>RL 的实现大致如下：</li>
+</ul>
+<pre tabindex=0><code>    const int NSTEPS = 64;
+    int encoded = (int)(input * （NSTEPS - 1) + 0.5f);
+    if (encoded &gt; NSTEPS - 1)
+    {
+        encoded = NSTEPS - 1;
+    }
+</code></pre><pre tabindex=0><code>    const float STEP_SIZE = (1.0f / (NSTEPS - 1));
+    float decoded = encoded * STEP_SIZE;
+</code></pre><ul>
+<li>其中，NSTEPS - 1 为缩放因子，input 为 [0 , 1] 区间的输入值，encoded 为编码后的值，decoded 为解码后的值。</li>
+<li>示例数据如下：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style=text-align:center>输入值（input）</th>
+<th style=text-align:center>编码值（encoded）</th>
+<th style=text-align:center>解码值（decoded）</th>
+<th style=text-align:center>偏差值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style=text-align:center>0.0</td>
+<td style=text-align:center>0</td>
+<td style=text-align:center>0.0</td>
+<td style=text-align:center>0.0</td>
+</tr>
+<tr>
+<td style=text-align:center>0.1</td>
+<td style=text-align:center>6</td>
+<td style=text-align:center>0.09524</td>
+<td style=text-align:center>-0.00476</td>
+</tr>
+<tr>
+<td style=text-align:center>0.2</td>
+<td style=text-align:center>13</td>
+<td style=text-align:center>0.20635</td>
+<td style=text-align:center>0.00635</td>
+</tr>
+<tr>
+<td style=text-align:center>0.3</td>
+<td style=text-align:center>19</td>
+<td style=text-align:center>0.30159</td>
+<td style=text-align:center>0.00159</td>
+</tr>
+<tr>
+<td style=text-align:center>0.4</td>
+<td style=text-align:center>25</td>
+<td style=text-align:center>0.39683</td>
+<td style=text-align:center>-0.00317</td>
+</tr>
+<tr>
+<td style=text-align:center>0.5</td>
+<td style=text-align:center>32</td>
+<td style=text-align:center>0.50794</td>
+<td style=text-align:center>0.00794</td>
+</tr>
+<tr>
+<td style=text-align:center>0.6</td>
+<td style=text-align:center>38</td>
+<td style=text-align:center>0.60317</td>
+<td style=text-align:center>0.00317</td>
+</tr>
+<tr>
+<td style=text-align:center>0.7</td>
+<td style=text-align:center>44</td>
+<td style=text-align:center>0.69841</td>
+<td style=text-align:center>-0.00159</td>
+</tr>
+<tr>
+<td style=text-align:center>0.8</td>
+<td style=text-align:center>51</td>
+<td style=text-align:center>0.80952</td>
+<td style=text-align:center>0.00952</td>
+</tr>
+<tr>
+<td style=text-align:center>0.9</td>
+<td style=text-align:center>57</td>
+<td style=text-align:center>0.90476</td>
+<td style=text-align:center>0.00476</td>
+</tr>
+<tr>
+<td style=text-align:center>1.0</td>
+<td style=text-align:center>63</td>
+<td style=text-align:center>1.0</td>
+<td style=text-align:center>0.0</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>RL 具有和 TC 一样的输出结果，但对应的输入值不一样。RL 可以表示 0 ，通过将缩放因子设置为 NSTEPS - 1 ，还可以表示 1 。</li>
+<li>如果缩放因子仍为 NSTEPS ，接近 1 的值将得到比输入范围中的其他数字更向下映射，因此会引入比更多的错误，并且会出现能量减小的轻微趋势。</li>
+<li>然而，为了达到与 TC 相同的误差目标，即整数代表的间隔相同，则 NSTEPS 需要加 1 ，使得带宽增大。如果 NSTEPS 很大，此时加 1 带来的额外代价很小，但如果 NSTEPS 很小，带宽增量就会比较明显，此时需要在 RL 和 TC 之间做选择。当不想考虑太多情况时，RL 是默认最安全、最稳定的方法。</li>
+</ul>
 <h4 id=rc>RC</h4>
+<ul>
+<li>RC 的实现大致如下：</li>
+</ul>
+<pre tabindex=0><code>    const int NSTEPS = 64;
+    int encoded = (int)(input * （NSTEPS - 1) + 0.5f);
+    if (encoded &gt; NSTEPS - 1)
+    {
+        encoded = NSTEPS - 1;
+    }
+</code></pre><pre tabindex=0><code>    const float STEP_SIZE = (1.0f / (NSTEPS - 1));
+    float decoded = (encoded + 0.5f) * STEP_SIZE;
+</code></pre><ul>
+<li>其中，NSTEPS - 1 为缩放因子，input 为 [0 , 1] 区间的输入值，encoded 为编码后的值，decoded 为解码后的值。</li>
+<li>示例数据如下：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style=text-align:center>输入值（input）</th>
+<th style=text-align:center>编码值（encoded）</th>
+<th style=text-align:center>解码值（decoded）</th>
+<th style=text-align:center>偏差值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style=text-align:center>0.0</td>
+<td style=text-align:center>0</td>
+<td style=text-align:center>0.00794</td>
+<td style=text-align:center>0.00794</td>
+</tr>
+<tr>
+<td style=text-align:center>0.1</td>
+<td style=text-align:center>6</td>
+<td style=text-align:center>0.10317</td>
+<td style=text-align:center>0.00317</td>
+</tr>
+<tr>
+<td style=text-align:center>0.2</td>
+<td style=text-align:center>13</td>
+<td style=text-align:center>0.21429</td>
+<td style=text-align:center>0.01429</td>
+</tr>
+<tr>
+<td style=text-align:center>0.3</td>
+<td style=text-align:center>19</td>
+<td style=text-align:center>0.30952</td>
+<td style=text-align:center>0.00952</td>
+</tr>
+<tr>
+<td style=text-align:center>0.4</td>
+<td style=text-align:center>25</td>
+<td style=text-align:center>0.40476</td>
+<td style=text-align:center>0.00476</td>
+</tr>
+<tr>
+<td style=text-align:center>0.5</td>
+<td style=text-align:center>32</td>
+<td style=text-align:center>0.51587</td>
+<td style=text-align:center>0.01587</td>
+</tr>
+<tr>
+<td style=text-align:center>0.6</td>
+<td style=text-align:center>38</td>
+<td style=text-align:center>0.61111</td>
+<td style=text-align:center>0.01111</td>
+</tr>
+<tr>
+<td style=text-align:center>0.7</td>
+<td style=text-align:center>44</td>
+<td style=text-align:center>0.70635</td>
+<td style=text-align:center>0.00635</td>
+</tr>
+<tr>
+<td style=text-align:center>0.8</td>
+<td style=text-align:center>51</td>
+<td style=text-align:center>0.81746</td>
+<td style=text-align:center>0.01746</td>
+</tr>
+<tr>
+<td style=text-align:center>0.9</td>
+<td style=text-align:center>57</td>
+<td style=text-align:center>0.91270</td>
+<td style=text-align:center>0.01270</td>
+</tr>
+<tr>
+<td style=text-align:center>1.0</td>
+<td style=text-align:center>63</td>
+<td style=text-align:center>1.00794</td>
+<td style=text-align:center>0.00794</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>和 TL 类似，最终的结果都比输入值大，然而，这样的结果会比 TL 更加糟糕，因为会出现能量增加。能量损失能保证系统存在上限，而能量增加则往往会出现系统爆炸，所以通常不会考虑使用这种方式。</li>
+</ul>
 <h2 id=参考>参考</h2>
 <ul>
 <li><a href=https://en.wikipedia.org/wiki/IEEE_754#cite_note-10>WIKIPEDIA IEEE754</a></li>
