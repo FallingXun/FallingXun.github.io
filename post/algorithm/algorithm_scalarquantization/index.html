@@ -270,7 +270,7 @@ post-container">
 </li>
 </ul>
 </li>
-<li>因此，对于单精度浮点数来说，有效数字最大能表示 2 ^ (23 + 1) = 16777216 ，即只能保证 7 位有效数字，双精度浮点数最大能 2 ^ (52 + 1) = 9007199254740992 ，即能保证 16 位有效数字。</li>
+<li>因此，对于单精度浮点数来说，有效数字最大能表示 2 ^ (23 + 1) - 1 = 16777215 ，即只能保证 7 位有效数字，双精度浮点数最大能 2 ^ (52 + 1) - 1 = 9007199254740991 ，即能保证 15 位有效数字。</li>
 </ul>
 <h3 id=量化方式>量化方式</h3>
 <ul>
@@ -389,6 +389,12 @@ post-container">
 </ul>
 </li>
 </ul>
+<p>
+<img src="/img/Algorithm/ScalarQuantization/ScalarQuantization_6.png?raw=true" alt=ScalarQuantization_6.png>
+</p>
+<ul>
+<li>TL 的量化图示如上图所示，其中白色点代表量化编码的整数结果值，蓝色点代表量化解码后的浮点数结果值，红色箭头表示两个相邻结果值之间的所有数的编码或解码映射方向。</li>
+</ul>
 <h4 id=tc>TC</h4>
 <ul>
 <li>TC 的实现大致如下：</li>
@@ -485,7 +491,10 @@ post-container">
 </table>
 <ul>
 <li>可以看到，TC 会增大一部分输入值，也会减小一部分输入值，但如果对很多随机值进行编码，这些编码值解码后的平均值，会趋于输入值的平均值，即总能量基本不变。</li>
-<li>然而，TC 有一个明显的问题，可能会比 TC 更糟糕，即无法表示 0 。也就是说，当输入值为 0 时，会得到一个很小的正数。如果用于表示速度，当对静止的对象的数据进行保存和加载时，静止的对象就变成在慢慢移动，会造成错误的结果。</li>
+<li>然而，TC 有一个明显的问题，可能会比 TC 更糟糕，即无法表示 0 。也就是说，当输入值为 0 时，会得到一个很小的正数。如果用于表示速度，当对静止的对象的数据进行保存和加载时，静止的对象就变成在慢慢移动，会造成错误的结果。
+<img src="/img/Algorithm/ScalarQuantization/ScalarQuantization_7.png?raw=true" alt=ScalarQuantization_7.png>
+</li>
+<li>TC 的量化图示如上图所示。</li>
 </ul>
 <h4 id=rl>RL</h4>
 <ul>
@@ -584,7 +593,10 @@ post-container">
 <ul>
 <li>RL 具有和 TC 一样的输出结果，但对应的输入值不一样。RL 可以表示 0 ，通过将缩放因子设置为 NSTEPS - 1 ，还可以表示 1 。</li>
 <li>如果缩放因子仍为 NSTEPS ，接近 1 的值将得到比输入范围中的其他数字更向下映射，因此会引入比更多的错误，并且会出现能量减小的轻微趋势。</li>
-<li>然而，为了达到与 TC 相同的误差目标，即整数代表的间隔相同，则 NSTEPS 需要加 1 ，使得带宽增大。如果 NSTEPS 很大，此时加 1 带来的额外代价很小，但如果 NSTEPS 很小，带宽增量就会比较明显，此时需要在 RL 和 TC 之间做选择。当不想考虑太多情况时，RL 是默认最安全、最稳定的方法。</li>
+<li>然而，为了达到与 TC 相同的误差目标，即整数代表的间隔相同，则 NSTEPS 需要加 1 ，使得带宽增大。如果 NSTEPS 很大，此时加 1 带来的额外代价很小，但如果 NSTEPS 很小，带宽增量就会比较明显，此时需要在 RL 和 TC 之间做选择。当不想考虑太多情况时，RL 是默认最安全、最稳定的方法。
+<img src="/img/Algorithm/ScalarQuantization/ScalarQuantization_8.png?raw=true" alt=ScalarQuantization_8.png>
+</li>
+<li>RL 的量化图示如上图所示，其中虚线部分即为额外需要的 1 个区间范围。</li>
 </ul>
 <h4 id=rc>RC</h4>
 <ul>
@@ -681,9 +693,136 @@ post-container">
 </tbody>
 </table>
 <ul>
-<li>和 TL 类似，最终的结果都比输入值大，然而，这样的结果会比 TL 更加糟糕，因为会出现能量增加。能量损失能保证系统存在上限，而能量增加则往往会出现系统爆炸，所以通常不会考虑使用这种方式。</li>
+<li>和 TL 类似，最终的结果都比输入值大，然而，这样的结果会比 TL 更加糟糕，因为会出现能量增加。能量损失能保证系统存在上限，而能量增加则往往会出现系统爆炸，所以通常不会考虑使用这种方式。
+<img src="/img/Algorithm/ScalarQuantization/ScalarQuantization_9.png?raw=true" alt=ScalarQuantization_9.png>
+</li>
+<li>RC 的量化图示如上图所示。</li>
 </ul>
-<h2 id=参考>参考</h2>
+<h3 id=浮点数组合>浮点数组合</h3>
+<ul>
+<li>整数量化中，通过减小整数的取值范围，可以将几个整数组合成一个整数值进行存储，使用时再根据每个数据使用的位进行解析。同样，浮点数也可以采用这种方式进行数据压缩。</li>
+<li>对于两个浮点数，最容易考虑的方式，就是使用十进制的方式进行，即将浮点数放大，保留整数部分，将两个整数部分进行整合。然而，浮点数的有效数字位数只有 23 + 1 位，即每个浮点数编码后只能使用 12 位保留有效数字，当小数点后最多保留 3 位，对于 [0, 4] 区间内的值则能够进行表示。实现代码如下：</li>
+</ul>
+<pre tabindex=0><code>    float a = 0.123f;
+    float b = 0.456f;
+    float c = 0.123 * 1000000 + 0.456 * 1000;
+</code></pre><pre tabindex=0><code>    float a = Mathf.Floor(c / 1000) / 1000;
+    float b = Mathf.Floor(c % 1000) / 1000;
+</code></pre><ul>
+<li>如果想要表示更大的范围，则需要使用二进制方式进行处理。前面提到，0.1 在内存中的表示为 0 0111 1011 1001 1001 1001 1001 1001 101 ，则</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style=text-align:center>基础值</th>
+<th style=text-align:center>放大值</th>
+<th style=text-align:center>内存表示</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style=text-align:center>0.1</td>
+<td style=text-align:center>2 ^ 0</td>
+<td style=text-align:center>0 <strong>0111 1011</strong> 1001 1001 1001 1001 1001 101</td>
+</tr>
+<tr>
+<td style=text-align:center>0.1</td>
+<td style=text-align:center>2 ^ 1</td>
+<td style=text-align:center>0 <strong>0111 1100</strong> 1001 1001 1001 1001 1001 101</td>
+</tr>
+<tr>
+<td style=text-align:center>0.1</td>
+<td style=text-align:center>2 ^ 10</td>
+<td style=text-align:center>0 <strong>1000 0101</strong> 1001 1001 1001 1001 1001 101</td>
+</tr>
+<tr>
+<td style=text-align:center>0.1</td>
+<td style=text-align:center>2 ^ 20</td>
+<td style=text-align:center>0 <strong>1000 1111</strong> 1001 1001 1001 1001 1001 101</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>可以看到，浮点数乘上 2 的次幂时，就是指数部分发生了变化，有效数字部分保持不变，因此在二进制下的处理方式为：
+<ul>
+<li>对输入值乘上 2 的次幂，进行放大，调整小数点的位置。</li>
+<li>对浮点数进行取整，将小数点后的有效数字清 0 。</li>
+<li>将一个浮点数乘上 2 ^ 12 ，进行移位操作，再与另一个浮点数相加，得到最终结果。</li>
+</ul>
+</li>
+<li>编码和解码的示例代码如下：</li>
+</ul>
+<pre tabindex=0><code>    private float Encode(float x, float y)
+    {
+        double x0 = (int)(x * 512);
+        double y0 = (int)(y * 512);
+        return (float)((x0 * 4096) + y0);
+    }
+
+    private (float, float) Decode(float v)
+    {
+        float x = Mathf.Floor(v / 4096);
+        float y = v - 4096 * x;
+        float scale = 0.001953125f; // 1.0f / 512
+        return (x * scale, y * scale);
+    }
+</code></pre><ul>
+<li>以 0.1 为例，编码过程如下：
+<ul>
+<li>进行放大后，在内存中为 0 1000 0100 1001 1001 1001 1001 1001 101 ，此时指数部分为 132 ，即小数点需要右移 132 - 127 = 5 位。</li>
+<li>进行取整后，在内存中为 0 1000 0100 1001 1000 1000 0000 0000 000 ，此时有效数字部分为 1 1001 1000 1000 0000 0000 000 （首位 1 为浮点数省略表示的）。</li>
+<li>进行移位后，在内存中为 0 1001 0000 1001 1000 1000 0000 0000 000 。</li>
+<li>对两个浮点数进行相加，即对有效数字部分进行相加：
+<ul>
+<li><strong>1</strong> | <strong>1001 1000 100</strong>0 0000 0000 000 | 0 0000 0000 000</li>
+<li>0 | 0000 0000 000<strong>1 1001 1000 100</strong> | 0 0000 0000 000</li>
+<li>1 | 1001 1000 1001 1001 1000 100 | 0 0000 0000 000</li>
+</ul>
+</li>
+<li>最终结果为 0 1001 0000 1001 1000 1001 1001 1000 100 。</li>
+</ul>
+</li>
+<li>解码过程如下：
+<ul>
+<li>将编码值进行移位，得到 0 1000 0100 1001 1000 1001 1001 1000 100 ，此时指数部分为 132 ，即小数点需要右移 132 - 127 = 5 位。</li>
+<li>向下取整，得到放大后的第一个浮点数，为 0 1000 0100 1001 1000 1000 0000 0000 000 。</li>
+<li>计算另一个放大后的浮点数，指数部分为 1001 0000 ，即 144 ，同样使用有效数字部分进行相减：
+<ul>
+<li>1 | 1001 1000 1001 1001 1000 100</li>
+<li>1 | 1001 1000 1000 0000 0000 000</li>
+<li>0 | 0000 0000 0001 1001 1000 100</li>
+</ul>
+</li>
+<li>有效数字首位设置为 1 ，则指数部分为 144 - 12 = 132 ，因此另一个浮点数为 0 1000 0100 1001 1000 1000 0000 0000 000 。</li>
+<li>将两个浮点数进行缩小，得到最终值，为 0 0111 1011 1001 1000 1000 0000 0000 000 ，即 0.0997314453125 。</li>
+</ul>
+</li>
+<li>从上面的过程可以看到，两个浮点数分别使用 12 个有效数字位。假设输入的浮点数，二进制下整数部分占 3 位，小数部分占 21 位，则按照编码过程放大 512 （2 ^ 9），则整数部分占 12 位，小数部分占 12 位，整数部分刚好能完全保留，第 13 ~ 24 位则全部置为 0 。而如果输入的浮点数整数部分占 4 位，则第 13 位不为 0 ，进行有效数字部分相加时，就会出现第一个浮点数的第 13 位的值加到第二个浮点数的第 1 位上，出现进位时，还会影响第一个浮点数的第 12 位，即两个浮点数的数据都受到影响，尤其是第二个浮点数，如：
+<ul>
+<li><strong>1</strong> | <strong>1001 1000 1001</strong> 0000 0000 000 | 0 0000 0000 000</li>
+<li>0 | 0000 0000 000<strong>1 1001 1000 100</strong> | <strong>1</strong> 0000 0000 000</li>
+<li>1 | 1001 1000 1010 1001 1000 100 | 1 0000 0000 000</li>
+</ul>
+</li>
+<li>此时，两个有效数字为 1 1001 1000 101 和 0 1001 1000 100 ，可以看到第二个有效数字已经出现了很大的偏差，无法解码出正确的结果。</li>
+<li>因此，编码过程的放大值，需要根据浮点数的大小进行调整。假设浮点数的整数部分最大值为 2 ^ n ，则放大值最大为 2 ^ (12 - n) ，其中 n &lt;= 12 。需要注意，随着放大值减小，小数部分舍弃的有效值位数越多，则最终解码得到的值偏差会越来越大，需要根据具体使用环境选择合适的 n 值。</li>
+<li>使用 RL 方式进行调整，则代码实现为：</li>
+</ul>
+<pre tabindex=0><code>    private float Encode(float x, float y)
+    {
+        double x0 = (int)(x * 511);
+        double y0 = (int)(y * 511);
+        return (float)((x0 * 4096) + y0);
+    }
+
+    private (float, float) Decode(float v)
+    {
+        float x = Mathf.Floor(v / 4096);
+        float y = v - 4096 * x;
+        float scale = 1.0f / 511;
+        return (x * scale, y * scale);
+    }
+</code></pre><h2 id=参考>参考</h2>
 <ul>
 <li><a href=https://en.wikipedia.org/wiki/IEEE_754#cite_note-10>WIKIPEDIA IEEE754</a></li>
 <li><a href=http://number-none.com/product/Scalar%20Quantization/index.html>Scalar Quantization</a></li>
