@@ -181,18 +181,100 @@ post-container">
 <li>CPU 将当前需要播放的动作起止帧索引，以及当前时间需要播放第几帧，传到 GPU 中。</li>
 <li>通过顶点 uv 读取当前顶点绑定的所有关节索引及对应权重。</li>
 <li>计算当前动作当前帧需要采样的纹理 uv 。</li>
-<li>采样离线生成的矩阵纹理，得到蒙皮矩阵信息。</li>
+<li>采样离线生成的矩阵纹理，得到蒙皮矩阵信息。
+<ul>
+<li>由于在顶点着色器中进行采样，无法使用 tex2D 方法，需要改为使用 tex2Dlod 方法。</li>
+</ul>
+</li>
 <li>使用蒙皮矩阵对顶点坐标、法线、切线进行变换，得到当前空间下的对应信息。</li>
 <li>将变换后的信息传到像素着色器中，采样模型纹理并输出最终颜色。</li>
 </ul>
 </li>
 <li>如果使用了实时阴影，生成 ShadowMap 时，需要对应的顶点、法线数据，所以需要在另一个 Pass 中进行采样计算，因此采样次数会翻倍。由于阴影不需要有那么多显示细节，所以可以选择使用简化后的网格，从而可以减少采样次数。而骨骼可以沿用，因此矩阵纹理可以共用。</li>
 </ul>
+<h3 id=优化方案>优化方案</h3>
+<h4 id=uv坐标计算>uv坐标计算</h4>
+<ul>
+<li>采样骨骼动画的 uv 坐标，通过当前帧数和当前骨骼索引可以计算得到。每根骨骼的变换矩阵，需要采样 4 个 uv 坐标，即 uv 坐标需要计算 4 次，计算中需要使用除法或者求余计算。</li>
+<li>由于变换矩阵的 4 个 uv 坐标通常是相邻的，如果保证骨骼动画纹理图的尺寸是 4 的倍数，则只要计算一次得到首个 uv ，再通过累加一个纹素的尺寸，就能得到下一个 uv 坐标，这样就能减少多次除法和求余的计算过程，降低计算压力。</li>
+<li>此外，由于变换矩阵的最后一行通常为 (0, 0, 0, 1) ，所以最后一行可以不用进行采样，减少采样频率，但骨骼动画中还是会写入，保证每个变换矩阵是占 4 个颜色值，避免纹理出现奇数。</li>
+</ul>
+<pre tabindex=0><code>half4x4 loadMatrix(uint frameIndex, uint boneIndex, float texelSizeX, float texelSizeY)
+{
+	uint index = frameIndex * _BoneCount + boneIndex;
+
+	half x = index % _Width * texelSizeX;
+	half y = index / _Width * 4 * texelSizeY;
+	half4 uv = half4(x, y, 0, 0);
+	half4 c0 = tex2Dlod(_AnimationTex, uv);
+	uv.y = uv.y + texelSizeY;
+	half4 c1 = tex2Dlod(_AnimationTex, uv);
+	uv.y = uv.y + texelSizeY;
+	half4 c2 = tex2Dlod(_AnimationTex, uv);
+
+	half4 c3 = half4(0, 0, 0, 1);
+	half4x4 m = half4x4(c0, c1, c2, c3);
+	return m;
+}
+</code></pre><h4 id=缓存命中>缓存命中</h4>
+<ul>
+<li>当 GPU 访问一个纹素时，很大可能会访问同个位置或者相邻的纹素，因此 GPU 通常会以 n x n 的块状对纹理数据进行缓存，从而提高缓存命中几率。</li>
+<li>存储骨骼动画的时候，纹理通常是按行写入，此时对一个顶点的 4 根骨骼进行采样时，由于骨骼索引值不一定连续，所以对每根骨骼采样时，GPU 很容易出现需要重新加载新的一块数据到缓存中，从而造成采样效率低下。</li>
+<li>因此，可以将每根骨骼每一帧的数据纵向写入到纹理中，从而尽可能保证同一块缓存中具有多根骨骼的数据，减少重新加载的频率。</li>
+<li>Hakura 和 Gupta 研究发现，当块的大小和缓存行一样大时，即 128KB 和 256KB ，缓存命中率越高，此时对应的块的大小为 8 x 8 和 16 x 16 。</li>
+<li>一些 GPU 还会以 Z 顺序存储纹理贴图，则缓存行中的连续数据代表一个矩形图块，从而增加附近访问位于缓存中的概率，这种方式成为 Z-order curve 或 Morton order 。</li>
+</ul>
+<h4 id=采样次数>采样次数</h4>
+<ul>
+<li>尽管 unity 默认为每个顶点提供了 4 根骨骼的数据结构，但并不是每个顶点都需要使用 4 根骨骼。通常情况下，很多顶点只需要使用 1 根或者 2 根骨骼，也就是说，会出现无效的纹理采样过程，而纹理采样通常是耗时较高的过程：
+<ul>
+<li>采样过程需要 GPU 中的硬件单元读取纹理数据，再传递给着色器处理，由于涉及硬件操作，所以会比纯粹的计算操作慢。</li>
+<li>纹理通常以二维图像的形式存在显存中，则采样时需要对显存进行读写操作。</li>
+<li>采样过程可能会应用纹理过滤（双线性插值、三线性插值）来处理纹理坐标不在整数像素点的情况。</li>
+<li>纹理大小会影响纹理的缓存命中，插值过滤的过程需要采样的数据量也会随着纹理变大而增多。</li>
+</ul>
+</li>
+<li>因此，GPU Gems 中给出了一个优化方案，即将顶点骨骼索引按照权重从大到小进行排序，如果某根骨骼权重为 0 ，则后续骨骼都不需要进行采样，即</li>
+</ul>
+<pre tabindex=0><code>	half4x4 mat = (loadMatrix(curFrame, i.uv2.x, texelSizeX, texelSizeY) * i.uv2.y);
+	if (i.uv2.w &gt; 0) {
+		mat += (loadMatrix(curFrame, i.uv2.z, texelSizeX, texelSizeY) * i.uv2.w);
+		if (i.uv3.y &gt; 0) {
+			mat += (loadMatrix(curFrame, i.uv3.x, texelSizeX, texelSizeY) * i.uv3.y);
+			if (i.uv3.w &gt; 0) {
+				mat += (loadMatrix(curFrame, i.uv3.z, texelSizeX, texelSizeY) * i.uv3.w);
+			}
+		}
+	}
+</code></pre><ul>
+<li>尽管出现了 if 分支，可能会导致 GPU 的并行处理效率降低，相较于纹理采样，总体上来讲还是能提高运行效率的。</li>
+<li>对顶点的骨骼按权重进行排序后，如果当前骨骼的权重为 0 ，则可以将当前骨骼的索引设置为上一个权重不为 0 的索引，则采样的时候，会和上一根骨骼使用同样的 uv 进行采样，则可能不需要进行真正的采样过程，而是通过直接读取缓存就能得到结果。</li>
+</ul>
+<pre tabindex=0><code>    for (int i = 0; i &lt; skr.sharedMesh.vertexCount; i++)
+    {
+        var boneWeight = skr.sharedMesh.boneWeights[i];
+        boneIndex[0] = boneWeight.boneIndex0;
+        boneIndex[1] = boneWeight.weight1 &gt; 0 ? boneWeight.boneIndex1 : boneIndex[0];
+        boneIndex[2] = boneWeight.weight2 &gt; 0 ? boneWeight.boneIndex2 : boneIndex[1];
+        boneIndex[3] = boneWeight.weight3 &gt; 0 ? boneWeight.boneIndex3 : boneIndex[2];
+        var uv2 = new Vector4(boneIndex[0], boneWeight.weight0, boneIndex[1], boneWeight.weight1);
+        var uv3 = new Vector4(boneIndex[2], boneWeight.weight2, boneIndex[3], boneWeight.weight3);
+        uv2s.Add(uv2);
+        uv3s.Add(uv3);
+    }
+</code></pre><h4 id=插值计算>插值计算</h4>
+<h3 id=示例工程>示例工程</h3>
+<ul>
+<li>Demo示例工程： <a href=https://github.com/FallingXun/Demo/tree/main/GPUSkinning>https://github.com/FallingXun/Demo/tree/main/GPUSkinning</a></li>
+</ul>
 <h3 id=参考>参考</h3>
 <ul>
 <li><a href>游戏引擎架构</a></li>
 <li><a href=https://github.com/chengkehan/GPUSkinning/tree/master>GPUSkinning github</a></li>
 <li><a href=https://github.com/Unity-Technologies/Animation-Instancing/tree/master>Animation-Instancing github</a></li>
+<li><a href=https://fileadmin.cs.lth.se/cs/Personal/Michael_Doggett/pubs/doggett12-tc.pdf>Texture Caches</a></li>
+<li><a href=https://en.wikipedia.org/wiki/Z-order_curve>Z-order curve</a></li>
+<li><a href=https://developer.nvidia.com/gpugems/gpugems3/part-i-geometry/chapter-2-animated-crowd-rendering>GPU Gems3 - Chapter 2. Animated Crowd Rendering</a></li>
 </ul>
 <hr>
 <ul class=pager>
