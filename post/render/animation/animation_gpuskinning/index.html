@@ -262,7 +262,80 @@ post-container">
         uv2s.Add(uv2);
         uv3s.Add(uv3);
     }
-</code></pre><h4 id=插值计算>插值计算</h4>
+</code></pre><h4 id=采样频率>采样频率</h4>
+<ul>
+<li>通常每秒会采样 30 帧，能得到一个比较好的动画效果。然而，采样 30 帧得到的矩阵数量是采样 15 帧的两倍，所以得到的纹理图通常会比较大。相对的，如果只采样 15 帧，则动画会出现明显的卡顿感。</li>
+<li>为了解决卡顿感，可以采用插值的方式，即每次会对当前帧和下一帧的骨骼动画进行采样，然后将顶点、法线、切线进行变换后，再分别进行插值。</li>
+</ul>
+<pre tabindex=0><code>	frame = frame + 1;
+	int nextFrame = lerp(clamp(frame, 0, count - 1), (frame % count), loop) + start;
+	half4x4 mat2 = (loadMatrix(nextFrame, i.uv2.x, texelSizeX, texelSizeY) * i.uv2.y);
+	mat2 += (loadMatrix(nextFrame, i.uv2.z, texelSizeX, texelSizeY) * i.uv2.w);
+	mat2 += (loadMatrix(nextFrame, i.uv3.x, texelSizeX, texelSizeY) * i.uv3.y);
+	mat2 += (loadMatrix(nextFrame, i.uv3.z, texelSizeX, texelSizeY) * i.uv3.w);
+	float4 vertex2 = mul(mat2, i.vertex);
+	float3 normal2 = mul((half3x3)mat2, i.normal.xyz);
+	float4 tangent2 = mul(mat2, i.tangent);
+
+	float l = frac(frameTime);
+	i.vertex = lerp(vertex, vertex2, l);
+	i.normal = normalize(lerp(normal, normal2, l));
+	i.tangent = normalize(lerp(tangent, tangent2, l));
+</code></pre><h4 id=阴影计算>阴影计算</h4>
+<ul>
+<li>阴影计算需要额外的 Pass ，其中顶点坐标计算还是需要对骨骼动画进行采样，但是相对可以有一些优化：
+<ul>
+<li>常规渲染时，每个顶点需要采样 4 根骨骼，使用插值时则需要采样 8 根骨骼。但阴影精确度可以不需要那么高，并且最终是投射到接收面上，所以可以只采样权重最高的 1 ~ 2 根骨骼，来降低采样计算消耗。</li>
+<li>法线、切线可以不需要进行计算，减少计算量。</li>
+</ul>
+</li>
+</ul>
+<pre tabindex=0><code>	// 动画不循环，播完则停在最后一帧
+	int curFrame = lerp(clamp(frame, 0, count - 1), (frame % count), loop) + start;
+	half4x4 mat = (loadMatrix(curFrame, i.uv2.x, texelSizeX, texelSizeY) * i.uv2.y);
+
+	float4 vertex = mul(mat, i.vertex);
+
+#ifdef GPUSKINNING_LERP
+	// 如果开启插值，则需要采样下一帧的状态，再进行插值
+	frame = frame + 1;
+	int nextFrame = lerp(clamp(frame, 0, count - 1), (frame % count), loop) + start;
+	half4x4 mat2 = (loadMatrix(nextFrame, i.uv2.x, texelSizeX, texelSizeY) * i.uv2.y);
+
+	float4 vertex2 = mul(mat2, i.vertex);
+
+	float l = frac(frameTime);
+	i.vertex = lerp(vertex, vertex2, l);
+#else
+	i.vertex = vertex;
+#endif
+</code></pre><h3 id=性能对比>性能对比</h3>
+<ul>
+<li>Animator 和 GPUSkinning 的性能对比如下：
+<figure>
+<img src="/img/Render/Animation/GPUSkinning_Compare_10.png?raw=true" alt=GPUSkinning_Compare_10.png>
+<center><figcaption>左：Animator（10） 右：GPUSkinning（10）</figcaption></center>
+</figure>
+<figure>
+<img src="/img/Render/Animation/GPUSkinning_Compare_50.png?raw=true" alt=GPUSkinning_Compare_50.png>
+<center><figcaption>左：Animator（50） 右：GPUSkinning（50）</figcaption></center>
+</figure>
+<figure>
+<img src="/img/Render/Animation/GPUSkinning_Compare_100.png?raw=true" alt=GPUSkinning_Compare_100.png>
+<center><figcaption>左：Animator（100） 右：GPUSkinning（100）</figcaption></center>
+</figure>
+<figure>
+<img src="/img/Render/Animation/GPUSkinning_Compare_50.png?raw=true" alt=GPUSkinning_Compare_500.png>
+<center><figcaption>左：Animator（500） 右：GPUSkinning（500）</figcaption></center>
+</figure>
+<figure>
+<img src="/img/Render/Animation/GPUSkinning_Compare_1000.png?raw=true" alt=GPUSkinning_Compare_1000.png>
+<center><figcaption>左：Animator（1000） 右：GPUSkinning（1000）</figcaption></center>
+</figure>
+</li>
+<li>当模型数量较少时，渲染耗时优化程度较小，但批次可以合并。</li>
+<li>当模型数量较多时，渲染耗时优化程度非常大，并且批次数量也得到了大幅度减少。</li>
+</ul>
 <h3 id=示例工程>示例工程</h3>
 <ul>
 <li>Demo示例工程： <a href=https://github.com/FallingXun/Demo/tree/main/GPUSkinning>https://github.com/FallingXun/Demo/tree/main/GPUSkinning</a></li>
