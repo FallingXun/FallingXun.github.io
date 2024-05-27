@@ -1277,17 +1277,21 @@ CSharp侧
 <li>由于这里使用反射获取，会有装拆箱问题，所以最好调用一次后将结果缓存起来。</li>
 <li>对于反射CSharp侧的方法、属性、字段、构造函数，则流程如下：</li>
 </ul>
-<pre tabindex=0><code>	-- 初始化调用一次，注册反射相关Wrap
+<pre tabindex=0><code>	-- 初始化调用一次，注册反射相关Wrap（默认没有初始化，未调用则无法使用 LuaInterface 下的内容）
 	package.preload['tolua.reflection']()
 
 	local type = tolua.findtype(&quot;xxxx类名&quot;)
 	-- 方法调用
 	local method = tolua.gettypemethod(type, &quot;xxxx方法名&quot;)
-	LuaInterface.LuaMethod.Call(method,nil)
+	method:Call(参数)
 
 	-- 属性调用
 	local property = tolua.getproperty(type, &quot;xxx属性名&quot;)
-    local instance = LuaInterface.LuaProperty.Get(property,nil,nil)
+    local instance = property:Get(实例对象, nil)
+
+	-- 变量调用
+	local field = tolua.getfield(type, &quot;xxx变量名&quot;)
+	local field:Get(实例对象)
 </code></pre><h3 id=64位整型>64位整型</h3>
 <ul>
 <li>前面提到，在CSharp的 OpenToLuaLibs 方法中，调用了lua侧的 tolua_openlibs 进行初始化库，其中对lua侧的int64和uint64进行了初始化。
