@@ -125,6 +125,8 @@ post-container">
 </ul>
 </li>
 <li>合批的优点，是 Unity 在绘制过程中，可以单独剔除部分网格对象，但代价是会产生一些额外开销。</li>
+<li>在内置渲染管道中，可以使用 MaterialPropertyBlock 更改材质属性，而不会破坏绘制调用批处理。尽管 CPU 仍然需要进行一些渲染状态更改，但使用 MaterialPropertyBlock 比使用多种材质更快。</li>
+<li>半透明的队列，通常需要 Unity 按照从后到前的顺序渲染网格。要批量处理透明网格，Unity 首先按从后到前的顺序进行排列，然后尝试合批。由于 Unity 必须按从后到前的顺序渲染网格，因此它通常无法批量处理与不透明网格一样多的半透明网格。</li>
 </ul>
 <h3 id=静态合批>静态合批</h3>
 <ul>
@@ -227,20 +229,426 @@ post-container">
 <li>网格的动态合批通过将所有顶点转换为世界空间来工作。这个过程是在 CPU 上，而不是在 GPU 上。这意味着，只有当转换工作比绘制调用占用的资源更少，动态合批才能产生优化。在游戏机或 Apple Metal 等现代 API 上，绘制调用开销通常要低得多，此时动态合批通常不会带来性能提升。</li>
 <li>动态合批的对象需要满足以下条件：
 <ul>
-<li>顶点数不超过 300 ，顶点属性不超过 900 。</li>
+<li>单个网格顶点数不超过 300 ，顶点属性不超过 900 。</li>
 <li>Transform 不能上设置为镜像，如一个对象的缩放为 1 ，另一个为 -1 。</li>
 <li>需要使用相同的材质示例（shadow caster 渲染例外，只要 Unity 阴影通道所需的材质值相同即可）。</li>
 <li>使用光照贴图时，光照贴图要相同。</li>
 <li>前向渲染的多 Pass 渲染时，只能批处理首个 Pass ，不支持旧版延迟渲染。</li>
 </ul>
 </li>
-<li></li>
+<li>对于动态生成几何体的组件，通常通过动态合批进行优化，如：
+<ul>
+<li>内置的 Particle Systems</li>
+<li>Line Renderers</li>
+<li>Trail Renderers</li>
+</ul>
+</li>
+<li>动态生成的几何体和网格的处理方式不同，主要方式为：
+<ul>
+<li>对于每个渲染器，Unity 将所有可以动态合批的内容构建到一个大的顶点缓冲区中。</li>
+<li>渲染器为每个批次设置材质状态。</li>
+<li>Unity 将顶点缓冲区绑定到 GPU 。</li>
+<li>对于批次中的每个渲染器，Unity 都会更新顶点缓冲区中的偏移量并提交新的绘制调用。</li>
 </ul>
 </li>
 </ul>
+</li>
+<li>此外，对于动态合批，合并后的网格顶点索引数组的长度不能超过 32000 ，超过部分则会创建一个新的批次。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_1.png?raw=true" alt=DynamicBatch_1.png>
+</li>
+<li>如上图所示，各个 GameObject 的名字含义如下：
+<ul>
+<li>c32 ：网格的每个顶点的 Color 为 4 bytes 。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_2.png?raw=true" alt=DynamicBatch_2.png>
+</li>
+<li>c ：网格的每个顶点的 Color 为 16 bytes 。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_3.png?raw=true" alt=DynamicBatch_3.png>
+</li>
+<li>v2 ：网格的每个顶点的 uv 为 8 bytes 。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_4.png?raw=true" alt=DynamicBatch_4.png>
+</li>
+<li>v4 ：网格的每个顶点的 uv 为 16 bytes 。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_5.png?raw=true" alt=DynamicBatch_5.png>
+</li>
+<li>uv1 ：网格的每个顶点的 uv 数组，只有 uv0 有数据。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_6.png?raw=true" alt=DynamicBatch_6.png>
+</li>
+<li>uv8 ：网格的每个顶点的 uv 数组，uv0 ~ uv7 都有数据。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_7.png?raw=true" alt=DynamicBatch_7.png>
+</li>
+<li>vertex120 ：网格的顶点数为 120。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_8.png?raw=true" alt=DynamicBatch_8.png>
+</li>
+</ul>
+</li>
+<li>通过上面生成的网格对象，后续将分几个模块对动态合批进行分析。</li>
+</ul>
+<h3 id=数量限制>数量限制</h3>
+<ul>
+<li>顶点属性包括位置、法线、切线、颜色、uv，然而动态合批计算的顶点属性数量，并不是传入顶点着色器的数据结构的数量，而是传入片元着色器的参数所引用到的顶点属性数据。</li>
+<li>当 shader 使用位置、法线、切线、颜色、uv0 ~ uv3 时，shader 示例如下：</li>
+</ul>
+<pre tabindex=0><code>    ...
+            v2f vert (appdata v)
+            {
+                v2f o;
+				float s = 1;
+				o.vertex = UnityObjectToClipPos(v.vertex);
+				s *= step(v.normal.x, 0);
+				s *= step(v.tangent.x, 0);
+				s *= step(v.color.x, 0);
+				s *= step(v.uv0.x, 0);
+				s *= step(v.uv1.y, 0);
+				s *= step(v.uv2.y, 0);
+				s *= step(v.uv3.y, 0);
+				o.color = float4(0.1, 0.1, 0.1, 1) * s;
+
+                return o;
+            }
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                fixed4 col = fixed4(1,1,1,1);
+                return col;
+            }
+    ...
+</code></pre><ul>
+<li>此时每个网格的顶点属性数量为 120 * 8 = 960 > 900 ，则所有网格都不能合批，如图所示：
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_9.png?raw=true" alt=DynamicBatch_9.png>
+</li>
+<li>shader 编译后的部分内容如下：
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_10.png?raw=true" alt=DynamicBatch_10.png>
+</li>
+<li>其中，v0 为 position ，v1 为 normal ，v2 为 color ，v3 为 tangent ，v4 ~ v7 为 uv0 ~ uv3 。</li>
+<li>如果片元着色器没有引用顶点属性，即：</li>
+</ul>
+<pre tabindex=0><code>    ...
+            v2f vert (appdata v)
+            {
+                v2f o;
+				float s = 1;
+				o.vertex = UnityObjectToClipPos(v.vertex);
+				s *= step(v.normal.x, 0);
+				s *= step(v.tangent.x, 0);
+				s *= step(v.color.x, 0);
+				s *= step(v.uv0.x, 0);
+				s *= step(v.uv1.y, 0);
+				s *= step(v.uv2.y, 0);
+				s *= step(v.uv3.y, 0);
+				o.color = float4(0.1, 0.1, 0.1, 1);
+
+                return o;
+            }
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                fixed4 col = fixed4(1,1,1,1);
+                return col;
+            }
+    ...
+</code></pre><p>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_11.png?raw=true" alt=DynamicBatch_11.png>
+</p>
+<ul>
+<li>可以看到，此时原本不能合并的网格都合并了，也就是说，需要 shader 中真正引用的顶点属性只有位置，编译后的 shader 如下：
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_12.png?raw=true" alt=DynamicBatch_12.png>
+</li>
+<li>原本引用的有 v0 ~ v7 ，现在只剩 v0 ，也就是说，尽管在顶点着色器中有引用进行计算，但最终结果没有受到这些属性的值的影响，代表没有真正引用，所以编译后的 shader 中也不存在。</li>
+<li>当 shader 使用位置、法线、切线、颜色、uv0 ~ uv2 时，即：</li>
+</ul>
+<pre tabindex=0><code>    ...
+            v2f vert (appdata v)
+            {
+                v2f o;
+				float s = 1;
+				o.vertex = UnityObjectToClipPos(v.vertex);
+				s *= step(v.normal.x, 0);
+				s *= step(v.tangent.x, 0);
+				s *= step(v.color.x, 0);
+				s *= step(v.uv0.x, 0);
+				s *= step(v.uv1.y, 0);
+				s *= step(v.uv2.y, 0);
+				o.color = float4(0.1, 0.1, 0.1, 1) * s;
+
+                return o;
+            }
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                fixed4 col = fixed4(1,1,1,1);
+                return col;
+            }
+    ...
+</code></pre><ul>
+<li>此时每个网格的顶点属性数量为 120 * 7 = 840 &lt; 900 ，则所有网格都能合批，如图所示：
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_13.png?raw=true" alt=DynamicBatch_13.png>
+</li>
+<li>因此，动态合批的顶点属性数量限制，应该是 shader 真正引用的顶点属性的数量。</li>
+</ul>
+<h3 id=数据长度>数据长度</h3>
+<ul>
+<li>当 shader 使用位置、法线、切线、颜色，共计 4 个顶点属性时，每个网格的顶点属性数量为 120 * 4 = 480 &lt; 900 ，应该所有网格都能合批，实际测试如图：
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_14.png?raw=true" alt=DynamicBatch_14.png>
+</li>
+<li>图中的对象分成了两个批次，一个批次的颜色为 4 bytes ，uv 为 8 bytes ，另一个批次的颜色为 16 bytes ， uv 为 16 bytes 。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_15.png?raw=true" alt=DynamicBatch_15.png>
+</li>
+<li>而当 shader 使用位置、法线、切线时，则所有网格又能正常合批:
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_16.png?raw=true" alt=DynamicBatch_16.png>
+</li>
+<li>由于数据长度不一样的只有颜色和 uv ，所以当 shader 使用的所有顶点属性的数据长度都相同，就能合批，当使用了颜色属性后，由于颜色属性的数据长度不一样，则不能合批。</li>
+<li>因此，shader 引用的网格顶点属性，数据长度相同的，才能进行动态合批。</li>
+</ul>
+<h3 id=位置信息>位置信息</h3>
+<ul>
+<li>当 shader 不使用顶点属性时：</li>
+</ul>
+<pre tabindex=0><code>    ...
+            v2f vert (appdata v)
+            {
+                v2f o;
+				float s = 1;
+				o.vertex = UnityObjectToClipPos(float3(0, 0, 0));
+				o.color = float4(0.1, 0.1, 0.1, 1) * s;
+
+                return o;
+            }
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                fixed4 col = fixed4(1,1,1,1);
+                return col;
+            }
+    ...
+</code></pre><p>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_17.png?raw=true" alt=DynamicBatch_17.png>
+</p>
+<ul>
+<li>当 shader 只使用法线时：</li>
+</ul>
+<pre tabindex=0><code>    ...
+            v2f vert (appdata v)
+            {
+                v2f o;
+				float s = 1;
+				o.vertex = UnityObjectToClipPos(v.normal);
+				o.color = float4(0.1, 0.1, 0.1, 1) * s;
+
+                return o;
+            }
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                fixed4 col = fixed4(1,1,1,1);
+                return col;
+            }
+    ...
+</code></pre><p>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_18.png?raw=true" alt=DynamicBatch_18.png>
+</p>
+<ul>
+<li>当 shader 只使用 uv0 时：</li>
+</ul>
+<pre tabindex=0><code>    ...
+            v2f vert (appdata v)
+            {
+                v2f o;
+				float s = 1;
+				o.vertex = UnityObjectToClipPos(float3(v.uv0.x, v.uv0.y, 0));
+				o.color = float4(0.1, 0.1, 0.1, 1) * s;
+
+                return o;
+            }
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                fixed4 col = fixed4(1,1,1,1);
+                return col;
+            }
+    ...
+</code></pre><p>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_19.png?raw=true" alt=DynamicBatch_19.png>
+</p>
+<ul>
+<li>而当 shader 使用位置，但不用于顶点坐标计算时：</li>
+</ul>
+<pre tabindex=0><code>    ...
+            v2f vert (appdata v)
+            {
+                v2f o;
+				float s = 1;
+				o.vertex = UnityObjectToClipPos(float3(0, 0, 0));
+                s *= step(v.vertex.x, 0);
+				o.color = float4(0.1, 0.1, 0.1, 1) * s;
+
+                return o;
+            }
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                fixed4 col = fixed4(1,1,1,1);
+                return col;
+            }
+    ...
+</code></pre><p>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_20.png?raw=true" alt=DynamicBatch_20.png>
+</p>
+<ul>
+<li>从上面所有测试可以看出，shader 只要没有引用位置信息，动态合批就都会失效，无论顶点属性数量有没有超出上限。只有引用了位置信息，动态合批才会开始生效，无论位置信息是不是用于最终的顶点位置计算。</li>
+</ul>
+<h3 id=蒙皮网格>蒙皮网格</h3>
+<ul>
+<li>蒙皮网格，即带有骨骼权重的网格，如图所示：
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_21.png?raw=true" alt=DynamicBatch_21.png>
+</li>
+<li>图中的网格为两个三角面，使用一根骨骼进行绑定。从左到右分别为顶点无颜色和 uv 、 顶点有颜色无 uv 、顶点无颜色有 uv 。合批情况如下：
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_22.png?raw=true" alt=DynamicBatch_22.png>
+</li>
+<li>可以看到，没有顶点颜色和 uv 的网格，都能动态合批，而当存在顶点颜色或者 uv 时，则所有都不能合批。由于蒙皮网格通常会带有 uv 来采样纹理，因此通常蒙皮网格都不能合批。</li>
+</ul>
 <h2 id=gpu-instancing>GPU Instancing</h2>
+<ul>
+<li>官方文档说明如下：
+<ul>
+<li>GPU Instancing 是一种绘制调用优化方法，可以渲染单个绘制调用中具有相同材质的相同网格副本，网格的每个副本称为一个实例。对于绘制单个场景中多次出现的网格时非常有效，例如树木或灌木丛。为了增加变化并减少重复，每个实例可以具有不同的属性，例如 Color 或 Scale 。</li>
+<li>使用 GPU Instancing 的条件如下：
+<ul>
+<li>shader 必须支持 GPU Instancing ，包括对应的 shader 代码支持以及开启 Enable GPU Instancing 选项。</li>
+<li>网格需要使用 MeshRenderer 组件或者使用 Graphics.RenderMesh 方法调用。不支持 SkinnedMeshRender 组件，不支持使用 SRP Batcher 的 MeshRenderer 组件。</li>
+<li>Graphics.RenderMeshInstanced 或 Graphics.RenderMeshIndirect 方法的每次调用都是一个独立的 draw call ，相互不会合并。</li>
+</ul>
+</li>
+<li>顶点数量较少的网格无法使用 GPU 实例化进行高效处理，因为 GPU 无法以充分利用 GPU 资源的方式分配工作。这种处理效率低下会对性能产生不利影响，效率低下的阈值取决于 GPU，但一般来说，不要对顶点数量少于 256 个的网格使用 GPU 实例化。如果想多次渲染具有少量顶点的网格，最佳做法是创建一个包含所有网格信息的单个缓冲区，并使用它来绘制网格。</li>
+</ul>
+</li>
+<li>shader 代码相关内容有：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style=text-align:center>内容</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style=text-align:center>#pragma multi_compile_instancing</td>
+<td>生成实例变体。对于顶点和片元着色器是必须的，对于表面着色器是可选的。</td>
+</tr>
+<tr>
+<td style=text-align:center>#pragma instancing_options</td>
+<td>指定 Unity 用于实例的选项。</td>
+</tr>
+<tr>
+<td style=text-align:center>UNITY_VERTEX_INPUT_INSTANCE_ID</td>
+<td>在顶点着色器输入/输出结构中定义实例 ID。</td>
+</tr>
+<tr>
+<td style=text-align:center>UNITY_INSTANCING_BUFFER_START(bufferName)</td>
+<td>声明名为 bufferName 的每个实例常量缓冲区的开始。</td>
+</tr>
+<tr>
+<td style=text-align:center>UNITY_INSTANCING_BUFFER_END(bufferName)</td>
+<td>声明名为 bufferName 的每个实例常量缓冲区的结尾。</td>
+</tr>
+<tr>
+<td style=text-align:center>UNITY_DEFINE_INSTANCED_PROP(type, propertyName)</td>
+<td>定义具有指定类型和名称的每个实例着色器属性。</td>
+</tr>
+<tr>
+<td style=text-align:center>UNITY_SETUP_INSTANCE_ID(v);</td>
+<td>允许着色器函数访问实例 ID 。对于顶点着色器，此宏在开始时是必需的。对于片段着色器，此添加是可选的。</td>
+</tr>
+<tr>
+<td style=text-align:center>UNITY_TRANSFER_INSTANCE_ID(v, o);</td>
+<td>将实例 ID 从输入结构复制到顶点着色器中的输出结构。如果需要访问片段着色器中的每个实例数据，则使用此宏。</td>
+</tr>
+<tr>
+<td style=text-align:center>UNITY_ACCESS_INSTANCED_PROP(bufferName, propertyName)</td>
+<td>访问实例化常量缓冲区中的每个实例着色器属性。Unity 使用实例 ID 来索引实例数据数组。</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>当使用多个实例属性时，无需在 MaterialPropertyBlock 对象中填充所有属性。如果一个实例缺少属性，Unity 将从引用的材质中获取默认值。如果材质没有属性的默认值，Unity 会将值设置为 0 。不要将非实例属性放在 MaterialPropertyBlock 中，因为这会禁用实例化，并且为它们创建不同的材质。</li>
+<li>自定义着色器不需要每个实例数据，但需要实例 ID ，因为世界矩阵需要实例 ID 才能正常运行。表面着色器会自动设置实例 ID，但自定义顶点和片元着色器则不会。要设置自定义顶点和片元着色器的 ID，需要在着色器的开头使用 UNITY_SETUP_INSTANCE_ID 。</li>
+<li>如果着色器有超过两个 pass ，Unity 只会实例化第一个 pass 。因为 Unity 会强制更改每个对象的材质，从而一起渲染后续 pass 。</li>
+<li>如果使用内置的前向渲染路径，Unity 无法高效地实例化受多种光照影响的对象，只能有效地将实例化用于 base pass ，而不能用于 additional passes 。</li>
+<li>对于半透明物体，由于没有对可以合并的实例对象列表进行排序，所以可能会出现混合错误的问题。</li>
+</ul>
 <h2 id=合并网格>合并网格</h2>
+<ul>
+<li>手动将多个网格组合成一个网格，Unity 在单个绘制调用中渲染组合网格，而不是每个网格一个绘制调用。当网格彼此靠近且彼此不移动时，此技术可以成为绘制调用批处理的良好替代方案。然而 Unity 无法单独剔除组合的网格，这意味着，如果组合网格只有一部分在屏幕上，Unity 也将绘制整个组合网格。如果需要网格剔除，则考虑静态合批。</li>
+<li>组合网格的方法有：
+<ul>
+<li>在网格制作工具中生成。</li>
+<li>在 Unity 中使用 Mesh.CombineMeshes 方法。</li>
+</ul>
+</li>
+</ul>
 <h2 id=srp-batcher>SRP Batcher</h2>
+<ul>
+<li>官方文档说明如下：
+<ul>
+<li>优化绘制调用的传统方法是减少绘制调用的数量，相反，SRP Batcher 减少了绘制调用之间的渲染状态变化。为此，SRP Batcher 结合了一系列 bind 和 draw 的 GPU 命令，每个命令序列称为一个 SRP Batcher 。
+<figure>
+<img src="/img/Unity/DrawCallOptimization/SRP_1.png?raw=true" alt=SRP_1.png>
+<center><figcaption>图片引自 Unity 官方文档</figcaption></center>
+</figure>
+</li>
+<li>为了实现最佳渲染性能，每个 SRP 批次应包含尽可能多的 bind 和 draw 命令，为此需要尽可能少使用着色器变体，但仍然可以根据需要在同一着色器中使用尽可能多的不同材质。</li>
+<li>当 Unity 在渲染循环期间检测到新材质时，CPU 会收集所有属性，并将它们绑定到常量缓冲区中的 GPU。GPU 缓冲区的数量取决于着色器如何声明其常量缓冲区。</li>
+<li>SRP Batcher 是一个低级渲染循环，可使材质数据保留在 GPU 内存中。如果材质内容没有变化，SRP Batcher 不会进行任何渲染状态更改。相反，SRP Batcher 使用专用代码路径在大型 GPU 缓冲区中更新 Unity Engine 属性，如图所示：
+<figure>
+<img src="/img/Unity/DrawCallOptimization/SRP_2.png?raw=true" alt=SRP_2.png>
+<center><figcaption>图片引自 Unity 官方文档</figcaption></center>
+</figure>
+</li>
+<li>在这里，CPU 仅处理 Unity Engine 属性，在上图中标记为 Per Object large buffer ，所有材质都有位于 GPU 内存中的持久常量缓冲区，可随时使用，这可以加快渲染速度，因为：
+<ul>
+<li>所有材质内容都保留在 GPU 内存中。</li>
+<li>使用专用代码管理一个大型 GPU 常量缓冲区，记录每个对象的所有属性。</li>
+</ul>
+</li>
+<li>SRP Batcher 的限制条件如下：
+<ul>
+<li>GameObject 必须包含 mesh 或 skinned mesh ，不能是粒子。</li>
+<li>GameObject 不能使用 MaterialPropertyBlocks 。</li>
+<li>shader 需要对应的代码支持：
+<ul>
+<li>shader 必须在名为 UnityPerDraw 的单个常量缓冲区中声明所有内置引擎属性。例如，unity_ObjectToWorld 或 unity_SHAr 。</li>
+<li>shader 必须在名为 UnityPerMaterial 的单个常量缓冲区中声明所有材质属性。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h2 id=总结>总结</h2>
+<ul>
+<li>各个优化的对比如下表：</li>
+</ul>
+<p>| 类型 | Draw Call 数量 | SetPass Call 数量 | Batch 数量 | 应用场景 |
+| :&mdash;-: | :&mdash;-: | :&mdash;-: | :&mdash;-: |
+| 静态合批 | 下降（网格顶点连续时） | 下降 | 下降 | 材质相同，网格不相同的静态物体 |
+| 动态合批 | 下降 | 下降 | 下降 | 材质相同，顶点数较少，网格不相同的物体 |
+| 合并网格 | 下降 | 下降 | 下降 | 材质相同，网格之间相对静止且不需要部分剔除的物体 |
+| GPU Instancing | 下降 | 下降 | 下降 | 材质相同，网格相同，顶点数量超过 256 ，物体数量较多 |
+| SRP Batcher | 不变 | 下降 | 下降 | shader 相同，非粒子网格 |</p>
+<ul>
+<li>
+<p>Unity 对绘制调用优化的优先级排序为：</p>
+<ul>
+<li>SRP Batcher 和静态合批。</li>
+<li>GPU Instancing 。</li>
+<li>动态合批。</li>
+</ul>
+</li>
+<li>
+<p>Demo示例工程： <a href=https://github.com/FallingXun/Demo/tree/main/DrawCallOptimization>https://github.com/FallingXun/Demo/tree/main/DrawCallOptimization</a></p>
+</li>
+</ul>
 <hr>
 <ul class=pager>
 <li class=previous>
