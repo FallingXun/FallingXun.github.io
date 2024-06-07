@@ -440,6 +440,42 @@ post-container">
 
 	...
 </code></pre><ul>
+<li>lua 侧检查某个 C# 类、方法、属性、字段是否有生成 Wrap ，可以通过以下方式：</li>
+</ul>
+<pre tabindex=0><code>	local function TypeWrapped(typeName)
+		local wrap = false
+		local wrapType = _G
+		local result = pcall(function()
+			for key in string.gmatch(typeName, &quot;[^%.]+&quot;) do 
+				wrapType = wrapType[key]
+			end
+			wrap = wrapType ~= nil and wrapType ~= _G 
+		end)
+		if not wrap then
+			wrapType = nil
+		end
+		return wrap, wrapType
+	end
+
+	local function PropertyOrFieldWrapped(wrapType, memberName)
+		local wrap = false
+		if wrapType ~= nil then
+			local gettag = wrapType[tolua.gettag]
+			if gettag ~= nil and gettag[memberName] ~= nil then
+				wrap = true
+			end
+		end
+		return wrap
+	end
+
+	local function MethodWrapped(wrapType, methodName)
+		local wrap = false
+		if wrapType ~= nil and wrapType[methodName] ~= nil then
+			wrap = true
+		end
+		return wrap
+	end
+</code></pre><ul>
 <li>DelegateFactory 对委托相关的类型进行管理</li>
 </ul>
 <pre tabindex=0><code>public class DelegateFactory
