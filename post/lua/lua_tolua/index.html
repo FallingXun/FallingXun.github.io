@@ -363,13 +363,16 @@ post-container">
 <li>以UnityEngine.Component和UnityEngine.Space为例，进行绑定后,Lua侧的大致表结构如下</li>
 </ul>
 <pre tabindex=0><code>	_G = {
-		UnityEngine = {
-			Component =  LUA_REGISTRYINDEX表中LUA_RIDX_LOADED表的UnityEngine.Component,
-			Space = LUA_REGISTRYINDEX表中LUA_RIDX_LOADED表的UnityEngine.Space,
-			name = &quot;UnityEngine&quot;
+		UnityEngine = 
+			table = {
+				__index = tolua.c中的module_index_event,
+				.name = &quot;UnityEngine&quot;,
 
-			...
-		}
+				Component =  LUA_REGISTRYINDEX表中LUA_RIDX_LOADED表的UnityEngine.Component,
+				Space = LUA_REGISTRYINDEX表中LUA_RIDX_LOADED表的UnityEngine.Space,
+				...
+			}
+			metatable = table
 		
 		...
 	}
@@ -392,7 +395,7 @@ post-container">
 
 		ref_Component（分配的id，UnityEngine.Component）
 			table = {
-				name = &quot;UnityEngine.Component&quot;,
+				.name = &quot;UnityEngine.Component&quot;,
 				ref = ref_Component分配的id,
 				&amp;tag = 1,
 
@@ -430,7 +433,7 @@ post-container">
 		
 		ref_SpaceEnum（分配的id，UnityEngine.Space）
 			table = {
-				name = &quot;Space&quot;
+				.name = &quot;Space&quot;
 				__index = tolua.c中的enum_index_event,
 				__newindex = tolua.c中的enum_newindex_event,
 				__gc = CSharp的LuaState.Collect,
@@ -980,7 +983,7 @@ CSharp侧
 <pre tabindex=0><code>	_G = {
 		UnityEngine = {
 			GameObject =  LUA_REGISTRYINDEX表中LUA_RIDX_LOADED表的UnityEngine.GameObject,
-			name = &quot;UnityEngine&quot;
+			.name = &quot;UnityEngine&quot;
 			...
 		}
 		
