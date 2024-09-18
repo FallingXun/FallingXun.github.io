@@ -161,11 +161,11 @@ typedef struct TString {
 <li>长字符串（len > 40）：为 0 表示字符串没有经过 hash 计算，经过 hash 计算后则为 1 （lstring.c 的 luaS_hashlongstr 方法）。</li>
 </ul>
 </li>
-<li>shrlen ：短字符串的长度。</li>
+<li>shrlen ：短字符串的长度（字节数，UTF-8 编码的中文字符通常占用 3 个字节）。</li>
 <li>hash ：字符串经过 hash 计算后的结果。</li>
 <li>u ：union 结构，有两个字段。
 <ul>
-<li>lnglen ：长字符串的长度。</li>
+<li>lnglen ：长字符串的长度（字节数）。</li>
 <li>hnext ：TString 链表，存放下一个 hash 值对 G(L)->strt.size 取模结果相同的 TString。</li>
 </ul>
 </li>

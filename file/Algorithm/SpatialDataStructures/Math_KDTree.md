@@ -89,3 +89,8 @@ L' = [\frac{e_m(X_q)}{e_b(X_q)} + 1] ^ k = \{[\frac{mG(k)}{b}] ^ \frac{1}{k} + 1
 ```math
 R' \le bL' = b\{[\frac{mG(k)}{b}] ^ \frac{1}{k} + 1\} ^ k
 ```
+
+- Math_KDTree_14
+```math
+R' \le \{[mG(k)] ^ \frac{1}{k} + 1\} ^ k
+```
