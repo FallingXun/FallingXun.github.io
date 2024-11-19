@@ -506,7 +506,218 @@ post-container">
 </li>
 <li>可以看到，没有顶点颜色和 uv 的网格，都能动态合批，而当存在顶点颜色或者 uv 时，则所有都不能合批。由于蒙皮网格通常会带有 uv 来采样纹理，因此通常蒙皮网格都不能合批。</li>
 </ul>
-<h2 id=gpu-instancing>GPU Instancing</h2>
+<h3 id=粒子系统>粒子系统</h3>
+<ul>
+<li>粒子系统（ParticleSystem）默认使用动态合批处理，但粒子系统的合批规则和常规的动态合批规则又有些差别。</li>
+</ul>
+<h4 id=数据长度数量位置信息>数据长度、数量、位置信息</h4>
+<p>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_23.png?raw=true" alt=DynamicBatch_23.png>
+</p>
+<ul>
+<li>当网格属性有位置、法线、切线、颜色、uv0 ~ uv7 ，shader 使用所有数据时，即：</li>
+</ul>
+<pre tabindex=0><code>    ...
+            v2f vert (appdata v)
+            {
+                v2f o;
+				float s = 1;
+				o.vertex = UnityObjectToClipPos(float3(0, 0, 0));
+				s *= step(v.vertex.x, 0);
+				s *= step(v.normal.x, 0);
+				s *= step(v.tangent.x, 0);
+				s *= step(v.color.x, 0);
+				s *= step(v.uv0.x, 0);
+				s *= step(v.uv1.y, 0);
+				s *= step(v.uv2.y, 0);
+				s *= step(v.uv3.y, 0);
+				s *= step(v.uv4.y, 0);
+				s *= step(v.uv5.y, 0);
+				s *= step(v.uv6.y, 0);
+				s *= step(v.uv7.y, 0);
+				o.color = float4(0.1, 0.1, 0.1, 1) * s;
+
+                return o;
+            }
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                fixed4 col = fixed4(1,1,1,1);
+                return col;
+            }
+    ...
+</code></pre><p>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_24.png?raw=true" alt=DynamicBatch_24.png>
+</p>
+<ul>
+<li>其中，MeshRenderer 无法进行动态合批，因为顶点数量、顶点属性数量、数据长度等都不符合动态合批要求。然而相同网格和材质球下，粒子特效却能正常合批。</li>
+<li>当 shader 不使用位置时，即：</li>
+</ul>
+<pre tabindex=0><code>    ...
+            v2f vert (appdata v)
+            {
+                v2f o;
+				float s = 1;
+				o.vertex = float4(0, 0, 0, 0);
+				s *= step(v.normal.x, 0);
+				s *= step(v.tangent.x, 0);
+				s *= step(v.color.x, 0);
+				s *= step(v.uv0.x, 0);
+				s *= step(v.uv1.y, 0);
+				s *= step(v.uv2.y, 0);
+				s *= step(v.uv3.y, 0);
+				s *= step(v.uv4.y, 0);
+				s *= step(v.uv5.y, 0);
+				s *= step(v.uv6.y, 0);
+				s *= step(v.uv7.y, 0);
+				o.color = float4(0.1, 0.1, 0.1, 1) * s;
+
+                return o;
+            }
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                fixed4 col = fixed4(1,1,1,1);
+                return col;
+            }
+    ...
+</code></pre><p>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_25.png?raw=true" alt=DynamicBatch_25.png>
+</p>
+<ul>
+<li>此时，粒子特效则不能正常进行动态合批。</li>
+<li>而当 shader 使用位置，但不用于顶点坐标计算时：</li>
+</ul>
+<pre tabindex=0><code>    ...
+            v2f vert (appdata v)
+            {
+                v2f o;
+				float s = 1;
+				o.vertex = float4(0, 0, 0, 0);
+                s *= step(v.vertex.x, 0);
+				s *= step(v.normal.x, 0);
+				s *= step(v.tangent.x, 0);
+				s *= step(v.color.x, 0);
+				s *= step(v.uv0.x, 0);
+				s *= step(v.uv1.y, 0);
+				s *= step(v.uv2.y, 0);
+				s *= step(v.uv3.y, 0);
+				s *= step(v.uv4.y, 0);
+				s *= step(v.uv5.y, 0);
+				s *= step(v.uv6.y, 0);
+				s *= step(v.uv7.y, 0);
+				o.color = float4(0.1, 0.1, 0.1, 1) * s;
+
+                return o;
+            }
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                fixed4 col = fixed4(1,1,1,1);
+                return col;
+            }
+    ...
+</code></pre><p>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_26.png?raw=true" alt=DynamicBatch_26.png>
+</p>
+<ul>
+<li>同样，粒子特效又恢复正常动态合批。</li>
+<li>也就是说，粒子特效在动态合批过程中，不会受到顶点数量、顶点属性数量、数据长度的限制，但仍需要使用顶点位置信息，才能正常合批。</li>
+</ul>
+<h4 id=网格顶点属性>网格顶点属性</h4>
+<ul>
+<li>当两个网格的顶点属性分别为：
+<ul>
+<li>位置、法线、切线、颜色、uv0 ~ uv3</li>
+<li>位置、法线、切线、颜色、uv0 ~ uv7
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_27.png?raw=true" alt=DynamicBatch_27.png>
+<figure>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_28.png?raw=true" alt=DynamicBatch_28.png>
+<center><figcaption>网格顶点属性相差 uv4 ~ uv7，正常合批</figcaption></center>
+</figure>
+</li>
+</ul>
+</li>
+<li>当两个网格的顶点属性分别为：
+<ul>
+<li>位置、法线、切线、颜色、uv0 ~ uv3</li>
+<li>位置、切线、颜色、uv0 ~ uv3
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_29.png?raw=true" alt=DynamicBatch_29.png>
+<figure>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_30.png?raw=true" alt=DynamicBatch_30.png>
+<center><figcaption>网格顶点属性相差法线，不能合批</figcaption></center>
+</figure>
+</li>
+</ul>
+</li>
+<li>当两个网格的顶点属性分别为：
+<ul>
+<li>位置、法线、切线、颜色、uv0 ~ uv3</li>
+<li>位置、法线、颜色、uv0 ~ uv3
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_31.png?raw=true" alt=DynamicBatch_31.png>
+<figure>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_32.png?raw=true" alt=DynamicBatch_32.png>
+<center><figcaption>网格顶点属性相差切线，不能合批</figcaption></center>
+</figure>
+</li>
+</ul>
+</li>
+<li>当两个网格的顶点属性分别为：
+<ul>
+<li>位置、法线、切线、颜色、uv0 ~ uv3</li>
+<li>位置、法线、切线、uv0 ~ uv3 / 位置、法线、切线、颜色、uv1 ~ uv3 / 位置、法线、切线、颜色、uv0 、uv1 、uv3
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_33.png?raw=true" alt=DynamicBatch_33.png>
+<figure>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_34.png?raw=true" alt=DynamicBatch_34.png>
+<center><figcaption>网格顶点属性相差颜色/uv1/uv3，正常合批</figcaption></center>
+</figure>
+</li>
+</ul>
+</li>
+<li>调整渲染顺序后，将所有粒子特效进行绘制，合并成三个批次。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_35.png?raw=true" alt=DynamicBatch_35.png>
+</li>
+<li>从以上数据可以看出，粒子特效动态合批会受到网格的顶点属性影响，其中，对于具有基本属性（位置、法线、切线）任意组合的网格，相同组合的网格（含蒙皮网格）才能动态合批，而颜色和 uv 不影响动态合批结果。</li>
+</ul>
+<h4 id=网格数量>网格数量</h4>
+<ul>
+<li>多个具有相同材质的粒子特效，当设置了多个网格时，能否合批取决于首个不为空的网格。当首个不为空的网格具有相同基本属性组合，则所有粒子特效都能正常合批，即使后续网格不具备相同基本属性组合。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_36.png?raw=true" alt=DynamicBatch_36.png>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_37.png?raw=true" alt=DynamicBatch_37.png>
+</li>
+<li>可以看到，首个不为空的网格具有相同基本属性组合，而第二个不为空的网格则组合不一致，但最终都能正常合批。</li>
+<li>当调换第二个对象的网格顺序时：
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_38.png?raw=true" alt=DynamicBatch_38.png>
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_39.png?raw=true" alt=DynamicBatch_39.png>
+</li>
+<li>调换后，首个不为空的网格基本属性组合不一致，因此变成了两个批次。</li>
+<li>多网格的粒子特效，每次都会从网格列表中取其中一个网格来发射粒子，数量受到 Max Particles 和 Emission 下的参数限制。</li>
+</ul>
+<h4 id=渲染模式>渲染模式</h4>
+<ul>
+<li>Renderer 下的 Render Mode ，Mesh 模式和其他模式相互不能合批，如：
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_40.png?raw=true" alt=DynamicBatch_40.png>
+</li>
+<li>原本 4 个粒子特效都能正常合批，当第一个粒子特效改为 Billboard 模式后，则不能和其他 3 个 Mesh 模式的特效合批。</li>
+<li>所有 Billboard 模式，都会创建一个 4 顶点 2 三角面的网格进行渲染。</li>
+</ul>
+<h4 id=材质球数量>材质球数量</h4>
+<ul>
+<li>当使用 Trails 效果时，Renderer 下会增加多一个 Trail Material 项，用于渲染拖尾效果。而拖尾效果无法和基础特效进行合批，即使材质球相同。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_41.png?raw=true" alt=DynamicBatch_41.png>
+</li>
+<li>多个使用 Trails 效果的特效，如果使用相同材质球，则主效果和拖尾效果能分别合批。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_42.png?raw=true" alt=DynamicBatch_42.png>
+</li>
+<li>如果多个使用 Trails 效果的特效，Trails 效果使用和主效果不同的材质球，则会根据渲染队列顺序进行绘制。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_43.png?raw=true" alt=DynamicBatch_43.png>
+</li>
+<li>如上图所示，每个粒子特效上的两个材质球的渲染队列都为 3000，则会先渲染特效 1 ，再渲染特效 2 ，所以会产生 4 个批次。</li>
+<li>当调整拖尾特效的渲染队列为 3001 时，则拖尾特效统一渲染，最终能合并成 2 个批次。
+<img src="/img/Unity/DrawCallOptimization/DynamicBatch_44.png?raw=true" alt=DynamicBatch_44.png>
+</li>
+</ul>
+<h1 id=gpu-instancing>GPU Instancing</h1>
 <ul>
 <li>官方文档说明如下：
 <ul>
@@ -576,7 +787,7 @@ post-container">
 <li>如果使用内置的前向渲染路径，Unity 无法高效地实例化受多种光照影响的对象，只能有效地将实例化用于 base pass ，而不能用于 additional passes 。</li>
 <li>对于半透明物体，由于没有对可以合并的实例对象列表进行排序，所以可能会出现混合错误的问题。</li>
 </ul>
-<h2 id=合并网格>合并网格</h2>
+<h1 id=合并网格>合并网格</h1>
 <ul>
 <li>手动将多个网格组合成一个网格，Unity 在单个绘制调用中渲染组合网格，而不是每个网格一个绘制调用。当网格彼此靠近且彼此不移动时，此技术可以成为绘制调用批处理的良好替代方案。然而 Unity 无法单独剔除组合的网格，这意味着，如果组合网格只有一部分在屏幕上，Unity 也将绘制整个组合网格。如果需要网格剔除，则考虑静态合批。</li>
 <li>组合网格的方法有：
@@ -586,7 +797,7 @@ post-container">
 </ul>
 </li>
 </ul>
-<h2 id=srp-batcher>SRP Batcher</h2>
+<h1 id=srp-batcher>SRP Batcher</h1>
 <ul>
 <li>官方文档说明如下：
 <ul>
@@ -625,7 +836,7 @@ post-container">
 </ul>
 </li>
 </ul>
-<h2 id=总结>总结</h2>
+<h1 id=总结>总结</h1>
 <ul>
 <li>各个优化的对比如下表：</li>
 </ul>
@@ -687,7 +898,7 @@ post-container">
 </ul>
 </li>
 <li>
-<p>Demo示例工程： <a href=https://github.com/FallingXun/Demo/tree/main/DrawCallOptimization>https://github.com/FallingXun/Demo/tree/main/DrawCallOptimization</a></p>
+<p>Demo示例工程（Unity2020.3）： <a href=https://github.com/FallingXun/Demo/tree/main/DrawCallOptimization>https://github.com/FallingXun/Demo/tree/main/DrawCallOptimization</a></p>
 </li>
 </ul>
 <hr>
