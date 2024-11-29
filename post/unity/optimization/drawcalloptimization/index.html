@@ -821,18 +821,26 @@ post-container">
 <li>使用专用代码管理一个大型 GPU 常量缓冲区，记录每个对象的所有属性。</li>
 </ul>
 </li>
-<li>SRP Batcher 的限制条件如下：
+</ul>
+</li>
+<li>SRP Batcher 合批的对象条件如下：
 <ul>
-<li>GameObject 必须包含 mesh 或 skinned mesh ，不能是粒子。</li>
+<li>GameObject 必须包含 mesh 或 skinned mesh ，但不能是粒子（粒子系统使用动态合批）。
+<ul>
+<li>网格顶点数、顶点属性数量等都不影响合批。</li>
+<li>不同组件可相互合批。</li>
+</ul>
+</li>
 <li>GameObject 不能使用 MaterialPropertyBlocks 。</li>
-<li>shader 需要对应的代码支持：
+<li>shader 相同，且 shader 需要对应的代码支持：
 <ul>
 <li>shader 必须在名为 UnityPerDraw 的单个常量缓冲区中声明所有内置引擎属性。例如，unity_ObjectToWorld 或 unity_SHAr 。</li>
 <li>shader 必须在名为 UnityPerMaterial 的单个常量缓冲区中声明所有材质属性。</li>
+<li>shader 的 pass 数量不影响合批。</li>
 </ul>
 </li>
-</ul>
-</li>
+<li>材质球的 ShaderKeywords 要相同，即具有相同的个数、相同名字组合的 keyword 。</li>
+<li>不同对象（具有相同 OrderInLayer）使用单/多材质球，当材质球的 RenderQueue 相同时，不同的 shader 能分别进行合批，材质球顺序不影响合批结果。</li>
 </ul>
 </li>
 </ul>
