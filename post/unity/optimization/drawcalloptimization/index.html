@@ -836,7 +836,7 @@ post-container">
 <ul>
 <li>shader 必须在名为 UnityPerDraw 的单个常量缓冲区中声明所有内置引擎属性。例如，unity_ObjectToWorld 或 unity_SHAr 。</li>
 <li>shader 必须在名为 UnityPerMaterial 的单个常量缓冲区中声明所有材质属性。</li>
-<li>shader 的 pass 数量不影响合批。</li>
+<li>shader 不支持多 Pass（ShadowCaster/DepthOnly/Meta 等特殊 Pass 除外）。</li>
 </ul>
 </li>
 <li>材质球的 ShaderKeywords 要相同，即具有相同的个数、相同名字组合的 keyword 。</li>
