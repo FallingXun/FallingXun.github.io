@@ -1,0 +1,1012 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="Unity篇 — HybridCLR 热更新">
+<meta property="og:title" content="Unity篇 — HybridCLR 热更新">
+<meta property="twitter:title" content="Unity篇 — HybridCLR 热更新">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>Unity篇 — HybridCLR 热更新-</title>
+<link rel=canonical href=/post/unity/hybridclr/hybridclr/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+<li>
+<a href=/categories/googleplay%E7%B3%BB%E5%88%97>googleplay系列</a>
+</li>
+<li>
+<a href=/categories/lua%E7%B3%BB%E5%88%97>lua系列</a>
+</li>
+<li>
+<a href=/categories/tmp%E7%B3%BB%E5%88%97>tmp系列</a>
+</li>
+<li>
+<a href=/categories/unity%E7%B3%BB%E5%88%97>unity系列</a>
+</li>
+<li>
+<a href=/categories/%E5%9B%BE%E5%BD%A2%E5%AD%A6%E7%B3%BB%E5%88%97>图形学系列</a>
+</li>
+<li>
+<a href=/categories/%E6%B8%B2%E6%9F%93%E7%B3%BB%E5%88%97>渲染系列</a>
+</li>
+<li>
+<a href=/categories/%E7%AE%97%E6%B3%95%E7%B3%BB%E5%88%97>算法系列</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/hybridclr title=HybridCLR>
+HybridCLR
+</a>
+<a class=tag href=/tags/%E7%83%AD%E6%9B%B4%E6%96%B0 title=热更新>
+热更新
+</a>
+</div>
+<h1>Unity篇 — HybridCLR 热更新</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Sunday, January 29, 2023
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>HybridCLR 是近些年新出的热热更方案。相较于 Lua ，HybridCLR 是基于 C# 的热更新方案，在 Unity 中使用可以获得使用纯 C# 语言的便利性。</p>
+<h2 id=基础概念>基础概念</h2>
+<ul>
+<li>在了解 HybridCLR 之前，需要了解一些程序编译执行相关的基础概念，才能更加清楚地理解框架的原理。</li>
+</ul>
+<h3 id=clicommon-language-infrastructure>CLI（Common Language Infrastructure）</h3>
+<ul>
+<li>通用语言架构，是一个开放的技术规范，它为跨平台和跨语言的软件开发提供了一个统一的框架。</li>
+</ul>
+<h3 id=ilintermediate-language>IL（Intermediate Language）</h3>
+<ul>
+<li>中间语言，也被称为 MSIL（Microsoft Intermediate Language）或 CIL（Common Intermediate Language），是一种低级的、面向堆栈的编程语言，由高级语言（如 C#、VB.NET 等）编译而成。</li>
+</ul>
+<h3 id=clrcommon-language-runtime>CLR（Common Language Runtime）</h3>
+<ul>
+<li>公共语言运行时，是一个执行环境，负责管理 .NET 程序的执行。通过即时编译（JIT）技术，将 IL 代码在运行时转换为特定平台的本地机器码，从而实现跨平台性，并提供了垃圾回收机制来自动回收不再使用的内存，从而减少内存泄漏的可能性。</li>
+</ul>
+<h3 id=jitjust-in-time-compilation>JIT（Just-In-Time Compilation）</h3>
+<ul>
+<li>即时编译，也称为动态翻译或运行时编译，是一种执行计算机代码的方法，这种方法设计在程序执行过程中而不是在执行之前进行编译。通常，这包括源代码或更常见的字节码到机器码的转换，然后直接执行。实现 JIT 编译器的系统通常会不断地分析正在执行的代码，并确定代码中可被即时编译加速的部分，在这些部分中，由编译或重新编译带来的性能提高将超过编译该代码的开销。</li>
+<li>JIT 编译是两种传统的机器代码翻译方法（提前编译、解释器）的结合，它结合了两者的优点和缺点。大致来说，JIT编译，通过解释器的开销以及编译和链接（解释之外）的开销，结合了编译代码的速度与解释的灵活性。JIT 编译是动态编译的一种形式，允许自适应优化，比如动态重编译和特定于微架构的加速。因此，在理论上，JIT 编译比静态编译能够产生更快的执行速度。解释和 JIT 编译特别适合于动态编程语言，因为运行时系统可以处理后期绑定的数据类型并实施安全保证。</li>
+</ul>
+<h3 id=aotahead-of-time-compilation>AOT（Ahead-Of-Time Compilation）</h3>
+<ul>
+<li>提前编译，通常是在执行程序之前（构建时），将高级编程语言编译为低级语言的行为，以减少运行时需要执行的工作量。它通常与将高级编程语言（例如 C 或 C++）或中间表示（例如 Java 字节码或通用中间语言 CIL 代码）编译为原生代码，以便生成的二进制文件可以像标准编译器一样执行。在这种情况下使用时，它通常被视为即时(JIT) 编译的对立面。</li>
+</ul>
+<h3 id=mono>Mono</h3>
+<ul>
+<li>Mono 是一种由 Xamarin 公司开发的开源项目，它包含了一个 C# 语言的编译器及代码运行引擎，可将 ECMA CIL 字节码转换为原生代码，使得开发者可以在Linux、Mac OS X、Windows等不同操作系统上编写 .NET 应用程序。在 Unity中，Mono 可以将 C# 代码编译成中间语言（IL，Intermediate Language），然后通过 Mono VM 解释执行，如图所示：
+<img src="/img/Unity/HybridCLR/HybridCLR_1.png?raw=true" alt=HybridCLR_1.png>
+</li>
+<li>代码生成器有三种模式：
+<ul>
+<li>即时编译（JIT）：运行时会在代码运行时将 ECMA CIL 字节码转换为原生代码。</li>
+<li>提前编译（AOT）：此代码转换 ECMA CIL 字节码（通常位于 .exe 或 .dll 文件中）并生成存储在操作系统、体系结构和 CPU 特定文件中的原生代码。此操作模式编译了通常在运行时完成的大部分代码，但有一些例外，例如 trampolines 和其他管理代码，仍然需要 JIT 才能运行，因此 AOT 映像并非完全独立。</li>
+<li>完全提前编译（Full AOT）：某些平台（例如 iPhone）使用技术或法律手段禁止 JIT 代码。这对于 Mono 运行时来说是一个重大问题，因为它使用 JIT 或更多低级代码生成宏动态生成大量代码。为了解决这个问题，AOT 编译器能够在 Full AOT 或 Only AOT 模式下运行，在这种模式下，它会生成并保存 AOT 映像中的所有必要代码，因此在运行时无需生成任何代码。有两种类型的代码需要注意：
+<ul>
+<li>wrapper 方法，其 IL 代码是运行时通过在 <code>add_wrappers()</code> 方法中动态生成，然后作为额外方法通知并执行。</li>
+<li>trampolines 和其他小型手动生成的代码片段，在 <code>emit_trampolines()</code> 方法中以临时方式处理。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h3 id=il2cpp>IL2CPP</h3>
+<ul>
+<li>然而，由于存在一些困难，Unity 后续改为使用 IL2CPP 方案（过渡），主要原因如下：
+<ul>
+<li>VM 维护成本高。为了实现跨平台，Mono 要为每一个平台实现 VM ，并且随 Unity 版本升级，还要持续不断更新，工作量非常大。</li>
+<li>Mono 版权受限。尽管 Mono 是开源项目，但是商用版有一定的版权限制，而低版本的 Mono 不能使用 C# 的很多新特性，因此只能一直使用低版本。</li>
+<li>ARM64 不支持。在以前，Mono arm64 AOT 引擎和运行模块不是开源的，并且 Unity 没有使用它们的适当许可证(<a href=https://discussions.unity.com/t/why-doesnt-mono-support-arm64/187302>引自 Unity 问答</a>)。</li>
+<li>IL2CPP 运行效率高。根据 <a href="https://www.youtube.com/watch?v=Bfa9ILwlsFw">Unite 2014</a> 官方实验数据，以 Mono 32 和 IL2CPP 64 对比，在 Windows 下，执行耗时降低了 45.6% ，在 OSX 下耗时降低了 58.2% 。
+<ul>
+<li>
+<img src="/img/Unity/HybridCLR/HybridCLR_3.png?raw=true" alt=HybridCLR_3.png>
+</li>
+<li>
+<img src="/img/Unity/HybridCLR/HybridCLR_4.png?raw=true" alt=HybridCLR_4.png>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>作为 Mono 的替代方案，IL2CPP 的执行流程如图所示：
+<img src="/img/Unity/HybridCLR/HybridCLR_2.png?raw=true" alt=HybridCLR_2.png>
+</li>
+<li>Mono 将 IL 代码放到 Mono VM 下解释执行，而 IL2CPP 则是修改了后续的步骤，将 IL 代码，经过 IL2CPP 将 IL 代码转成 C++ 代码，再由各个平台的 C++ 编译器编译成可执行的原生汇编代码，由 IL2CPP VM 执行。其中，IL2CPP VM 和 Mono VM 不同，不会执行 IL 加载和动态解析的工作，主要提供 GC 管理等工作，保持 C# 原来的内存管理方式。</li>
+</ul>
+<h2 id=unity-执行流程>Unity 执行流程</h2>
+<h3 id=初始化>初始化</h3>
+<ul>
+<li>Unity 启动时，会执行 <code>il2cpp::vm::Runtime::Init</code> 方法，初始化 il2cpp 虚拟机，初始化代码如下：</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/vm/Runtime.cpp
+...
+
+    bool Runtime::Init(const char* domainName)
+    {
+        os::FastAutoLock lock(&amp;s_InitLock);
+
+        IL2CPP_ASSERT(s_RuntimeInitCount &gt;= 0);
+        if (s_RuntimeInitCount++ &gt; 0)
+            return true;
+
+        SanityChecks();
+
+        os::Initialize();
+        os::Locale::Initialize();
+        MetadataAllocInitialize();
+
+        // NOTE(gab): the runtime_version needs to change once we
+        // will support multiple runtimes.
+        // For now we default to the one used by unity and don't
+        // allow the callers to change it.
+        s_FrameworkVersion = framework_version_for(&quot;v4.0.30319&quot;);
+
+        os::Image::Initialize();
+        os::Thread::Init();
+
+        // This should be filled in by generated code.
+        IL2CPP_ASSERT(g_CodegenRegistration != NULL);
+        g_CodegenRegistration();
+
+        if (!MetadataCache::Initialize())
+        {
+            s_RuntimeInitCount--;
+            return false;
+        }
+
+        Assembly::Initialize();
+        gc::GarbageCollector::Initialize();
+
+        // Thread needs GC initialized
+        Thread::Initialize();
+
+        // Reflection needs GC initialized
+        Reflection::Initialize();
+
+        register_allocator(il2cpp::utils::Memory::Malloc);
+
+        memset(&amp;il2cpp_defaults, 0, sizeof(Il2CppDefaults));
+
+        const Il2CppAssembly* assembly = Assembly::Load(&quot;mscorlib.dll&quot;);
+
+        // It is not possible to use DEFAULTS_INIT_TYPE for managed types for which we have a native struct, if the
+        // native struct does not map the complete managed type.
+        // Which is the case for: Il2CppThread, Il2CppAppDomain, Il2CppCultureInfo, Il2CppReflectionProperty,
+        // Il2CppDateTimeFormatInfo, Il2CppNumberFormatInfo
+
+        il2cpp_defaults.corlib = Assembly::GetImage(assembly);
+        DEFAULTS_INIT(object_class, &quot;System&quot;, &quot;Object&quot;);
+        DEFAULTS_INIT(void_class, &quot;System&quot;, &quot;Void&quot;);
+        DEFAULTS_INIT_TYPE(boolean_class, &quot;System&quot;, &quot;Boolean&quot;, bool);
+        DEFAULTS_INIT_TYPE(byte_class, &quot;System&quot;, &quot;Byte&quot;, uint8_t);
+        DEFAULTS_INIT_TYPE(sbyte_class, &quot;System&quot;, &quot;SByte&quot;, int8_t);
+        DEFAULTS_INIT_TYPE(int16_class, &quot;System&quot;, &quot;Int16&quot;, int16_t);
+        DEFAULTS_INIT_TYPE(uint16_class, &quot;System&quot;, &quot;UInt16&quot;, uint16_t);
+        DEFAULTS_INIT_TYPE(int32_class, &quot;System&quot;, &quot;Int32&quot;, int32_t);
+        DEFAULTS_INIT_TYPE(uint32_class, &quot;System&quot;, &quot;UInt32&quot;, uint32_t);
+        DEFAULTS_INIT(uint_class, &quot;System&quot;, &quot;UIntPtr&quot;);
+        DEFAULTS_INIT_TYPE(int_class, &quot;System&quot;, &quot;IntPtr&quot;, intptr_t);
+        DEFAULTS_INIT_TYPE(int64_class, &quot;System&quot;, &quot;Int64&quot;, int64_t);
+        DEFAULTS_INIT_TYPE(uint64_class, &quot;System&quot;, &quot;UInt64&quot;, uint64_t);
+        DEFAULTS_INIT_TYPE(single_class, &quot;System&quot;, &quot;Single&quot;, float);
+        DEFAULTS_INIT_TYPE(double_class, &quot;System&quot;, &quot;Double&quot;, double);
+        DEFAULTS_INIT_TYPE(char_class, &quot;System&quot;, &quot;Char&quot;, Il2CppChar);
+        DEFAULTS_INIT(string_class, &quot;System&quot;, &quot;String&quot;);
+        DEFAULTS_INIT(enum_class, &quot;System&quot;, &quot;Enum&quot;);
+        DEFAULTS_INIT(array_class, &quot;System&quot;, &quot;Array&quot;);
+#if !IL2CPP_TINY
+        DEFAULTS_INIT_TYPE(delegate_class, &quot;System&quot;, &quot;Delegate&quot;, Il2CppDelegate);
+        DEFAULTS_INIT_TYPE(multicastdelegate_class, &quot;System&quot;, &quot;MulticastDelegate&quot;, Il2CppMulticastDelegate);
+        DEFAULTS_INIT(asyncresult_class, &quot;System.Runtime.Remoting.Messaging&quot;, &quot;AsyncResult&quot;);
+        DEFAULTS_INIT_TYPE(async_call_class, &quot;System&quot;, &quot;MonoAsyncCall&quot;, Il2CppAsyncCall);
+        DEFAULTS_INIT(manualresetevent_class, &quot;System.Threading&quot;, &quot;ManualResetEvent&quot;);
+#endif // !IL2CPP_TINY
+        //DEFAULTS_INIT(typehandle_class, &quot;System&quot;, &quot;RuntimeTypeHandle&quot;);
+        //DEFAULTS_INIT(methodhandle_class, &quot;System&quot;, &quot;RuntimeMethodHandle&quot;);
+        //DEFAULTS_INIT(fieldhandle_class, &quot;System&quot;, &quot;RuntimeFieldHandle&quot;);
+        DEFAULTS_INIT(systemtype_class, &quot;System&quot;, &quot;Type&quot;);
+#if !IL2CPP_TINY
+        DEFAULTS_INIT_TYPE(monotype_class, &quot;System&quot;, &quot;MonoType&quot;, Il2CppReflectionMonoType);
+#endif
+        //DEFAULTS_INIT(exception_class, &quot;System&quot;, &quot;Exception&quot;);
+        //DEFAULTS_INIT(threadabortexcepXtion_class, &quot;System.Threading&quot;, &quot;ThreadAbortException&quot;);
+        DEFAULTS_INIT_TYPE(thread_class, &quot;System.Threading&quot;, &quot;Thread&quot;, Il2CppThread);
+        DEFAULTS_INIT_TYPE(internal_thread_class, &quot;System.Threading&quot;, &quot;InternalThread&quot;, Il2CppInternalThread);
+        DEFAULTS_INIT_TYPE(runtimetype_class, &quot;System&quot;, &quot;RuntimeType&quot;, Il2CppReflectionRuntimeType);
+#if !IL2CPP_TINY
+        DEFAULTS_INIT(appdomain_class, &quot;System&quot;, &quot;AppDomain&quot;);
+        DEFAULTS_INIT(appdomain_setup_class, &quot;System&quot;, &quot;AppDomainSetup&quot;);
+        DEFAULTS_INIT(field_info_class, &quot;System.Reflection&quot;, &quot;FieldInfo&quot;);
+        DEFAULTS_INIT(method_info_class, &quot;System.Reflection&quot;, &quot;MethodInfo&quot;);
+        DEFAULTS_INIT(property_info_class, &quot;System.Reflection&quot;, &quot;PropertyInfo&quot;);
+        DEFAULTS_INIT_TYPE(event_info_class, &quot;System.Reflection&quot;, &quot;EventInfo&quot;, Il2CppReflectionEvent);
+        DEFAULTS_INIT_TYPE(mono_event_info_class, &quot;System.Reflection&quot;, &quot;MonoEventInfo&quot;, Il2CppReflectionMonoEventInfo);
+        DEFAULTS_INIT_TYPE(stringbuilder_class, &quot;System.Text&quot;, &quot;StringBuilder&quot;, Il2CppStringBuilder);
+        DEFAULTS_INIT_TYPE(stack_frame_class, &quot;System.Diagnostics&quot;, &quot;StackFrame&quot;, Il2CppStackFrame);
+        DEFAULTS_INIT(stack_trace_class, &quot;System.Diagnostics&quot;, &quot;StackTrace&quot;);
+        DEFAULTS_INIT_TYPE(typed_reference_class, &quot;System&quot;, &quot;TypedReference&quot;, Il2CppTypedRef);
+#endif
+        DEFAULTS_INIT(generic_ilist_class, &quot;System.Collections.Generic&quot;, &quot;IList`1&quot;);
+        DEFAULTS_INIT(generic_icollection_class, &quot;System.Collections.Generic&quot;, &quot;ICollection`1&quot;);
+        DEFAULTS_INIT(generic_ienumerable_class, &quot;System.Collections.Generic&quot;, &quot;IEnumerable`1&quot;);
+        DEFAULTS_INIT(generic_ireadonlylist_class, &quot;System.Collections.Generic&quot;, &quot;IReadOnlyList`1&quot;);
+        DEFAULTS_INIT(generic_ireadonlycollection_class, &quot;System.Collections.Generic&quot;, &quot;IReadOnlyCollection`1&quot;);
+        DEFAULTS_INIT(generic_nullable_class, &quot;System&quot;, &quot;Nullable`1&quot;);
+#if !IL2CPP_TINY
+        DEFAULTS_INIT(version, &quot;System&quot;, &quot;Version&quot;);
+        DEFAULTS_INIT(culture_info, &quot;System.Globalization&quot;, &quot;CultureInfo&quot;);
+        DEFAULTS_INIT_TYPE(assembly_class, &quot;System.Reflection&quot;, &quot;Assembly&quot;, Il2CppReflectionAssembly);
+        DEFAULTS_INIT_TYPE(assembly_name_class, &quot;System.Reflection&quot;, &quot;AssemblyName&quot;, Il2CppReflectionAssemblyName);
+#endif // !IL2CPP_TINY
+        DEFAULTS_INIT_TYPE(mono_assembly_class, &quot;System.Reflection&quot;, &quot;MonoAssembly&quot;, Il2CppReflectionAssembly);
+#if !IL2CPP_TINY
+        DEFAULTS_INIT_TYPE(mono_field_class, &quot;System.Reflection&quot;, &quot;MonoField&quot;, Il2CppReflectionField);
+        DEFAULTS_INIT_TYPE(mono_method_class, &quot;System.Reflection&quot;, &quot;MonoMethod&quot;, Il2CppReflectionMethod);
+        DEFAULTS_INIT_TYPE(mono_method_info_class, &quot;System.Reflection&quot;, &quot;MonoMethodInfo&quot;, Il2CppMethodInfo);
+        DEFAULTS_INIT_TYPE(mono_property_info_class, &quot;System.Reflection&quot;, &quot;MonoPropertyInfo&quot;, Il2CppPropertyInfo);
+        DEFAULTS_INIT_TYPE(parameter_info_class, &quot;System.Reflection&quot;, &quot;ParameterInfo&quot;, Il2CppReflectionParameter);
+        DEFAULTS_INIT_TYPE(mono_parameter_info_class, &quot;System.Reflection&quot;, &quot;MonoParameterInfo&quot;, Il2CppReflectionParameter);
+        DEFAULTS_INIT_TYPE(module_class, &quot;System.Reflection&quot;, &quot;Module&quot;, Il2CppReflectionModule);
+
+        DEFAULTS_INIT_TYPE(pointer_class, &quot;System.Reflection&quot;, &quot;Pointer&quot;, Il2CppReflectionPointer);
+        DEFAULTS_INIT_TYPE(exception_class, &quot;System&quot;, &quot;Exception&quot;, Il2CppException);
+        DEFAULTS_INIT_TYPE(system_exception_class, &quot;System&quot;, &quot;SystemException&quot;, Il2CppSystemException);
+        DEFAULTS_INIT_TYPE(argument_exception_class, &quot;System&quot;, &quot;ArgumentException&quot;, Il2CppArgumentException);
+        DEFAULTS_INIT_TYPE(marshalbyrefobject_class, &quot;System&quot;, &quot;MarshalByRefObject&quot;, Il2CppMarshalByRefObject);
+        DEFAULTS_INIT_TYPE(il2cpp_com_object_class, &quot;System&quot;, &quot;__Il2CppComObject&quot;, Il2CppComObject);
+        DEFAULTS_INIT_TYPE(safe_handle_class, &quot;System.Runtime.InteropServices&quot;, &quot;SafeHandle&quot;, Il2CppSafeHandle);
+        DEFAULTS_INIT_TYPE(sort_key_class, &quot;System.Globalization&quot;, &quot;SortKey&quot;, Il2CppSortKey);
+        DEFAULTS_INIT(dbnull_class, &quot;System&quot;, &quot;DBNull&quot;);
+        DEFAULTS_INIT_TYPE_OPTIONAL(error_wrapper_class, &quot;System.Runtime.InteropServices&quot;, &quot;ErrorWrapper&quot;, Il2CppErrorWrapper);
+        DEFAULTS_INIT(missing_class, &quot;System.Reflection&quot;, &quot;Missing&quot;);
+        DEFAULTS_INIT(attribute_class, &quot;System&quot;, &quot;Attribute&quot;);
+        DEFAULTS_INIT(customattribute_data_class, &quot;System.Reflection&quot;, &quot;CustomAttributeData&quot;);
+        DEFAULTS_INIT(value_type_class, &quot;System&quot;, &quot;ValueType&quot;);
+        DEFAULTS_INIT(key_value_pair_class, &quot;System.Collections.Generic&quot;, &quot;KeyValuePair`2&quot;);
+        DEFAULTS_INIT(system_guid_class, &quot;System&quot;, &quot;Guid&quot;);
+#endif // !IL2CPP_TINY
+
+#if !IL2CPP_TINY
+        DEFAULTS_INIT(threadpool_wait_callback_class, &quot;System.Threading&quot;, &quot;_ThreadPoolWaitCallback&quot;);
+        DEFAULTS_INIT(mono_method_message_class, &quot;System.Runtime.Remoting.Messaging&quot;, &quot;MonoMethodMessage&quot;);
+
+        il2cpp_defaults.threadpool_perform_wait_callback_method = (MethodInfo*)vm::Class::GetMethodFromName(
+            il2cpp_defaults.threadpool_wait_callback_class, &quot;PerformWaitCallback&quot;, 0);
+#endif
+
+        DEFAULTS_INIT_OPTIONAL(sbyte_shared_enum, &quot;System&quot;, &quot;SByteEnum&quot;);
+        DEFAULTS_INIT_OPTIONAL(int16_shared_enum, &quot;System&quot;, &quot;Int16Enum&quot;);
+        DEFAULTS_INIT_OPTIONAL(int32_shared_enum, &quot;System&quot;, &quot;Int32Enum&quot;);
+        DEFAULTS_INIT_OPTIONAL(int64_shared_enum, &quot;System&quot;, &quot;Int64Enum&quot;);
+
+        DEFAULTS_INIT_OPTIONAL(byte_shared_enum, &quot;System&quot;, &quot;ByteEnum&quot;);
+        DEFAULTS_INIT_OPTIONAL(uint16_shared_enum, &quot;System&quot;, &quot;UInt16Enum&quot;);
+        DEFAULTS_INIT_OPTIONAL(uint32_shared_enum, &quot;System&quot;, &quot;UInt32Enum&quot;);
+        DEFAULTS_INIT_OPTIONAL(uint64_shared_enum, &quot;System&quot;, &quot;UInt64Enum&quot;);
+
+        Image::InitNestedTypes(il2cpp_defaults.corlib);
+
+        const Il2CppAssembly* systemDll = Assembly::Load(&quot;System&quot;);
+        if (systemDll != NULL)
+            il2cpp_defaults.system_uri_class = Class::FromName(Assembly::GetImage(systemDll), &quot;System&quot;, &quot;Uri&quot;);
+
+        // This will only exist if there was at least 1 winmd file present during conversion
+        const Il2CppAssembly* windowsRuntimeMetadataAssembly = Assembly::Load(&quot;WindowsRuntimeMetadata&quot;);
+        if (windowsRuntimeMetadataAssembly != NULL)
+        {
+            const Il2CppImage* windowsRuntimeMetadataImage = Assembly::GetImage(windowsRuntimeMetadataAssembly);
+            il2cpp_defaults.ireference_class = Class::FromName(windowsRuntimeMetadataImage, &quot;Windows.Foundation&quot;, &quot;IReference`1&quot;);
+            il2cpp_defaults.ireferencearray_class = Class::FromName(windowsRuntimeMetadataImage, &quot;Windows.Foundation&quot;, &quot;IReferenceArray`1&quot;);
+            il2cpp_defaults.ikey_value_pair_class = Class::FromName(windowsRuntimeMetadataImage, &quot;Windows.Foundation.Collections&quot;, &quot;IKeyValuePair`2&quot;);
+            il2cpp_defaults.ikey_value_pair_class = Class::FromName(windowsRuntimeMetadataImage, &quot;Windows.Foundation.Collections&quot;, &quot;IKeyValuePair`2&quot;);
+            il2cpp_defaults.windows_foundation_uri_class = Class::FromName(windowsRuntimeMetadataImage, &quot;Windows.Foundation&quot;, &quot;Uri&quot;);
+            il2cpp_defaults.windows_foundation_iuri_runtime_class_class = Class::FromName(windowsRuntimeMetadataImage, &quot;Windows.Foundation&quot;, &quot;IUriRuntimeClass&quot;);
+        }
+
+        Class::Init(il2cpp_defaults.string_class);
+
+        os::Socket::Startup();
+
+#if IL2CPP_MONO_DEBUGGER
+        il2cpp::utils::Debugger::Init();
+#endif
+
+        Il2CppDomain* domain = Domain::GetCurrent();
+
+        Il2CppThread* mainThread = Thread::Attach(domain);
+        Thread::SetMain(mainThread);
+
+#if !IL2CPP_TINY
+        Il2CppAppDomainSetup* setup = (Il2CppAppDomainSetup*)Object::NewPinned(il2cpp_defaults.appdomain_setup_class);
+
+        Il2CppAppDomain* ad = (Il2CppAppDomain*)Object::NewPinned(il2cpp_defaults.appdomain_class);
+        gc::WriteBarrier::GenericStore(&amp;ad-&gt;data, domain);
+        gc::WriteBarrier::GenericStore(&amp;domain-&gt;domain, ad);
+        gc::WriteBarrier::GenericStore(&amp;domain-&gt;setup, setup);
+#endif
+
+        domain-&gt;domain_id = 1; // Only have a single domain ATM.
+
+        domain-&gt;friendly_name = basepath(domainName);
+
+        LastError::InitializeLastErrorThreadStatic();
+
+        gc::GarbageCollector::InitializeFinalizer();
+
+        MetadataCache::InitializeGCSafe();
+
+        String::InitializeEmptyString(il2cpp_defaults.string_class);
+        InitializeStringEmpty();
+
+        g_il2cpp_is_fully_initialized = true;
+
+        // Force binary serialization in Mono to use reflection instead of code generation.
+    #undef SetEnvironmentVariable // Get rid of windows.h #define.
+        os::Environment::SetEnvironmentVariable(&quot;MONO_REFLECTION_SERIALIZER&quot;, &quot;yes&quot;);
+        os::Environment::SetEnvironmentVariable(&quot;MONO_XMLSERIALIZER_THS&quot;, &quot;no&quot;);
+
+#if !IL2CPP_TINY
+        Domain::ContextInit(domain);
+        Domain::ContextSet(domain-&gt;default_context);
+#endif
+
+        VerifyApiVersion();
+
+#if IL2CPP_MONO_DEBUGGER
+        il2cpp::utils::Debugger::Start();
+#endif
+
+        std::string executablePath = os::Path::GetExecutablePath();
+        SetConfigStr(executablePath);
+
+        if (utils::Environment::GetNumMainArgs() == 0)
+        {
+            // If main args were never set, we default to 1 arg that is the executable path
+            const char* mainArgs[] = { executablePath.c_str() };
+            utils::Environment::SetMainArgs(mainArgs, 1);
+        }
+
+        vm::MetadataCache::ExecuteEagerStaticClassConstructors();
+        vm::MetadataCache::ExecuteModuleInitializers();
+
+        return true;
+    }
+
+...
+</code></pre><ul>
+<li>初始化的内容很多，但主要关心的有几个：
+<ul>
+<li>代码注册。</li>
+<li>初始化 MetadataCache 。</li>
+</ul>
+</li>
+</ul>
+<h4 id=代码注册>代码注册</h4>
+<ul>
+<li><code>g_CodegenRegistration()</code> 会对编译生成的代码内容进行注册，具体逻辑实现在构建后生成的 <code>il2CppCodeRegistration.cpp</code> 中，如下：</li>
+</ul>
+<pre tabindex=0><code>// Classes/Native/il2CppCodeRegistration.cpp（构建后生成）
+void s_Il2CppCodegenRegistration()
+{
+	il2cpp_codegen_register (&amp;g_CodeRegistration, &amp;g_MetadataRegistration, &amp;s_Il2CppCodeGenOptions);
+}
+#if RUNTIME_IL2CPP
+typedef void (*CodegenRegistrationFunction)();
+CodegenRegistrationFunction g_CodegenRegistration = s_Il2CppCodegenRegistration;
+#endif
+
+</code></pre><ul>
+<li>注册的内容有：
+<ul>
+<li><code>g_CodeRegistration</code> : 指向 <code>Il2CppCodeRegistration</code> 类型的指针，表示当前注册的代码信息，注册到：
+<ul>
+<li>il2cpp::vm::GlobalMetadata->s_GlobalMetadata_CodeRegistration</li>
+<li>il2cpp::vm::MetadataCache->s_Il2CppCodeRegistration</li>
+</ul>
+</li>
+<li><code>g_MetadataRegistration</code> ：指向 <code>Il2CppMetadataRegistration</code> 类型的指针，表示与代码相关的元数据信息，注册到：
+<ul>
+<li>il2cpp::vm::GlobalMetadata->s_Il2CppMetadataRegistration</li>
+<li>il2cpp::vm::MetadataCache->s_MetadataCache_Il2CppMetadataRegistration</li>
+</ul>
+</li>
+<li><code>s_Il2CppCodeGenOptions</code> ：指向 <code>Il2CppCodeGenOptions</code> 类型的指针，包含代码生成过程中的选项和配置，注册到：
+<ul>
+<li>il2cpp::vm::MetadataCache->s_Il2CppCodeGenOptions</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>以 hybridclr 的 Demo 工程为例，构建后的内容如下:</li>
+</ul>
+<pre tabindex=0><code>// Classes/Native/il2CppCodeRegistration.cpp
+
+IL2CPP_EXTERN_C const Il2CppCodeRegistration g_CodeRegistration;
+const Il2CppCodeRegistration g_CodeRegistration = 
+{
+	1,                                          // uint32_t reversePInvokeWrapperCount;
+	g_ReversePInvokeWrapperPointers,            // const Il2CppMethodPointer* reversePInvokeWrappers;
+	5880,                                       // uint32_t genericMethodPointersCount;
+	g_Il2CppGenericMethodPointers,              // const Il2CppMethodPointer* genericMethodPointers;
+	g_Il2CppGenericAdjustorThunks,              // const Il2CppMethodPointer* genericAdjustorThunks;
+	1970,                                       // uint32_t invokerPointersCount;
+	g_Il2CppInvokerPointers,                    // const InvokerMethod* invokerPointers;
+	293,                                        // uint32_t unresolvedVirtualCallCount;
+	g_UnresolvedVirtualMethodPointers,          // const Il2CppMethodPointer* unresolvedVirtualCallPointers;
+	162,                                        // uint32_t interopDataCount;
+	g_Il2CppInteropData,                        // Il2CppInteropData* interopData;
+	0,                                          // uint32_t windowsRuntimeFactoryCount;
+	NULL,                                       // Il2CppWindowsRuntimeFactoryTableEntry* windowsRuntimeFactoryTable;
+	20,                                         // uint32_t codeGenModulesCount;
+	g_CodeGenModules,                           // const Il2CppCodeGenModule** codeGenModules;
+};
+IL2CPP_EXTERN_C_CONST Il2CppMetadataRegistration g_MetadataRegistration;
+static const Il2CppCodeGenOptions s_Il2CppCodeGenOptions = 
+{
+	true,                                       // bool enablePrimitiveValueTypeGenericSharing;
+	7,                                          // int maximumRuntimeGenericDepth;
+};
+</code></pre><pre tabindex=0><code>// Classes/Native/Il2CppMetadataRegistration.c
+
+IL2CPP_EXTERN_C const Il2CppMetadataRegistration g_MetadataRegistration;
+const Il2CppMetadataRegistration g_MetadataRegistration = 
+{
+	973,                                        // int32_t genericClassesCount;
+	g_Il2CppGenericTypes,                       // Il2CppGenericClass* const * genericClasses;
+	547,                                        // int32_t genericInstsCount;
+	g_Il2CppGenericInstTable,                   // const Il2CppGenericInst* const * genericInsts;
+	6690,                                       // int32_t genericMethodTableCount;
+	g_Il2CppGenericMethodFunctions,             // const Il2CppGenericMethodFunctionsDefinitions* genericMethodTable;
+	5600,                                       // int32_t typesCount;
+	g_Il2CppTypeTable,                          // const Il2CppType* const * types;
+	7228,                                       // int32_t methodSpecsCount;
+	g_Il2CppMethodSpecTable,                    // Il2CppMethodSpec* methodSpecs;
+	2270,                                       // FieldIndex fieldOffsetsCount;
+	g_FieldOffsetTable,                         // const int32_t** fieldOffsets;
+	2270,                                       // TypeDefinitionIndex typeDefinitionsSizesCount;
+	g_Il2CppTypeDefinitionSizesTable,           // const Il2CppTypeDefinitionSizes** typeDefinitionsSizes;
+	0,                                          // const size_t metadataUsagesCount;
+	NULL,                                       // void** const* metadataUsages;
+};
+</code></pre><h4 id=初始化-metadatacache>初始化 MetadataCache</h4>
+<ul>
+<li>通过 <code>il2cpp::vm::MetadataCache::Initialize</code> <code>=></code> <code>il2cpp::vm::GlobalMetadata::Initialize</code> 方法，加载 <code>global-metadata.dat</code> 文件。<code>global-metadata.dat</code> 文件存储了所有编译后的编译后的 IL 代码所需要的所有信息，包括类型信息、方法信息、字段信息等，解析后以 <code>Il2CppGlobalMetadataHeader</code> 结构使用，其内容如下：</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/vm/GlobalMetadataFileInternals.h
+
+typedef struct Il2CppGlobalMetadataHeader
+{
+    int32_t sanity;
+    int32_t version;
+    int32_t stringLiteralOffset; // string data for managed code
+    int32_t stringLiteralSize;
+    int32_t stringLiteralDataOffset;
+    int32_t stringLiteralDataSize;
+    int32_t stringOffset; // string data for metadata
+    int32_t stringSize;
+    int32_t eventsOffset; // Il2CppEventDefinition
+    int32_t eventsSize;
+    int32_t propertiesOffset; // Il2CppPropertyDefinition
+    int32_t propertiesSize;
+    int32_t methodsOffset; // Il2CppMethodDefinition
+    int32_t methodsSize;
+    int32_t parameterDefaultValuesOffset; // Il2CppParameterDefaultValue
+    int32_t parameterDefaultValuesSize;
+    int32_t fieldDefaultValuesOffset; // Il2CppFieldDefaultValue
+    int32_t fieldDefaultValuesSize;
+    int32_t fieldAndParameterDefaultValueDataOffset; // uint8_t
+    int32_t fieldAndParameterDefaultValueDataSize;
+    int32_t fieldMarshaledSizesOffset; // Il2CppFieldMarshaledSize
+    int32_t fieldMarshaledSizesSize;
+    int32_t parametersOffset; // Il2CppParameterDefinition
+    int32_t parametersSize;
+    int32_t fieldsOffset; // Il2CppFieldDefinition
+    int32_t fieldsSize;
+    int32_t genericParametersOffset; // Il2CppGenericParameter
+    int32_t genericParametersSize;
+    int32_t genericParameterConstraintsOffset; // TypeIndex
+    int32_t genericParameterConstraintsSize;
+    int32_t genericContainersOffset; // Il2CppGenericContainer
+    int32_t genericContainersSize;
+    int32_t nestedTypesOffset; // TypeDefinitionIndex
+    int32_t nestedTypesSize;
+    int32_t interfacesOffset; // TypeIndex
+    int32_t interfacesSize;
+    int32_t vtableMethodsOffset; // EncodedMethodIndex
+    int32_t vtableMethodsSize;
+    int32_t interfaceOffsetsOffset; // Il2CppInterfaceOffsetPair
+    int32_t interfaceOffsetsSize;
+    int32_t typeDefinitionsOffset; // Il2CppTypeDefinition
+    int32_t typeDefinitionsSize;
+    int32_t imagesOffset; // Il2CppImageDefinition
+    int32_t imagesSize;
+    int32_t assembliesOffset; // Il2CppAssemblyDefinition
+    int32_t assembliesSize;
+    int32_t fieldRefsOffset; // Il2CppFieldRef
+    int32_t fieldRefsSize;
+    int32_t referencedAssembliesOffset; // int32_t
+    int32_t referencedAssembliesSize;
+    int32_t attributesInfoOffset; // Il2CppCustomAttributeTypeRange
+    int32_t attributesInfoSize;
+    int32_t attributeTypesOffset; // TypeIndex
+    int32_t attributeTypesSize;
+    int32_t unresolvedVirtualCallParameterTypesOffset; // TypeIndex
+    int32_t unresolvedVirtualCallParameterTypesSize;
+    int32_t unresolvedVirtualCallParameterRangesOffset; // Il2CppMetadataRange
+    int32_t unresolvedVirtualCallParameterRangesSize;
+    int32_t windowsRuntimeTypeNamesOffset; // Il2CppWindowsRuntimeTypeNamePair
+    int32_t windowsRuntimeTypeNamesSize;
+    int32_t windowsRuntimeStringsOffset; // const char*
+    int32_t windowsRuntimeStringsSize;
+    int32_t exportedTypeDefinitionsOffset; // TypeDefinitionIndex
+    int32_t exportedTypeDefinitionsSize;
+} Il2CppGlobalMetadataHeader;
+</code></pre><ul>
+<li><code>global-metadata.dat</code> 解析完成后，主要执行的操作有：
+<ul>
+<li>会根据得到的数据，申请各种类型的内存块，如：程序集表、镜像表、类型表、方法表、泛型方法表等。</li>
+<li>将 g_MetadataRegistration->genericClasses 存储到 GenericMetadata.s_GenericClassSet 中。</li>
+<li>从解析得到的数据中，获取镜像地址，创建镜像对象，绑定对应的程序集，将数据设置到镜像上，并将 g_CodeRegistration->codeGenModules 中对应的模块数据设置到镜像上。</li>
+<li>从解析得到的数据中，获取程序集地址，创建程序集对象，绑定对应的镜像，将程序集注册到 Assembly.s_Assemblies 中。</li>
+</ul>
+</li>
+<li>hybridclr 的 Demo 工程的模块数据如下：</li>
+</ul>
+<pre tabindex=0><code>// Classes/Native/il2CppCodeRegistration.cpp
+
+...
+
+IL2CPP_EXTERN_C const Il2CppCodeGenModule* g_CodeGenModules[];
+const Il2CppCodeGenModule* g_CodeGenModules[20] = 
+{
+	(&amp;g_AssemblyU2DCSharp_CodeGenModule),
+	(&amp;g_HybridCLR_Runtime_CodeGenModule),
+	(&amp;g_Mono_Security_CodeGenModule),
+	(&amp;g_System_CodeGenModule),
+	(&amp;g_System_Configuration_CodeGenModule),
+	(&amp;g_System_Core_CodeGenModule),
+	(&amp;g_System_Xml_CodeGenModule),
+	(&amp;g_UnityEngine_AssetBundleModule_CodeGenModule),
+	(&amp;g_UnityEngine_AudioModule_CodeGenModule),
+	(&amp;g_UnityEngine_CodeGenModule),
+	(&amp;g_UnityEngine_CoreModule_CodeGenModule),
+	(&amp;g_UnityEngine_GameCenterModule_CodeGenModule),
+	(&amp;g_UnityEngine_IMGUIModule_CodeGenModule),
+	(&amp;g_UnityEngine_InputLegacyModule_CodeGenModule),
+	(&amp;g_UnityEngine_SharedInternalsModule_CodeGenModule),
+	(&amp;g_UnityEngine_TextRenderingModule_CodeGenModule),
+	(&amp;g_UnityEngine_UIModule_CodeGenModule),
+	(&amp;g_UnityEngine_UI_CodeGenModule),
+	(&amp;g_UnityEngine_UnityWebRequestModule_CodeGenModule),
+	(&amp;g_mscorlib_CodeGenModule),
+};
+
+...
+</code></pre><ul>
+<li>以 <code>Assembly-CSharp.dll</code> 为例，每个模块数据以 <code>Il2CppCodeGenModule</code> 结构保存。</li>
+</ul>
+<pre tabindex=0><code>// Classes/Native/Assembly-CSharp_CodeGen.c 
+
+...
+
+IL2CPP_EXTERN_C const Il2CppCodeGenModule g_AssemblyU2DCSharp_CodeGenModule;
+const Il2CppCodeGenModule g_AssemblyU2DCSharp_CodeGenModule = 
+{
+	&quot;Assembly-CSharp.dll&quot;,                      // const char* moduleName;
+	33,                                         // const uint32_t methodPointerCount;
+	s_methodPointers,                           // const Il2CppMethodPointer* methodPointers;
+	0,                                          // const uint32_t adjustorThunkCount;
+	NULL,                                       // const Il2CppTokenAdjustorThunkPair* adjustorThunks;
+	s_InvokerIndices,                           // const int32_t* invokerIndices;
+	0,                                          // const uint32_t reversePInvokeWrapperCount;
+	NULL,                                       // const Il2CppTokenIndexMethodTuple* reversePInvokeWrapperIndices;
+	0,                                          // const uint32_t rgctxRangesCount;
+	NULL,                                       // const Il2CppTokenRangePair* rgctxRanges;
+	0,                                          // const uint32_t rgctxsCount;
+	NULL,                                       // const Il2CppRGCTXDefinition* rgctxs;
+	NULL,                                       // const Il2CppDebuggerMetadataRegistration *debuggerMetadata;
+	g_AssemblyU2DCSharp_AttributeGenerators,    // const CustomAttributesCacheGenerator* customAttributeCacheGenerator;
+	NULL, // module initializer,                // const Il2CppMethodPointer moduleInitializer;
+	NULL,                                       // TypeDefinitionIndex* staticConstructorTypeIndices;
+	NULL,                                       // const Il2CppMetadataRegistration* metadataRegistration; // Per-assembly mode only
+	NULL,                                       // const Il2CppCodeRegistration* codeRegistaration; // Per-assembly mode only
+};
+</code></pre><h3 id=方法调用>方法调用</h3>
+<ul>
+<li>当调用 C# 的方法时，通过 <code>libiPhone-lib.a(Runtime_ScriptingBackend_Il2Cpp_0.o)</code> 的 <code>scripting_method_invoke(ScriptingMethodPtr, ScriptingObjectPtr, ScriptingArguments&, ScriptingExceptionPtr*, bool)</code> 方法，调用 il2cpp 的 <code>il2cpp_runtime_invoke</code> 方法。</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/il2cpp-api.cpp
+...
+
+Il2CppObject* il2cpp_runtime_invoke(const MethodInfo *method,
+    void *obj, void **params, Il2CppException **exc)
+{
+    // Our embedding API has historically taken pointers to unboxed value types, rather than Il2CppObjects.
+    // However, with the introduction of adjustor thunks, our invokees expect us to pass them Il2CppObject*, or at least something that
+    // ressembles boxed value type. Since it's not going to access any of the Il2CppObject* fields,
+    // it's fine to just subtract sizeof(Il2CppObject) from obj pointer
+    if (method-&gt;klass-&gt;valuetype)
+        obj = static_cast&lt;Il2CppObject*&gt;(obj) - 1;
+
+    return Runtime::Invoke(method, obj, params, exc);
+}
+
+...
+</code></pre><pre tabindex=0><code>// libil2cpp/vm/Runtime.cpp
+
+...
+
+    Il2CppObject* Runtime::Invoke(const MethodInfo *method, void *obj, void **params, Il2CppException **exc)
+    {
+        if (exc)
+            il2cpp::gc::WriteBarrier::GenericStore(exc, NULL);
+
+        // we wrap invoker call in try/catch here, rather than emitting a try/catch
+        // in every invoke call as that blows up the code size.
+        try
+        {
+            RaiseExecutionEngineExceptionIfMethodIsNotFound(method);
+
+            if (!Method::IsInstance(method) &amp;&amp; method-&gt;klass &amp;&amp; method-&gt;klass-&gt;has_cctor &amp;&amp; !method-&gt;klass-&gt;cctor_finished)
+                ClassInit(method-&gt;klass);
+
+            return (Il2CppObject*)method-&gt;invoker_method(method-&gt;methodPointer, method, obj, params);
+        }
+        catch (Il2CppExceptionWrapper&amp; ex)
+        {
+            if (exc)
+                il2cpp::gc::WriteBarrier::GenericStore(exc, ex.ex);
+            return NULL;
+        }
+    }
+
+...
+</code></pre><ul>
+<li>最终通过 <code>MethodInfo</code> 方法对象，来执行对应的方法。需要的信息有：
+<ul>
+<li><code>MethodInfo->invoker_method</code></li>
+<li><code>MethodInfo->methodPointer</code></li>
+<li></li>
+</ul>
+</li>
+<li>而 <code>MethodInfo</code> 的信息，需要通过类的初始化得到。对于静态方法，调用的时候，会通过 <code>Runtime::ClassInit</code> 执行类初始化。对于实例方法，则是通过 <code>il2cpp_object_new</code> 方法，在创建实例对象时进行初始化。无论哪种方法，最终都是通过 <code>Class::Init</code> 方法进行初始化。</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/vm/Class.cpp
+...
+
+    bool Class::Init(Il2CppClass *klass)
+    {
+        IL2CPP_ASSERT(klass);
+
+        if (!klass-&gt;initialized)
+        {
+            il2cpp::os::FastAutoLock lock(&amp;g_MetadataLock);
+            InitLocked(klass, lock);
+        }
+
+        return true;
+    }
+
+...
+
+    static bool InitLocked(Il2CppClass *klass, const il2cpp::os::FastAutoLock&amp; lock)
+    {
+        ...
+        
+        SetupMethodsLocked(klass, lock);
+        ...
+
+        return true;
+    }
+
+...
+
+    void SetupMethodsLocked(Il2CppClass *klass, const il2cpp::os::FastAutoLock&amp; lock)
+    {
+        if ((!klass-&gt;method_count &amp;&amp; !klass-&gt;rank) || klass-&gt;methods)
+            return;
+
+        if (klass-&gt;generic_class)
+        {
+            InitLocked(GenericClass::GetTypeDefinition(klass-&gt;generic_class), lock);
+            GenericClass::SetupMethods(klass);
+        }
+        else if (klass-&gt;rank)
+        {
+            InitLocked(klass-&gt;element_class, lock);
+            SetupVTable(klass, lock);
+        }
+        else
+        {
+            if (klass-&gt;method_count == 0)
+            {
+                klass-&gt;methods = NULL;
+                return;
+            }
+
+            klass-&gt;methods = (const MethodInfo**)MetadataCalloc(klass-&gt;method_count, sizeof(MethodInfo*));
+            MethodInfo* methods = (MethodInfo*)MetadataCalloc(klass-&gt;method_count, sizeof(MethodInfo));
+            MethodInfo* newMethod = methods;
+
+            MethodIndex end = klass-&gt;method_count;
+
+            for (MethodIndex index = 0; index &lt; end; ++index)
+            {
+                Il2CppMetadataMethodInfo methodInfo = MetadataCache::GetMethodInfo(klass, index);
+
+                newMethod-&gt;name = methodInfo.name;
+
+                if (klass-&gt;valuetype)
+                {
+                    Il2CppMethodPointer adjustorThunk = MetadataCache::GetAdjustorThunk(klass-&gt;image, methodInfo.token);
+                    if (adjustorThunk != NULL)
+                        newMethod-&gt;methodPointer = adjustorThunk;
+                }
+
+                // We did not find an adjustor thunk, or maybe did not need to look for one. Let's get the real method pointer.
+                if (newMethod-&gt;methodPointer == NULL)
+                    newMethod-&gt;methodPointer = MetadataCache::GetMethodPointer(klass-&gt;image, methodInfo.token);
+
+                newMethod-&gt;invoker_method = MetadataCache::GetMethodInvoker(klass-&gt;image, methodInfo.token);
+
+                newMethod-&gt;klass = klass;
+                newMethod-&gt;return_type = methodInfo.return_type;
+
+                newMethod-&gt;parameters_count = (uint8_t)methodInfo.parameterCount;
+
+                ParameterInfo* parameters = (ParameterInfo*)MetadataCalloc(methodInfo.parameterCount, sizeof(ParameterInfo));
+                ParameterInfo* newParameter = parameters;
+                for (uint16_t paramIndex = 0; paramIndex &lt; methodInfo.parameterCount; ++paramIndex)
+                {
+                    Il2CppMetadataParameterInfo paramInfo = MetadataCache::GetParameterInfo(klass, methodInfo.handle, paramIndex);
+                    newParameter-&gt;name = paramInfo.name;
+                    newParameter-&gt;position = paramIndex;
+                    newParameter-&gt;token = paramInfo.token;
+                    newParameter-&gt;parameter_type = paramInfo.type;
+
+                    newParameter++;
+                }
+                newMethod-&gt;parameters = parameters;
+
+                newMethod-&gt;flags = methodInfo.flags;
+                newMethod-&gt;iflags = methodInfo.iflags;
+                newMethod-&gt;slot = methodInfo.slot;
+                newMethod-&gt;is_inflated = false;
+                newMethod-&gt;token = methodInfo.token;
+                newMethod-&gt;methodMetadataHandle = methodInfo.handle;
+                newMethod-&gt;genericContainerHandle = MetadataCache::GetGenericContainerFromMethod(methodInfo.handle);
+                if (newMethod-&gt;genericContainerHandle)
+                    newMethod-&gt;is_generic = true;
+
+                klass-&gt;methods[index] = newMethod;
+
+                newMethod++;
+            }
+        }
+    }
+
+...
+</code></pre><pre tabindex=0><code>// libil2cpp/vm/MetadataCache.cpp
+...
+
+Il2CppMethodPointer il2cpp::vm::MetadataCache::GetMethodPointer(const Il2CppImage* image, uint32_t token)
+{
+    uint32_t rid = GetTokenRowId(token);
+    uint32_t table =  GetTokenType(token);
+    if (rid == 0)
+        return NULL;
+
+    IL2CPP_ASSERT(rid &lt;= image-&gt;codeGenModule-&gt;methodPointerCount);
+
+    return image-&gt;codeGenModule-&gt;methodPointers[rid - 1];
+}
+
+InvokerMethod il2cpp::vm::MetadataCache::GetMethodInvoker(const Il2CppImage* image, uint32_t token)
+{
+    uint32_t rid = GetTokenRowId(token);
+    uint32_t table = GetTokenType(token);
+    if (rid == 0)
+        return NULL;
+
+    int32_t index = image-&gt;codeGenModule-&gt;invokerIndices[rid - 1];
+
+    if (index == kMethodIndexInvalid)
+        return NULL;
+
+    IL2CPP_ASSERT(index &gt;= 0 &amp;&amp; static_cast&lt;uint32_t&gt;(index) &lt; s_Il2CppCodeRegistration-&gt;invokerPointersCount);
+    return s_Il2CppCodeRegistration-&gt;invokerPointers[index];
+}
+
+...
+</code></pre><ul>
+<li>可以看到，<code>invoker_method</code> 使用的是 <code>g_CodeRegistration</code> 中的 <code>g_Il2CppInvokerPointers</code> ，<code>methodPointer</code> 使用的是 <code>g_CodeRegistration</code> 的 <code>g_CodeGenModules</code> 中对应模块的 <code>s_methodPointers</code>。以 <code>LoadDll.cs</code> 的 <code>Start</code> 方法为例，C# 代码如下：</li>
+</ul>
+<pre tabindex=0><code>...
+// Assets/Main/LoadDll.cs
+...
+
+public class LoadDll : MonoBehaviour
+{
+
+    void Start()
+    {
+        StartCoroutine(DownLoadAssets(this.StartGame));
+    }
+
+    ...
+}
+
+</code></pre><ul>
+<li>构建后生成的代码如下：</li>
+</ul>
+<pre tabindex=0><code>// Classes/Native/Assembly-CSharp_CodeGen.c
+...
+
+// 0x0000000A System.Void LoadDll::Start()
+extern void LoadDll_Start_mDFFD4CEFDDC803966E45E8D7D915007650963687 (void);
+
+...
+
+static Il2CppMethodPointer s_methodPointers[33] = 
+{
+    ...
+	LoadDll_Start_mDFFD4CEFDDC803966E45E8D7D915007650963687,
+	...
+};
+
+...
+
+const Il2CppCodeGenModule g_AssemblyU2DCSharp_CodeGenModule = 
+{
+	&quot;Assembly-CSharp.dll&quot;,
+	33,
+	s_methodPointers,
+	0,
+	NULL,
+	s_InvokerIndices,
+	0,
+	NULL,
+	0,
+	NULL,
+	0,
+	NULL,
+	NULL,
+	g_AssemblyU2DCSharp_AttributeGenerators,
+	NULL, // module initializer,
+	NULL,
+	NULL,
+	NULL,
+};
+</code></pre><h4 id=heading></h4>
+<p>IL2CPP执行流程、JIT、AOT、FULL AOT
+<a href=https://www.mono-project.com/docs/advanced/runtime/docs/aot/>https://www.mono-project.com/docs/advanced/runtime/docs/aot/</a>
+<a href=https://zhuanlan.zhihu.com/p/622597028>https://zhuanlan.zhihu.com/p/622597028</a>
+<a href=https://learn.microsoft.com/zh-cn/previous-versions/xamarin/ios/internals/limitations#.NET.c2.a0API.c2.a0Limitations>https://learn.microsoft.com/zh-cn/previous-versions/xamarin/ios/internals/limitations#.NET.c2.a0API.c2.a0Limitations</a>
+<a href=https://unity.com/cn/blog/engine-platform/an-introduction-to-ilcpp-internals>https://unity.com/cn/blog/engine-platform/an-introduction-to-ilcpp-internals</a></p>
+<p>Unity执行流程：Runtime::Init 、 g_CodegenRegistration() 、MetadataCache::Initialize()</p>
+<p>包里方法执行流程</p>
+<p>热更方法执行流程</p>
+<p>为什么不能直接用新流程获取 IL2CPP 对象后，用原流程处理</p>
+<h2 id=参考>参考</h2>
+<ul>
+<li><a href=https://en.wikipedia.org/wiki/Just-in-time_compilation>Wikipedia : Just-in-time compilation</a></li>
+<li><a href=https://en.wikipedia.org/wiki/Ahead-of-time_compilation>Wikipedia : Ahead-of-time_compilation</a></li>
+<li><a href=https://www.mono-project.com/docs/advanced/runtime/docs/aot/#full-aot-mode>Mono : Ahead of Time Compilation (AOT)</a></li>
+<li><a href=https://unity.com/blog/engine-platform/an-introduction-to-ilcpp-internals>Unity Blog : An introduction to IL2CPP internals</a></li>
+<li><a href=https://unity.com/blog/engine-platform/il2cpp-internals-a-tour-of-generated-code>Unity Blog : IL2CPP internals: A tour of generated code</a></li>
+<li><a href=https://unity.com/blog/engine-platform/il2cpp-internals-method-calls>Unity Blog : IL2CPP internals: Method calls</a></li>
+<li><a href=https://hybridclr.doc.code-philosophy.com/>HybridCLR</a></li>
+</ul>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/unity/ugui/eventsystem/ data-toggle=tooltip data-placement=top title="Unity篇 — 事件系统">&larr;
+Previous Post</a>
+</li>
+<li class=next>
+<a href=/post/unity/optimization/drawcalloptimization/ data-toggle=tooltip data-placement=top title="Unity篇 — Draw Call">Next
+Post &rarr;</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2025
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>
