@@ -604,9 +604,9 @@ typedef struct Il2CppGlobalMetadataHeader
 <li><code>global-metadata.dat</code> 解析完成后，主要执行的操作有：
 <ul>
 <li>会根据得到的数据，申请各种类型的内存块，如：程序集表、镜像表、类型表、方法表、泛型方法表等。</li>
-<li>将 g_MetadataRegistration->genericClasses 存储到 GenericMetadata.s_GenericClassSet 中。</li>
-<li>从解析得到的数据中，获取镜像地址，创建镜像对象，绑定对应的程序集，将数据设置到镜像上，并将 g_CodeRegistration->codeGenModules 中对应的模块数据设置到镜像上。</li>
-<li>从解析得到的数据中，获取程序集地址，创建程序集对象，绑定对应的镜像，将程序集注册到 Assembly.s_Assemblies 中。</li>
+<li>将 <code>g_MetadataRegistration->genericClasses</code> 存储到 <code>GenericMetadata.s_GenericClassSet</code> 中。</li>
+<li>从解析得到的数据中，获取镜像地址，创建镜像对象到 <code>MetadataCache.s_ImagesTable</code> ，绑定对应的程序集，将数据设置到镜像上，并将 <code>g_CodeRegistration->codeGenModules</code> 中对应的模块数据设置到镜像上。</li>
+<li>从解析得到的数据中，获取程序集地址，创建程序集对象到 <code>MetadataCache.s_AssembliesTable</code> ，绑定对应的镜像，将程序集注册到 <code>il2cpp::vm.s_Assemblies</code> 中。</li>
 </ul>
 </li>
 <li>hybridclr 的 Demo 工程的模块数据如下：</li>
@@ -901,6 +901,7 @@ public class LoadDll : MonoBehaviour
 <pre tabindex=0><code>// Classes/Native/Assembly-CSharp_CodeGen.c
 ...
 
+// C# LoadDll.Start 方法的 methodPointer
 // 0x0000000A System.Void LoadDll::Start()
 extern void LoadDll_Start_mDFFD4CEFDDC803966E45E8D7D915007650963687 (void);
 
@@ -936,24 +937,179 @@ const Il2CppCodeGenModule g_AssemblyU2DCSharp_CodeGenModule =
 	NULL,
 	NULL,
 };
-</code></pre><h4 id=heading></h4>
-<p>IL2CPP执行流程、JIT、AOT、FULL AOT
-<a href=https://www.mono-project.com/docs/advanced/runtime/docs/aot/>https://www.mono-project.com/docs/advanced/runtime/docs/aot/</a>
-<a href=https://zhuanlan.zhihu.com/p/622597028>https://zhuanlan.zhihu.com/p/622597028</a>
-<a href=https://learn.microsoft.com/zh-cn/previous-versions/xamarin/ios/internals/limitations#.NET.c2.a0API.c2.a0Limitations>https://learn.microsoft.com/zh-cn/previous-versions/xamarin/ios/internals/limitations#.NET.c2.a0API.c2.a0Limitations</a>
-<a href=https://unity.com/cn/blog/engine-platform/an-introduction-to-ilcpp-internals>https://unity.com/cn/blog/engine-platform/an-introduction-to-ilcpp-internals</a></p>
-<p>Unity执行流程：Runtime::Init 、 g_CodegenRegistration() 、MetadataCache::Initialize()</p>
-<p>包里方法执行流程</p>
-<p>热更方法执行流程</p>
-<p>为什么不能直接用新流程获取 IL2CPP 对象后，用原流程处理</p>
+</code></pre><pre tabindex=0><code>// Classes/Native/Il2CppInvokerTable.cpp
+...
+
+// C# LoadDll.Start 方法的 invoker_method
+void* RuntimeInvoker_TrueVoid_t700C6383A2A510C2CF4DD86DABD5CA9FF70ADAC5 (Il2CppMethodPointer methodPointer, const RuntimeMethod* methodMetadata, void* obj, void** args)
+{
+	typedef void (*Func)(void* obj, const RuntimeMethod* method);
+	((Func)methodPointer)(obj, methodMetadata);
+	return NULL;
+}
+
+...
+</code></pre><ul>
+<li>通过使用 <code>invoker_method</code> ，所有 C# 方法将统一成相同形式，由 C++ 调用，其参数说明如下：
+<ul>
+<li><code>methodPointer</code> ：C# 编译成 C++ 的方法。</li>
+<li><code>methodMetadata</code> ：C# 方法的元数据。</li>
+<li><code>obj</code> ：C# 方法执行时的实例对象，静态方法时则为空。</li>
+<li><code>args</code> ： C# 方法执行的参数对象。</li>
+</ul>
+</li>
+<li>其中，<code>RuntimeInvoker_True</code> 表示该方法为实例方法，<code>RuntimeInvoker_False</code> 则为静态方法，静态方法调用 <code>methodPointer</code> 时，则不会传入 <code>obj</code> 参数。</li>
+</ul>
+<h2 id=hybridclr-执行流程>HybridCLR 执行流程</h2>
+<h3 id=动态加载程序集>动态加载程序集</h3>
+<ul>
+<li>动态加载程序集，需要调用 C# 的几个方法之一：
+<ul>
+<li><code>System.Reflection.Assembly.Load(byte[] rawAssembly)</code></li>
+<li><code>System.Reflection.Assembly.LoadFile(string path)</code></li>
+<li><code>System.Reflection.Assembly.LoadFrom(string assemblyFile)</code></li>
+</ul>
+</li>
+<li>其中，<code>LoadFile</code> 和 <code>LoadFrom</code> 最终调用的是 <code>il2cpp::icalls::mscorlib::System::Reflection::Assembly::LoadFrom</code> ，其实现如下</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/icalls/mscorlib/System.Reflection/Assembly.cpp
+    ...
+
+    Il2CppReflectionAssembly* Assembly::LoadFrom(Il2CppString* assemblyFile, bool refonly)
+    {
+        IL2CPP_ASSERT(!refonly &amp;&amp; &quot;This icall is not supported by il2cpp when refonly=true&quot;);
+
+        // Our implementation is going to behave a bit different.  We can't actually load any assembly.  If we didn't know about the assembly at conversion time,
+        // then we won't be able to do anything.
+        // On the other hand, if the name of the assembly matches the name of an assembly that we converted, then lets return the assembly that we know about.
+        std::string utf8Path = utils::StringUtils::Utf16ToUtf8(utils::StringUtils::GetChars(assemblyFile));
+        std::string fileName = utils::PathUtils::BasenameNoExtension(utf8Path);
+
+        const Il2CppAssembly* foundAssembly = vm::MetadataCache::GetAssemblyByName(fileName.c_str());
+
+        if (!foundAssembly)
+        {
+            vm::Exception::Raise(vm::Exception::GetFileLoadException(fileName.c_str()));
+            IL2CPP_UNREACHABLE;
+        }
+
+        return vm::Reflection::GetAssemblyObject(foundAssembly);
+    }
+
+    ...
+</code></pre><pre tabindex=0><code>// libil2cpp/vm/MetadataCache.cpp
+
+...
+
+const Il2CppAssembly* il2cpp::vm::MetadataCache::GetAssemblyByName(const char* nameToFind)
+{
+    for (int i = 0; i &lt; s_AssembliesCount; i++)
+    {
+        const Il2CppAssembly* assembly = s_AssembliesTable + i;
+
+        const char* assemblyName = assembly-&gt;aname.name;
+
+        if (strcmp(assemblyName, nameToFind) == 0)
+            return assembly;
+    }
+
+    return NULL;
+}
+
+...
+</code></pre><ul>
+<li>可以看到，如果使用路径或文件名加载，最终会从 <code>MetadataCache.s_AssembliesTable</code> 中查找程序集，前面提到 <code>MetadataCache.s_AssembliesTable</code> 是从 <code>global-metadata.dat</code> 中解析得到的，所以没办法动态加载。</li>
+<li><code>Load(byte[] rawAssembly)</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/icalls/mscorlib/System/AppDomain.cpp
+
+...
+
+    Il2CppAssembly* AppDomain::LoadAssemblyRaw(Il2CppAppDomain* self, Il2CppArray* rawAssembly, Il2CppArray* rawSymbolStore, void* /* System.Security.Policy.Evidence */ securityEvidence, bool refonly)
+    {
+        NOT_SUPPORTED_IL2CPP(AppDomain::LoadAssemblyRaw, &quot;This icall is not supported by il2cpp.&quot;);
+
+        return 0;
+    }
+
+...
+</code></pre><ul>
+<li>Unity 的默认流程，也不支持通过 <code>Load(byte[] rawAssembly)</code> 方法动态加载程序集，因此 HybridCLR 修改了 <code>AppDomain::LoadAssemblyRaw</code> 方法的实现：</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/icalls/mscorlib/System/AppDomain.cpp
+
+...
+
+    Il2CppReflectionAssembly* AppDomain::LoadAssemblyRaw(Il2CppAppDomain* self, Il2CppArray* rawAssembly, Il2CppArray* rawSymbolStore, void* /* System.Security.Policy.Evidence */ securityEvidence, bool refonly)
+    {
+        //NOT_SUPPORTED_IL2CPP(AppDomain::LoadAssemblyRaw, &quot;This icall is not supported by il2cpp.&quot;);
+        // return 0;
+        if (!rawAssembly)
+        {
+            il2cpp::vm::Exception::Raise(il2cpp::vm::Exception::GetArgumentNullException(&quot;rawAssembly is null&quot;));
+        }
+        const char* rawSymbolStoreBytes;
+        size_t rawSymbolStoreLength;
+        if (rawSymbolStore)
+        {
+			rawSymbolStoreBytes = (const char*)il2cpp::vm::Array::GetFirstElementAddress(rawSymbolStore);
+			rawSymbolStoreLength = il2cpp::vm::Array::GetByteLength(rawSymbolStore);
+		}
+        else
+        {
+            rawSymbolStoreBytes = nullptr;
+            rawSymbolStoreLength = 0;
+        }
+        const Il2CppAssembly* assembly = il2cpp::vm::MetadataCache::LoadAssemblyFromBytes(
+            il2cpp::vm::Array::GetFirstElementAddress(rawAssembly),
+            il2cpp::vm::Array::GetByteLength(rawAssembly),
+            rawSymbolStoreBytes,
+            rawSymbolStoreLength);
+        return vm::Reflection::GetAssemblyObject(assembly);
+    }
+
+...
+</code></pre><pre tabindex=0><code>// libil2cpp/vm/MetadataCache.cpp
+...
+
+void il2cpp::vm::MetadataCache::RegisterInterpreterAssembly(Il2CppAssembly* assembly)
+{
+    il2cpp::vm::Assembly::Register(assembly);
+    s_cliAssemblies.push_back(assembly);
+}
+
+const Il2CppAssembly* il2cpp::vm::MetadataCache::LoadAssemblyFromBytes(const char* assemblyBytes, size_t length, const char* rawSymbolStoreBytes, size_t rawSymbolStoreLength)
+{
+    Il2CppAssembly* newAssembly = hybridclr::metadata::Assembly::LoadFromBytes(assemblyBytes, length, rawSymbolStoreBytes, rawSymbolStoreLength);
+    il2cpp::os::FastAutoLock lock(&amp;il2cpp::vm::g_MetadataLock);
+
+    // avoid register placeholder assembly twicely.
+    for (Il2CppAssembly* ass : s_cliAssemblies)
+    {
+        if (ass == newAssembly)
+        {
+            il2cpp::vm::Assembly::InvalidateAssemblyList();
+            return ass;
+        }
+    }
+    RegisterInterpreterAssembly(newAssembly);
+
+    return newAssembly;
+}
+
+...
+</code></pre><ul>
+<li>动态加载的程序集，除了注册到 <code>il2cpp::vm::MetadataCache.s_cliAssemblies</code> 以外，也和 AOT 加载的程序集一样，注册到 <code>il2cpp::vm.s_Assemblies</code> 中。</li>
+</ul>
 <h2 id=参考>参考</h2>
 <ul>
 <li><a href=https://en.wikipedia.org/wiki/Just-in-time_compilation>Wikipedia : Just-in-time compilation</a></li>
 <li><a href=https://en.wikipedia.org/wiki/Ahead-of-time_compilation>Wikipedia : Ahead-of-time_compilation</a></li>
 <li><a href=https://www.mono-project.com/docs/advanced/runtime/docs/aot/#full-aot-mode>Mono : Ahead of Time Compilation (AOT)</a></li>
 <li><a href=https://unity.com/blog/engine-platform/an-introduction-to-ilcpp-internals>Unity Blog : An introduction to IL2CPP internals</a></li>
-<li><a href=https://unity.com/blog/engine-platform/il2cpp-internals-a-tour-of-generated-code>Unity Blog : IL2CPP internals: A tour of generated code</a></li>
 <li><a href=https://unity.com/blog/engine-platform/il2cpp-internals-method-calls>Unity Blog : IL2CPP internals: Method calls</a></li>
+<li><a href=https://unity.com/blog/engine-platform/il2cpp-internals-a-tour-of-generated-code>Unity Blog : IL2CPP internals: A tour of generated code</a></li>
+<li><a href=https://unity.com/blog/engine-platform/il2cpp-internals-generic-sharing-implementation>Unity Blog : IL2CPP Internals: Generic sharing implementation</a></li>
 <li><a href=https://hybridclr.doc.code-philosophy.com/>HybridCLR</a></li>
 </ul>
 <hr>
