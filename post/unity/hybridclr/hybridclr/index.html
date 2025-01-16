@@ -1101,6 +1101,131 @@ const Il2CppAssembly* il2cpp::vm::MetadataCache::LoadAssemblyFromBytes(const cha
 </code></pre><ul>
 <li>动态加载的程序集，除了注册到 <code>il2cpp::vm::MetadataCache.s_cliAssemblies</code> 以外，也和 AOT 加载的程序集一样，注册到 <code>il2cpp::vm.s_Assemblies</code> 中。</li>
 </ul>
+<h3 id=程序集解析>程序集解析</h3>
+<ul>
+<li>动态加载的二进制数据，将会以 PE 文件结构进行解析，主要方法为 <code>RawImageBase::Load</code> 。其中主要工作有：
+<ul>
+<li>解析 PE Headers 。</li>
+<li>解析 Section Headers，找出 CLI Header，定位出 CLI 数据段。</li>
+<li>解析出所有 Stream 。Stream 是 CLI 中最底层的数据结构之一，CLI 将元数据根据特性分为几个大类:
+<ul>
+<li>#~ 流。包含所有 Tables 定义，是最核心的元数据结构。</li>
+<li>#Strings 流。包括代码中非文档类型的字符串，如类型名、字段名等等。</li>
+<li>#GUID 流。</li>
+<li>#Blob 流。一些元数据类型过于复杂，以 Blob 格式保存。还有一些数据如数组初始化数据列表，也常常保存到 Blob 流。</li>
+<li>#- 流。</li>
+<li>#Pdb 流。用于调试。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>文件结构解析完成后，还需要进行后续的处理：
+<ul>
+<li>Tables Metadata 解析。</li>
+<li>Table 解析。</li>
+<li>Metadata 高级元数据结构解析。</li>
+</ul>
+</li>
+</ul>
+<h3 id=方法调用-1>方法调用</h3>
+<ul>
+<li>前面提到，Unity 的方法执行过程，会对类进行初始化，通过 <code>MetadataCache::GetMethodInvoker</code> 和 <code>MetadataCache::GetMethodPointer</code> 来获取方法的 <code>invoker_method</code> 和 <code>methodPointer</code> 。<code>MetadataCache::GetMethodInvoker</code> 代码如下：</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/vm/MetadataCache.cpp
+
+...
+
+InvokerMethod il2cpp::vm::MetadataCache::GetMethodInvoker(const Il2CppImage* image, uint32_t token)
+{
+    uint32_t rid = GetTokenRowId(token);
+    uint32_t table = GetTokenType(token);
+    if (rid == 0)
+        return NULL;
+    if (hybridclr::metadata::IsInterpreterImage(image))
+    {
+        return hybridclr::metadata::MetadataModule::GetMethodInvoker(image, token);
+    }
+    int32_t index = image-&gt;codeGenModule-&gt;invokerIndices[rid - 1];
+
+    if (index == kMethodIndexInvalid)
+        return NULL;
+
+    IL2CPP_ASSERT(index &gt;= 0 &amp;&amp; static_cast&lt;uint32_t&gt;(index) &lt; s_Il2CppCodeRegistration-&gt;invokerPointersCount);
+    return s_Il2CppCodeRegistration-&gt;invokerPointers[index];
+}
+
+...
+</code></pre><ul>
+<li>与原版相比，多了一个 <code>IsInterpreterImage</code> 方法判断的分支，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/hybridclr/metadata/MetadataUtil.h
+
+...
+
+    inline bool IsInterpreterIndex(int32_t index)
+    {
+        //return DecodeImageIndex(index) != 0;
+        return index != kInvalidIndex &amp;&amp; ((uint32_t)index &amp; ~kMetadataIndexMaskA) != 0;
+    }
+
+...
+
+    inline bool IsInterpreterImage(const Il2CppImage* image)
+    {
+        return IsInterpreterIndex(image-&gt;token);
+    }
+
+...
+</code></pre><ul>
+<li>其中，<code>~kMetadataIndexMaskA</code> 的值为 <code>0xF0000000</code> ，即 <code>Il2CppImage.token</code> 的高 4 位用于区分是动态加载的程序集，还是 AOT 的程序集。实际项目生成的<code>globalmetadata.dat</code> 中，这些元数据 id 的值都较小，最大也不过几十万级别，所以使用 id 分高位低位这种方式来标记。<code>token</code> 的具体含义如下：
+<ul>
+<li>第 0 ~ 21 位（共 22 位）：元数据的 id 标识范围，镜像 id 不使用这个区间，保证不会影响到 AOT 生成的 id。</li>
+<li>第 22 ~ 31 位（共 10 位）：镜像 id 标识，动态加载的镜像 id ，AOT 生成的为 0。
+<ul>
+<li>第 22 ~ 29 位：不同的镜像类型的 id ，按加载顺序增长。</li>
+<li>第 30 ~ 31 位：镜像的类型标识（优先按二进制文件大小划分）。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>当镜像类型为 0 时，id 的范围会从 0x40 开始（<code>libil2cpp::hybridclr::metadata.s_nextImageIndexByKind[0]</code>），即此时最小的镜像 id 为 00 0100 0000 ，确保能够被识别为动态加载的程序集。</li>
+<li>动态加载的程序集中的方法，初始化后存在了 <code>libil2cpp::hybridclr::metadata::InterpreterImage._methodDefines</code> 中。<code>hybridclr::metadata::MetadataModule::GetMethodInvoker</code> 方法，通过方法的 token ，从 <code>_methodDefines</code> 获取 <code>Il2CppMethodDefinition</code> 结构的方法声明，通过 <code>InterpreterModule::GetMethodInvoker</code> 方法获取 <code>InvokerMethod</code> 方法对象，其代码如下：</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/hybridclr/interpreter/InterpreterImage.cpp
+...
+
+	static void* InterpreterInvoke(Il2CppMethodPointer methodPointer, const MethodInfo* method, void* __this, void** __args)
+	{
+		InterpMethodInfo* imi = method-&gt;interpData ? (InterpMethodInfo*)method-&gt;interpData : InterpreterModule::GetInterpMethodInfo(method);
+		StackObject* args = (StackObject*)alloca(sizeof(StackObject) * imi-&gt;argStackObjectSize);
+		bool isInstanceMethod = metadata::IsInstanceMethod(method);
+		if (isInstanceMethod)
+		{
+			if (IS_CLASS_VALUE_TYPE(method-&gt;klass))
+			{
+				__this = (Il2CppObject*)__this + (methodPointer != method-&gt;methodPointerCallByInterp);
+			}
+			args[0].ptr = __this;
+		}
+		MethodArgDesc* argDescs = imi-&gt;args + isInstanceMethod;
+		ConvertInvokeArgs(args + isInstanceMethod, method, argDescs, __args);
+		if (method-&gt;return_type-&gt;type == IL2CPP_TYPE_VOID)
+		{
+			Interpreter::Execute(method, args, nullptr);
+			return nullptr;
+		}
+		else
+		{
+			StackObject* ret = (StackObject*)alloca(sizeof(StackObject) * imi-&gt;retStackObjectSize);
+			Interpreter::Execute(method, args, ret);
+			return TranslateNativeValueToBoxValue(method-&gt;return_type, ret);
+		}
+	}
+
+...
+</code></pre><ul>
+<li></li>
+</ul>
 <h2 id=参考>参考</h2>
 <ul>
 <li><a href=https://en.wikipedia.org/wiki/Just-in-time_compilation>Wikipedia : Just-in-time compilation</a></li>
