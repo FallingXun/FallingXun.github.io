@@ -759,7 +759,7 @@ Il2CppObject* il2cpp_runtime_invoke(const MethodInfo *method,
     }
 
 ...
-
+1
     void SetupMethodsLocked(Il2CppClass *klass, const il2cpp::os::FastAutoLock&amp; lock)
     {
         if ((!klass-&gt;method_count &amp;&amp; !klass-&gt;rank) || klass-&gt;methods)
@@ -1258,11 +1258,29 @@ const Il2CppAssembly* il2cpp::vm::MetadataCache::LoadAssemblyFromBytes(const cha
 
 </code></pre><h3 id=方法调用-1>方法调用</h3>
 <ul>
-<li>前面提到，Unity 的方法执行过程，会对类进行初始化，通过 <code>MetadataCache::GetMethodInvoker</code> 和 <code>MetadataCache::GetMethodPointer</code> 来获取方法的 <code>invoker_method</code> 和 <code>methodPointer</code> 。<code>MetadataCache::GetMethodInvoker</code> 代码如下：</li>
+<li>前面提到，Unity 的方法执行过程，会对类进行初始化，通过 <code>MetadataCache::GetMethodInvoker</code> 和 <code>MetadataCache::GetMethodPointer</code> 来获取方法的 <code>invoker_method</code> 和 <code>methodPointer</code> 。<code>MetadataCache::GetMethodPointer</code> 和 <code>MetadataCache::GetMethodInvoker</code> 代码如下：</li>
 </ul>
 <pre tabindex=0><code>// libil2cpp/vm/MetadataCache.cpp
 
 ...
+
+Il2CppMethodPointer il2cpp::vm::MetadataCache::GetMethodPointer(const Il2CppImage* image, uint32_t token)
+{
+    uint32_t rid = GetTokenRowId(token);
+    uint32_t table =  GetTokenType(token);
+    if (rid == 0)
+        return NULL;
+
+    if (hybridclr::metadata::IsInterpreterImage(image))
+    {
+        return hybridclr::metadata::MetadataModule::GetMethodPointer(image, token);
+    }
+
+    IL2CPP_ASSERT(rid &lt;= image-&gt;codeGenModule-&gt;methodPointerCount);
+
+    return image-&gt;codeGenModule-&gt;methodPointers[rid - 1];
+}
+
 
 InvokerMethod il2cpp::vm::MetadataCache::GetMethodInvoker(const Il2CppImage* image, uint32_t token)
 {
@@ -1285,7 +1303,7 @@ InvokerMethod il2cpp::vm::MetadataCache::GetMethodInvoker(const Il2CppImage* ima
 
 ...
 </code></pre><ul>
-<li>与原版相比，多了一个 <code>IsInterpreterImage</code> 方法判断的分支，其实现如下：</li>
+<li>与原版相比，均多了一个 <code>IsInterpreterImage</code> 方法判断的分支，其实现如下：</li>
 </ul>
 <pre tabindex=0><code>// libil2cpp/hybridclr/metadata/MetadataUtil.h
 
@@ -1503,7 +1521,7 @@ InvokerMethod il2cpp::vm::MetadataCache::GetMethodInvoker(const Il2CppImage* ima
 </ul>
 <h4 id=解释方法>解释方法</h4>
 <ul>
-<li>从解释帧中了解到，方法的执行是从 <code>Interpreter::Execute</code> 方法中的 <code>ip</code> 指向的地址开始，而 <code>ip</code> 初始化是设置为 <code>imi->codes</code> ，即设置为解释方法的代码地址。也就是说，解释方法需要完成从元数据到可执行指令的转换过程。</li>
+<li>从解释帧中了解到，方法的执行是从 <code>Interpreter::Execute</code> 方法中的 <code>ip</code> 指向的地址开始，而 <code>ip</code> 初始化是设置为 <code>imi->codes</code> ，即设置为解释方法的地址。也就是说，解释方法需要完成从元数据到可执行指令的转换过程。</li>
 <li>解释方法的创建过程如下：
 <ul>
 <li><code>Interpreter::Execute</code>（libil2cpp/hybridclr/interpreter/Interpreter_Execute.cpp）</li>
@@ -1680,7 +1698,7 @@ InvokerMethod il2cpp::vm::MetadataCache::GetMethodInvoker(const Il2CppImage* ima
 <ul>
 <li>AOT 方法：
 <ul>
-<li>AOT 方法的参数数量不定，在编译时就已经确定了数据的处理方式和内存布局。编译器会根据函数的逻辑和变量的使用情况，为每个变量分配合适的寄存器或内存空间，并在生成的机器码中直接使用这些寄存器或内存地址来进行数据的访问和操作，则执行过程需要精确地知道每个参数的具体地址偏移，因此将每个参数都记录到 <code>resolvedDatas</code> 中。此外，调用 AOT 方法还需要通过桥接函数完成解释器方法参数到 Native abi 方法的转换，为了避免运行时查找的开销，所以提前计算了对应的桥接函数并缓存起来，并记录到 <code>resolvedDatas</code> 中。</li>
+<li>AOT 方法的参数数量不定，在编译时就已经确定了数据的处理方式和内存布局。编译器会根据函数的逻辑和变量的使用情况，为每个变量分配合适的寄存器或内存空间，并在生成的机器码中直接使用这些寄存器或内存地址来进行数据的访问和操作，则执行过程需要精确地知道每个参数的具体地址<strong>偏移</strong>，因此将每个参数都记录到 <code>resolvedDatas</code> 中。此外，调用 AOT 方法还需要通过桥接函数完成解释器方法参数到 Native abi 方法的转换，为了避免运行时查找的开销，所以提前计算了对应的桥接函数并缓存起来，并记录到 <code>resolvedDatas</code> 中。</li>
 </ul>
 </li>
 <li>Interpreter 方法：
@@ -1691,9 +1709,17 @@ InvokerMethod il2cpp::vm::MetadataCache::GetMethodInvoker(const Il2CppImage* ima
 </ul>
 </li>
 </ul>
-<h4 id=计算方法标识>计算方法标识</h4>
+<h4 id=桥接函数>桥接函数</h4>
 <ul>
-<li>AOT 的桥接函数获取代码如下：</li>
+<li>方法执行过程，会经常出现托管（Managed）代码和本机（Native）代码的相互调用。但两者无法直接相互调用，主要有以下原因：
+<ul>
+<li>运行环境不同。托管代码运行在公共语言运行库（CLR）中，受 CLR 的管理和约束，而本机代码运行在操作系统的原生环境中，不经过 CLR 管理。</li>
+<li>调用约定差异。托管代码通常使用栈来传递参数，并且遵循特定的调用约定，如 <code>__stdcall</code> 或 <code>__cdecl</code> 等，返回值通常也在栈上，并根据函数的声明来确定返回值类型和大小。而本机代码可能使用不同的调用约定，或者直接通过寄存器传递参数，返回值可能直接通过寄存器，或者其他方式返回。</li>
+<li>数据类型不兼容。托管代码中的基本数据类型（如 C# 中的 int、float 等）与本机代码中的基本数据类型（如 C++ 中的 int、float 等）虽然名称相同，但在内存布局、表示范围等方面可能存在差异。例如，在某些平台上，托管代码中的 int 可能是 32 位的，而本机代码中的 int 可能是 64 位的。此外，对于结构体、类等复杂数据类型，托管代码中的复杂数据类型通常包含元数据，用于支持反射等特性，而本机代码中的复杂数据类型则没有这些额外的信息。因此，在相互调用时，无法直接传递和处理这些复杂数据类型。</li>
+<li>内存管理方式不同。托管代码使用托管堆来分配内存，托管对象具有自动的垃圾回收机制，由 CLR 进行管理，而本机代码使用非托管堆来分配内存，本机对象的生命周期需要开发者自行管理。</li>
+</ul>
+</li>
+<li>为了实现两者交互，需要使用桥接函数。AOT 的桥接函数获取代码如下：</li>
 </ul>
 <pre tabindex=0><code>// libil2cpp/hybridclr/interpreter/InterpreterModule.cpp
 
@@ -1717,7 +1743,7 @@ InvokerMethod il2cpp::vm::MetadataCache::GetMethodInvoker(const Il2CppImage* ima
 
 ...
 </code></pre><ul>
-<li>首先，会根据方法的元数据，通过 <code>ComputeSignature</code> 方法计算出一个字符串表示。每个类型的值，都对应一个标识符，具体如下：</li>
+<li>根据方法的元数据，通过 <code>ComputeSignature</code> 方法计算出一个字符串表示。每个类型的值，都对应一个标识符，具体如下：</li>
 </ul>
 <table>
 <thead>
@@ -1805,14 +1831,473 @@ InvokerMethod il2cpp::vm::MetadataCache::GetMethodInvoker(const Il2CppImage* ima
 </tr>
 <tr>
 <td style=text-align:center>struct</td>
-<td style=text-align:center>全局唯一 struct 签名, 如： <code>s1</code>、<code>s7</code></td>
+<td style=text-align:center>全局唯一 struct 签名, 如： <code>s1</code>、<code>s7</code> ，在 <code>libil2cpp/codegen/hybridclr/generated/MethodBridge.cpp</code> 中定义</td>
 </tr>
 </tbody>
 </table>
 <ul>
-<li>最后计算得到的结果为：返回值类型 + 实例对象类型（如果有）+ 参数 1 类型 + 参数 2 类型 + &mldr;..</li>
+<li>计算得到的结果为：<code>返回值类型</code> + <code>实例对象类型（如果有）</code> + <code>参数 1 类型</code> + <code>参数 2 类型</code> + <code>.....</code> 。</li>
+<li>通过方法标识，可以从 <code>hybridclr::interpreter::g_managed2nativeStub</code> 中找到对应的桥接方法，如：</li>
 </ul>
-<h4 id=泛型共享>泛型共享</h4>
+<pre tabindex=0><code>// libil2cpp/hybridclr/generated/MethodBridge.cpp
+
+const Managed2NativeMethodInfo hybridclr::interpreter::g_managed2nativeStub[] = 
+{
+    ...
+
+	{&quot;vi&quot;, __M2N_vi},
+
+    ...
+}
+
+...
+
+static void __M2N_vi(const MethodInfo* method, uint16_t* argVarIndexs, StackObject* localVarBase, void* ret)
+{
+    typedef void (*NativeMethod)(intptr_t __arg0, const MethodInfo* method);
+    ((NativeMethod)(method-&gt;methodPointerCallByInterp))(M2NFromValueOrAddress&lt;intptr_t&gt;(localVarBase+argVarIndexs[0]), method);
+}
+
+...
+
+</code></pre><ul>
+<li><code>M2N</code> 的桥接方法都是 <code>Managed2NativeCallMethod</code> 类型的方法，具有四个参数：
+<ul>
+<li><code>const MethodInfo* method</code> ：方法的元数据信息。</li>
+<li><code>uint16_t* argVarIndexs</code> ：方法的所有参数在 <code>resolveDatas</code> 中的索引，<code>resolveDatas</code> 中记录了对应的地址偏移信息。</li>
+<li><code>StackObject* localVarBase</code> ：解释帧的首个参数指针，结合 <code>argVarIndexs</code> 就能得到参数具体地址。</li>
+<li><code>void* ret</code>：方法执行后的返回值。</li>
+</ul>
+</li>
+<li>设置桥接方法的指针地址到对应的 IR 对象上，如：调用无返回值的实例方法，创建的 IR 对象类型为 <code>CallNativeInstance_void</code> ，其结构如下：</li>
+</ul>
+<pre tabindex=0><code>//  libil2cpp/hybridclr/interpreter/Instruction.h
+
+...
+	enum class HiOpcodeEnum : uint16_t
+	{
+        ...
+
+        CallNativeInstance_void,
+
+        ...
+    }
+
+	struct IRCommon
+	{
+		HiOpcodeEnum type;
+	};
+
+    ...
+
+	struct IRCallNativeInstance_void : IRCommon
+	{
+		uint8_t __pad2;     // 内存对齐用
+		uint8_t __pad3;     // 内存对齐用
+		uint32_t managed2NativeMethod;
+		uint32_t methodInfo;
+		uint32_t argIdxs;
+	};
+
+...
+</code></pre><ul>
+<li>执行时的处理如下：</li>
+</ul>
+<pre tabindex=0><code>	void Interpreter::Execute(const MethodInfo* methodInfo, StackObject* args, void* ret)
+	{
+        ...
+
+	LoopStart:
+		try
+		{
+			for (;;)
+			{
+				switch (*(HiOpcodeEnum*)ip)
+				{
+                
+                ...
+
+				case HiOpcodeEnum::CallNativeInstance_void:
+				{
+					uint32_t __managed2NativeMethod = *(uint32_t*)(ip + 4);
+					uint32_t __methodInfo = *(uint32_t*)(ip + 8);
+					uint32_t __argIdxs = *(uint32_t*)(ip + 12);
+				    uint16_t* _resolvedArgIdxs = ((uint16_t*)&amp;imi-&gt;resolveDatas[__argIdxs]);
+				    CHECK_NOT_NULL_THROW((localVarBase + _resolvedArgIdxs[0])-&gt;obj);
+				    ((Managed2NativeCallMethod)imi-&gt;resolveDatas[__managed2NativeMethod])(((MethodInfo*)imi-&gt;resolveDatas[__methodInfo]), _resolvedArgIdxs, localVarBase, nullptr);
+				    ip += 16;
+				    continue;
+				}
+
+                ...
+				}
+			}
+		ExitEvalLoop:;
+		}
+		catch (Il2CppExceptionWrapper ex)
+		{
+			PREPARE_EXCEPTION(ex.ex, 0);
+			FIND_NEXT_EX_HANDLER_OR_UNWIND();
+		}
+		return;
+	UnWindFail:
+		IL2CPP_ASSERT(lastUnwindException);
+		IL2CPP_ASSERT(interpFrameGroup.GetFrameCount() == 0);
+		il2cpp::vm::Exception::Raise(lastUnwindException);
+	}
+
+...
+
+</code></pre><ul>
+<li>前面提到，执行时的 <code>ip</code> 指向的是解释方法的地址，即转换后的 IR 对象，根据不同类型的 IR 对象，对应的执行方法会从指定的地址偏移上获取对应的参数和方法进行处理。以 <code>vi</code> 方法标识为例，执行 <code>M2N</code> 方法时，最终会调用 <code>method->methodPointerCallByInterp</code> ，而 <code>method->methodPointerCallByInterp</code> 是通过 <code>MetadataCache::GetMethodPointer</code> 方法获取的，当调用的是 AOT 方法时，则会获取到 <code>s_methodPointers</code> 中对应的方法，类型为 <code>Il2CppMethodPointer</code> 。如果调用的方法是动态加载的，最终也同样需要返回 <code>Il2CppMethodPointer</code> 对象，获取的代码如下：</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/hybridclr/interpreter/InterpreterModule.cpp
+
+    ...
+
+	template&lt;typename T&gt;
+	const Il2CppMethodPointer GetNative2ManagedMethod(const T* method, bool forceStatic)
+	{
+		char sigName[1000];
+		ComputeSignature(method, !forceStatic, sigName, sizeof(sigName) - 1);
+		auto it = s_native2manageds.find(sigName);
+		return it != s_native2manageds.end() ? it-&gt;second : InterpreterModule::NotSupportNative2Managed;
+	}
+
+    ...
+
+</code></pre><ul>
+<li>和 <code>M2N</code> 桥接方法一样，<code>N2M</code> 桥接方法同样也是要先计算方法标识，再从 <code>hybridclr::interpreter::g_native2managedStub</code> 中获取对应的方法，如：</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/hybridclr/generated/MethodBridge.cpp
+...
+
+const Native2ManagedMethodInfo hybridclr::interpreter::g_native2managedStub[] = 
+{
+    ...
+
+    {&quot;vi&quot;, (Il2CppMethodPointer)__N2M_vi},
+
+    ...
+}
+
+...
+
+static void __N2M_vi(intptr_t __arg0, const MethodInfo* method)
+{
+    
+	constexpr int __ARG_OFFSET_0__ = 0;
+	constexpr int __ARG_SIZE_0__ = (sizeof(__arg0) + 7)/8;      //内存对齐
+	constexpr int __TOTAL_ARG_SIZE__ = __ARG_OFFSET_0__ + __ARG_SIZE_0__;
+
+    StackObject args[__TOTAL_ARG_SIZE__];
+	*(intptr_t*)(args + __ARG_OFFSET_0__) = __arg0;
+
+    Interpreter::Execute(method, args, nullptr);
+}
+
+...
+</code></pre><ul>
+<li>执行对应的 <code>N2M</code> 桥接函数时，则再次调起 <code>Interpreter::Execute</code> ，对方法的内容进行解释执行，即实现了动态加载的方法的运行。</li>
+</ul>
+<h4 id=泛型共享机制>泛型共享机制</h4>
+<ul>
+<li>在 C# 中，泛型类的所有方法都可以共用，如：<code>List&lt;int></code> 、<code>List&lt;string></code> 和 <code>List&lt;object></code> 都使用相同的 <code>Add</code> 方法。当 IL2CPP 将 List 转换为 C++ 代码后，为了避免泛型代码膨胀，节约内存，在保证代码逻辑正确性的情况下对于一些能够共享代码，只生成一份代码，此技术称为<strong>泛型共享机制</strong>。</li>
+<li>调用泛型方法，同样也需要 <code>invoker_method</code> 和 <code>methodPointer</code> ，以 <code>invoker_method</code> 为例，其获取代码如下：</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/vm/MetadataCache.cpp
+
+...
+
+InvokerMethod il2cpp::vm::MetadataCache::GetInvokerMethodPointer(const MethodInfo* methodDefinition, const Il2CppGenericContext* context)
+{
+    Il2CppGenericMethod method = { 0 };
+    method.methodDefinition = const_cast&lt;MethodInfo*&gt;(methodDefinition);
+    method.context.class_inst = context-&gt;class_inst;
+    method.context.method_inst = context-&gt;method_inst;
+
+    Il2CppMethodTableMapIter iter = s_MethodTableMap.find(&amp;method);
+    if (iter != s_MethodTableMap.end())
+    {
+        IL2CPP_ASSERT(iter-&gt;second-&gt;invokerIndex &gt;= 0);
+        if (static_cast&lt;uint32_t&gt;(iter-&gt;second-&gt;invokerIndex) &lt; s_Il2CppCodeRegistration-&gt;invokerPointersCount)
+            return s_Il2CppCodeRegistration-&gt;invokerPointers[iter-&gt;second-&gt;invokerIndex];
+        return NULL;
+    }
+    // get the shared version if it exists
+    method.context.class_inst = GetSharedInst(context-&gt;class_inst);
+    method.context.method_inst = GetSharedInst(context-&gt;method_inst);
+
+    iter = s_MethodTableMap.find(&amp;method);
+    if (iter != s_MethodTableMap.end())
+    {
+        IL2CPP_ASSERT(iter-&gt;second-&gt;invokerIndex &gt;= 0);
+        if (static_cast&lt;uint32_t&gt;(iter-&gt;second-&gt;invokerIndex) &lt; s_Il2CppCodeRegistration-&gt;invokerPointersCount)
+            return s_Il2CppCodeRegistration-&gt;invokerPointers[iter-&gt;second-&gt;invokerIndex];
+        return NULL;
+    }
+
+    return NULL;
+}
+
+...
+
+</code></pre><ul>
+<li>可以看到，获取对应方法时，先根据泛型上下文 <code>context</code> 对象的 <code>class_inst</code> 和 <code>method_inst</code> ，从 <code>MetadataCache.s_MethodTableMap</code> 中查找。如果没有找到，则通过 <code>GetSharedInst</code> 计算其共享类型，然后再次进行查找。<code>GetSharedInst</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/vm/MetadataCache.cpp
+
+...
+
+static const Il2CppGenericInst* GetSharedInst(const Il2CppGenericInst* inst)
+{
+    if (inst == NULL)
+        return NULL;
+
+    il2cpp::metadata::Il2CppTypeVector types;
+    for (uint32_t i = 0; i &lt; inst-&gt;type_argc; ++i)
+    {
+        if (il2cpp::vm::Type::IsReference(inst-&gt;type_argv[i]))
+            types.push_back(&amp;il2cpp_defaults.object_class-&gt;byval_arg);
+        else
+        {
+            const Il2CppType* type = inst-&gt;type_argv[i];
+            if (s_Il2CppCodeGenOptions-&gt;enablePrimitiveValueTypeGenericSharing)
+            {
+                if (IsShareableEnum(type))
+                {
+                    const Il2CppType* underlyingType = il2cpp::vm::Type::GetUnderlyingType(type);
+                    switch (underlyingType-&gt;type)
+                    {
+                        case IL2CPP_TYPE_I1:
+                            type = &amp;il2cpp_defaults.sbyte_shared_enum-&gt;byval_arg;
+                            break;
+                        case IL2CPP_TYPE_I2:
+                            type = &amp;il2cpp_defaults.int16_shared_enum-&gt;byval_arg;
+                            break;
+                        case IL2CPP_TYPE_I4:
+                            type = &amp;il2cpp_defaults.int32_shared_enum-&gt;byval_arg;
+                            break;
+                        case IL2CPP_TYPE_I8:
+                            type = &amp;il2cpp_defaults.int64_shared_enum-&gt;byval_arg;
+                            break;
+                        case IL2CPP_TYPE_U1:
+                            type = &amp;il2cpp_defaults.byte_shared_enum-&gt;byval_arg;
+                            break;
+                        case IL2CPP_TYPE_U2:
+                            type = &amp;il2cpp_defaults.uint16_shared_enum-&gt;byval_arg;
+                            break;
+                        case IL2CPP_TYPE_U4:
+                            type = &amp;il2cpp_defaults.uint32_shared_enum-&gt;byval_arg;
+                            break;
+                        case IL2CPP_TYPE_U8:
+                            type = &amp;il2cpp_defaults.uint64_shared_enum-&gt;byval_arg;
+                            break;
+                        default:
+                            IL2CPP_ASSERT(0 &amp;&amp; &quot;Invalid enum underlying type&quot;);
+                            break;
+                    }
+                }
+            }
+
+            if (il2cpp::vm::Type::IsGenericInstance(type))
+            {
+                const Il2CppGenericInst* sharedInst = GetSharedInst(type-&gt;data.generic_class-&gt;context.class_inst);
+                Il2CppGenericClass* gklass = il2cpp::metadata::GenericMetadata::GetGenericClass(type-&gt;data.generic_class-&gt;type, sharedInst);
+                Il2CppClass* klass = il2cpp::vm::GenericClass::GetClass(gklass);
+                type = &amp;klass-&gt;byval_arg;
+            }
+            types.push_back(type);
+        }
+    }
+
+    const Il2CppGenericInst* sharedInst = il2cpp::vm::MetadataCache::GetGenericInst(types);
+
+    return sharedInst;
+}
+
+...
+
+</code></pre><ul>
+<li>共享类型的计算规则如下：
+<ul>
+<li>引用类型统一使用 <code>System.Object</code>，主要包括：
+<ul>
+<li>IL2CPP_TYPE_STRING（字符串）</li>
+<li>IL2CPP_TYPE_SZARRAY（单元素零界数组）</li>
+<li>IL2CPP_TYPE_CLASS（类）</li>
+<li>IL2CPP_TYPE_OBJECT（对象）</li>
+<li>IL2CPP_TYPE_ARRAY（数组）</li>
+<li>IL2CPP_TYPE_GENERICINST（非值类型的泛型实例），如：<code>Dictionary&lt;int, string></code> 的共享类型为 <code>object</code> 。</li>
+</ul>
+</li>
+<li>枚举以其基础类型计算，主要包括：
+<ul>
+<li>IL2CPP_TYPE_I1（<code>System.SByteEnum</code>）</li>
+<li>IL2CPP_TYPE_I2（<code>System.Int16Enum</code>）</li>
+<li>IL2CPP_TYPE_I4（<code>System.Int32Enum</code>）</li>
+<li>IL2CPP_TYPE_I8（<code>System.Int64Enum</code>）</li>
+<li>IL2CPP_TYPE_U1（<code>System.ByteEnum</code>）</li>
+<li>IL2CPP_TYPE_U2（<code>System.UInt16Enum</code>）</li>
+<li>IL2CPP_TYPE_U4（<code>System.UInt32Enum</code>）</li>
+<li>IL2CPP_TYPE_U8（<code>System.UInt64Enum</code>）</li>
+</ul>
+</li>
+<li>值类型的泛型实例，为其实例类型的共享类型组成的泛型类型，如：<code>ValueTuple&lt;int, string></code> 的共享类型为 <code>ValueTuple&lt;int, object></code> 。</li>
+</ul>
+</li>
+<li>获取 <code>methodPointer</code> 方法和 <code>invoker_method</code> 基本一致，都是从 <code>s_Il2CppCodeRegistration</code> 中通过自身类型或共享类型进行查找，不同的是 <code>invoker_method</code> 是从 <code>s_Il2CppCodeRegistration->invokerPointers</code> 中查找，而 <code>methodPointer</code> 是从 <code>s_Il2CppCodeRegistration->genericMethodPointers</code> 中查找。</li>
+<li>以<code>List&lt;string></code> 的 <code>Add</code> 方法为例，生成 C++ 代码后为：</li>
+</ul>
+<pre tabindex=0><code>// System.Void System.Collections.Generic.List`1&lt;System.String&gt;::Add(T)
+inline void List_1_Add_m627ED3F7C50096BB8934F778CB980E79483BD2AE (List_1_t6C9F81EDBF0F4A31A9B0DA372D2EF34BDA3A1AF3 * __this, String_t* ___item0, const RuntimeMethod* method)
+{
+	((  void (*) (List_1_t6C9F81EDBF0F4A31A9B0DA372D2EF34BDA3A1AF3 *, String_t*, const RuntimeMethod*))List_1_Add_mE5B3CBB3A625606D9BC4337FEAAF1D66BCB6F96E_gshared)(__this, ___item0, method);
+}
+
+...
+
+// System.Collections.Generic.List`1&lt;System.String&gt;
+struct List_1_t6C9F81EDBF0F4A31A9B0DA372D2EF34BDA3A1AF3  : public RuntimeObject
+{
+
+...
+
+};
+
+
+// System.Void System.Collections.Generic.List`1&lt;System.Object&gt;::Add(T)
+IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR void List_1_Add_mE5B3CBB3A625606D9BC4337FEAAF1D66BCB6F96E_gshared (List_1_t3F94120C77410A62EAE48421CF166B83AB95A2F5 * __this, RuntimeObject * ___item0, const RuntimeMethod* method)
+{
+	...
+}
+</code></pre><ul>
+<li>执行 <code>List&lt;string>.Add</code> 时，实际上在 C++ 中执行的是 <code>List&lt;object>.Add</code> 的方法，执行完成后，再将返回值由 <code>List&lt;object></code> 转换为 <code>List&lt;string></code> 返回。这里 IL2CPP 欺骗了 C++ 编译器，由于 C# 编译器已经强制要求 <code>List&lt;string></code> 中只能是对 <code>List&lt;T></code> 对象使用 <code>string</code> 类型进行操作，因此 IL2CPP 可以安全地欺骗 C++ 编译器。</li>
+<li>对于 AOT 中使用过的泛型类型，会生成对应的代码（不能被裁剪）到 <code>global-metadata.bat</code> 中，初始化的时候通过 <code>MetadataCache::InitializeGCSafe</code> 添加到 <code>MetadataCache.s_MethodTableMap</code> 中。基于泛型共享机制，此时在热更代码中调用对应可共享类型，就能直接使用。</li>
+</ul>
+<h4 id=补充元数据技术>补充元数据技术</h4>
+<ul>
+<li>引用类型能通过泛型共享机制实现共享，而值类型则不能共享，主要有以下情况（引自 Hybridclr 文档）：
+<ul>
+<li>值类型有不同大小，不同大小的值类型需要使用不同的参数类型。</li>
+<li>内存对齐问题。如：
+<pre tabindex=0><code>// 
+
+
+struct A
+{
+    short x;
+    short y;
+};
+
+
+struct B
+{
+    int x;
+};
+
+
+{
+    short x;
+    T v;
+
+
+}
+</code></pre>其中，<code>GenericDemo&lt;A></code> 的 size = 6 ，alignment = 2 ，v 的偏移为 2 ，而 <code>GenericDemo&lt;B></code> 的 size = 8 ，alignment = 4 ，v 的偏移为 4 。由于 v 偏移不同，对于 <code>GetValue</code> 方法，无法使用相同的 C++ 代码让这两个类型都能正常工作。</li>
+<li>ABI 问题。相同大小及对齐的结构体，在x64 ABI是等效的，可以用同等大小的结构体来作共享泛型实例化，但在 arm64 ABI 中却不行。如：
+<pre tabindex=0><code>struct IntVec3 { int32_t x, y, z; }; 
+
+
+</code></pre>其中，<code>IntVec3</code> 以引用的方式传参，而 <code>FloatVec3</code> 的三个字段分别放在三个浮点数寄存器中。</li>
+</ul>
+</li>
+<li>由于值类型不能泛型共享，泛型实例（类或函数）的泛型参数中如果出现值类型，这个泛型实例必须在 AOT 提前实例化。如果泛型参数类型是热更新代码中定义的值类型，则会导致无法使用 <code>List&lt;热更新值类型></code> 这类代码，使得开发过程出现诸多不便。</li>
+<li>对于热更新值类型，AOT 泛型方法无法执行，而热更新代码中的泛型方法可以正常执行，实际上是因为热更新代码中有原始的 IL 指令，因此可以根据泛型参数实例化出对应的泛型方法最终代码，而 AOT 方法没有获得原始 IL 指令的方法，因为在 IL 代码转成 C++ 代码后已经丢弃了。基于此情况，HybridCLR 提出了基于补充元数据的泛型函数实例化技术，通过补充 AOT 泛型的原始 IL 方法信息，从而解决泛型实例在热更新中的调用问题。</li>
+<li>需要补充的是 AOT 中的方法，首先需要将对应的程序集进行动态加载，然后通过调用 <code>RuntimeApi::LoadMetadataForAOTAssembly</code> 方法，将 AOT 的补充程序集进行解析，和热更程序集加载类似，但由于 AOT 已经存在有同名的程序集，所以补充的程序集没有添加到 <code>s_Assemblies</code> 中，而是存在了 <code>AOTHomologousImage</code> 中，通过 <code>AOTHomologousImage::FindImageByAssembly</code> 方法获取。</li>
+<li>没有补充元数据时，热更新值类型的 AOT 泛型方法通过 <code>GenericMethod::GetMethod</code> 获取到的方法，其 <code>methodPointer</code> 为空，HybridCLR 修改了 <code>GenericMethod::GetMethod</code> 的实现，增加了补充元数据后的处理：</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/metadata/GenericMethod.cpp
+...
+    const MethodInfo* GenericMethod::GetMethod(const Il2CppGenericMethod* gmethod, bool copyMethodPtr)
+    {
+        // This can be NULL only when we have hit the generic recursion depth limit.
+        if (gmethod == NULL)
+        {
+            MethodInfo* newMethod = (MethodInfo*)MetadataCalloc(1, sizeof(MethodInfo));
+            newMethod-&gt;methodPointer = AGenericMethodWhichIsTooDeeplyNestedWasInvoked;
+            return newMethod;
+        }
+
+        // First check for an already constructed generic method using the shared/reader lock
+        MethodInfo* existingMethod;
+        if (s_GenericMethodMap.TryGet(gmethod, &amp;existingMethod))
+            return existingMethod;
+
+        return CreateMethodLocked(gmethod, copyMethodPtr);
+    }
+
+    const MethodInfo* GenericMethod::CreateMethodLocked(const Il2CppGenericMethod* gmethod, bool copyMethodPtr)
+    {
+        ...
+
+        newMethod-&gt;invoker_method = MetadataCache::GetInvokerMethodPointer(methodDefinition, &amp;gmethod-&gt;context);
+        newMethod-&gt;methodPointer = MetadataCache::GetMethodPointer(methodDefinition, &amp;gmethod-&gt;context, true, true);
+
+        bool isAdjustorThunkMethod = newMethod-&gt;klass-&gt;valuetype &amp;&amp; hybridclr::metadata::IsInstanceMethod(newMethod);
+        if (newMethod-&gt;methodPointer == nullptr)
+        {
+            if ((hybridclr::metadata::IsInterpreterMethod(newMethod) || hybridclr::metadata::MetadataModule::IsImplementedByInterpreter(newMethod)))
+            {
+                newMethod-&gt;invoker_method = hybridclr::interpreter::InterpreterModule::GetMethodInvoker(newMethod);
+                newMethod-&gt;methodPointerCallByInterp = hybridclr::interpreter::InterpreterModule::GetMethodPointer(newMethod);
+                if (isAdjustorThunkMethod)
+                {
+                    newMethod-&gt;virtualMethodPointerCallByInterp = hybridclr::interpreter::InterpreterModule::GetAdjustThunkMethodPointer(newMethod);
+                }
+                else
+                {
+                    newMethod-&gt;virtualMethodPointerCallByInterp = newMethod-&gt;methodPointerCallByInterp;
+                }
+                newMethod-&gt;methodPointer = newMethod-&gt;virtualMethodPointerCallByInterp;
+                newMethod-&gt;isInterpterImpl = true;
+                newMethod-&gt;initInterpCallMethodPointer = true;
+            }
+            else
+            {
+                // not init anything
+            }
+        }
+        else
+        {
+            newMethod-&gt;virtualMethodPointerCallByInterp = newMethod-&gt;methodPointer;
+            newMethod-&gt;methodPointerCallByInterp = isAdjustorThunkMethod ? MetadataCache::GetMethodPointer(methodDefinition, &amp;gmethod-&gt;context, false, true) : newMethod-&gt;methodPointer;
+            newMethod-&gt;initInterpCallMethodPointer = true;
+        }
+
+        ...
+    }
+
+</code></pre><ul>
+<li>然而，在 <code>InterpreterModule::GetMethodInvoker</code> -> <code>InterpreterModule::GetInterpMethodInfo</code> -> <code>HiTransform::Transform</code> -> <code>metadata::MetadataModule::GetUnderlyingInterpreterImage</code> 中，由于是解释执行，取的是解释程序集镜像 <code>InterpreterImage</code>，而 AOT 的补充程序集镜像是 <code>AOTHomologousImage</code> ，所以需要在 <code>GetUnderlyingInterpreterImage</code> 中特殊处理，代码如下：</li>
+</ul>
+<pre tabindex=0><code>// libil2cpp/hybridclr/metadata/MetadataModule.cpp
+
+...
+
+    Image* MetadataModule::GetUnderlyingInterpreterImage(const MethodInfo* methodInfo)
+    {
+        return metadata::IsInterpreterMethod(methodInfo) ? hybridclr::metadata::MetadataModule::GetImage(methodInfo-&gt;klass)
+            : (metadata::Image*)hybridclr::metadata::AOTHomologousImage::FindImageByAssembly(
+                methodInfo-&gt;klass-&gt;rank ? il2cpp_defaults.corlib-&gt;assembly : methodInfo-&gt;klass-&gt;image-&gt;assembly);
+    }
+
+...
+
+</code></pre><ul>
+<li>如果方法为解释方法，则直接获取解释程序集，否则需要获取方法所属 AOT 程序集的补充程序集。其中有一个特殊细节，对于 T[] 的成员函数，<code>methodInfo->klass</code> 指向了类型 T 所属的程序集，而不是 mscorlib 程序集，所以再做了特殊处理，数组类型指向 <code>il2cpp_defaults.corlib->assembly</code> 。</li>
+<li><code>HiTransform::Transform</code> 方法中，通过执行 <code>metadata::MethodBodyCache::GetMethodBody(image, methodInfo->token)</code> 来获取方法的 <code>MethBody</code> ，对于 AOT 泛型方法，传入的 token 是 AOT 中的 token ，而</li>
+</ul>
+<h4 id=完全泛型共享>完全泛型共享</h4>
 <h2 id=参考>参考</h2>
 <ul>
 <li><a href=https://en.wikipedia.org/wiki/Just-in-time_compilation>Wikipedia : Just-in-time compilation</a></li>
@@ -1823,6 +2308,7 @@ InvokerMethod il2cpp::vm::MetadataCache::GetMethodInvoker(const Il2CppImage* ima
 <li><a href=https://unity.com/blog/engine-platform/il2cpp-internals-a-tour-of-generated-code>Unity Blog : IL2CPP internals: A tour of generated code</a></li>
 <li><a href=https://unity.com/blog/engine-platform/il2cpp-internals-generic-sharing-implementation>Unity Blog : IL2CPP Internals: Generic sharing implementation</a></li>
 <li><a href=https://hybridclr.doc.code-philosophy.com/blog>HybridCLR</a></li>
+<li><a href=https://www.zhihu.com/column/c_1489549396035870720>知乎专栏 - HybridCLR c#热更新</a></li>
 </ul>
 <hr>
 <ul class=pager>
