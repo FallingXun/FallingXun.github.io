@@ -2295,9 +2295,40 @@ struct B
 
 </code></pre><ul>
 <li>如果方法为解释方法，则直接获取解释程序集，否则需要获取方法所属 AOT 程序集的补充程序集。其中有一个特殊细节，对于 T[] 的成员函数，<code>methodInfo->klass</code> 指向了类型 T 所属的程序集，而不是 mscorlib 程序集，所以再做了特殊处理，数组类型指向 <code>il2cpp_defaults.corlib->assembly</code> 。</li>
-<li><code>HiTransform::Transform</code> 方法中，通过执行 <code>metadata::MethodBodyCache::GetMethodBody(image, methodInfo->token)</code> 来获取方法的 <code>MethBody</code> ，对于 AOT 泛型方法，传入的 token 是 AOT 中的 token ，而</li>
+<li><code>HiTransform::Transform</code> 方法中，通过执行 <code>metadata::MethodBodyCache::GetMethodBody(image, methodInfo->token)</code> 来获取方法的 <code>MethBody</code> ，对于 AOT 泛型方法，传入的 token 是 AOT 程序集中的 token ，而不是补充程序集中的 token 。加载补充程序集有两种模式：
+<ul>
+<li>CONSISTENT ：补充程序集的元数据和 AOT 中的完全精确一致，即两者的 token 也相同，可以直接使用。</li>
+<li>SUPERSET ：补充程序集的元数据和 AOT 中的不一致，需要在初始化时计算原始 AOT 方法的 token 和补充元数据方法的 token 的映射关系。
+<ul>
+<li>调用 <code>SuperSetAOTHomologousImage::InitTypes1</code> ，遍历补充程序集中所有类型，通过 <code>TypeHandleFromName</code> 方法找到 AOT 中的类型，将补充程序集的类型加入到 <code>_aotTypeIndex2TypeDefs</code> 中，key 值为 AOT 类型的索引偏移值。</li>
+<li>调用 <code>SuperSetAOTHomologousImage::InitMethods</code> ，遍历补充程序集中的所有方法，通过 <code>FindMatchMethod</code> 方法找到 AOT 中同名且参数类型和返回值类型都相同的方法，如果是泛型方法则将补充程序集的方法加入到 <code>_token2MethodDefs</code> 中，key 值为 AOT 方法的 token 。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>对于 AOT 程序集中的类型、方法、变量，在解释执行过程中，为了提高执行性能，都需要保持使用原有 AOT 中生成的，所以无论哪种加载模式，在初始化补充程序集时，都需要做好绑定，以 SUPERSET 模式为例，即：
+<ul>
+<li><code>_typeDefs[index].aotTypeDef</code> 通过 <code>il2cpp::vm::Image::TypeHandleFromName</code> 方法查找并绑定，通过 <code>Image::GetClassFromToken</code> -> <code>...</code> -> <code>SuperSetAOTHomologousImage::GetIl2CppTypeFromRawTypeDefIndex</code> 方法获取。</li>
+<li><code>_methodDefs[index].aotMethodDef</code> 通过 <code>FindMatchMethod</code> 方法查找并绑定，通过 <code>Image::GetMethodInfoFromToken</code> -> <code>...</code> -> <code>SuperSetAOTHomologousImage::GetMethodDefinitionFromRawIndex</code> 方法获取。</li>
+<li><code>_fields[index].aotFieldDef</code> 通过 <code>FindMatchField</code> 方法查找并绑定，通过 <code>Image::GetFieldInfoFromToken</code> -> <code>...</code> -> <code>SuperSetAOTHomologousImage::ReadFieldRefInfoFromFieldDefToken</code> 方法获取。</li>
+</ul>
+</li>
 </ul>
 <h4 id=完全泛型共享>完全泛型共享</h4>
+<ul>
+<li>旧的泛型共享技术只能对 class 类型进行泛型共享，即只有引用类型（如类、接口等）的泛型实例可以共享代码。对于值类型（如整数、结构体等），则无法进行泛型共享。自 Unity 2021.3.x LTS版本起，IL2CPP 开始支持完全泛型共享机制，泛型参数无论是任何类型（包含值类型）都可以共享。这意味着无论是类、结构体还是其他数据类型，只要符合泛型约束条件，就可以实现泛型共享。HybridCLR 通过这个机制实现了不需要补充元数据也能支持 AOT 泛型，则不需要补充元数据，从而减小了内存的占用。此外，由于不需要解释执行，运行性能也得到了提升。不同版本开启完全泛型共享的方式如下：
+<ul>
+<li>2020 版本不支持完全泛型共享。</li>
+<li>2021 版本需要设置 IL2CPP Code Generation 选项为 faster(smaller build) 。</li>
+<li>2022 版本默认开启完全泛型共享，无法关闭。如果设置 IL2CPP Code Generation 选项为 faster(smaller build) 则能进一步减少包体。</li>
+</ul>
+</li>
+<li>HybridCLR 文档说明，faster (smaller build) 会对泛型函数性能有较大影响（15% 甚至更高），因此建议不要开启这个选项。所以如果是 2021 版本并且没有内存压力情况下，建议使用补充元数据技术方案（HyBridCLR 完全泛型共享方案仅在商业版中提供）。</li>
+</ul>
+<h2 id=总结>总结</h2>
+<ul>
+<li>总的来说，目前 HyBridCLR 是主流的 Unity 热更新方案中唯一彻底支持原生 C# 泛型的方案，通过实现一套 IL 代码解释器，可以在运行时在 C++ 中直接解释执行动态加载的 IL 代码，从而达到热更新的目的。HyBridCLR 的细节内容还有很多，如：PE 文件结构解析、IL 指令集实现、VTable 虚表、GC 管理、多线程等，这里主要介绍 IL2CPP 的基础概念和 HybridCLR 的基本运作流程。相较于 Lua 而言，真正意义上的纯 C# 的开发对很多 Unity 开发者来说是比较友好的，可以减少学习另一门语言的成本，同时可以使用 Unity 的分析器进行性能调优，但 Lua 目前也在大部分项目中使用，大部分开发者都具备足够的使用经验，因此需要根据项目的实际情况选择适合的热更新方案。</li>
+</ul>
 <h2 id=参考>参考</h2>
 <ul>
 <li><a href=https://en.wikipedia.org/wiki/Just-in-time_compilation>Wikipedia : Just-in-time compilation</a></li>
