@@ -178,13 +178,10 @@ post-container">
 </ul>
 </li>
 <li>OpenBaseLibs()
-<ul>
-<li>注册System、LuaInterface、UnityEngine模块，其中List和Dictionary没有注册创建方法。</li>
-<li>创建Layer表到全局表中，将LayerMask的层级添加到Layer表中。</li>
-<li>初始化反射相关，加载mscorlib和UnityEngine程序集并缓存，注册反射相关方法到tolua表中，包括findtype、loadassembly、getmethod、getconstructor、gettypemethod、getfield、getproperty、createinstance。</li>
-<li>注册CSharp反射相关Wrap的初始化方法，key值为tolua.reflection。</li>
-</ul>
-</li>
+- 注册System、LuaInterface、UnityEngine模块，其中List和Dictionary没有注册创建方法。
+- 创建Layer表到全局表中，将LayerMask的层级添加到Layer表中。
+- 初始化反射相关，加载mscorlib和UnityEngine程序集并缓存，注册反射相关方法到tolua表中，包括findtype、loadassembly、getmethod、getconstructor、gettypemethod、getfield、getproperty、createinstance。
+- 注册CSharp反射相关Wrap的初始化方法，key值为tolua.reflection。</li>
 <li>创建完成后，lua侧大致为：</li>
 </ul>
 <pre tabindex=0><code>	_G(即 -10002) = {
@@ -230,9 +227,9 @@ post-container">
 	}
 </code></pre><h4 id=初始化相关库>初始化相关库</h4>
 <ul>
-<li>lua侧需要使用的相关库函数，要进行初始化
+<li>lua侧需要使用的相关库函数，要进行初始化</li>
+<li>luaopen_pb
 <ul>
-<li>luaopen_pb</li>
 <li>luaopen_struct</li>
 <li>luaopen_lpeg</li>
 <li>cjson（可选）</li>
@@ -352,10 +349,18 @@ post-container">
 <li>所有Enum变量注册完后，注册IntToEnum方法到table（tb_enum）中，可将int转成lua侧的Enum表示。</li>
 </ul>
 </li>
-<li>L.EndEnum()
-<ul>
+<li>L.EndEnum()</li>
 <li>将当前Enum的table（tb_enum）设置为LUA_RIDX_LOADED中table（tb_loaded）的metatable，再将LUA_RIDX_LOADED中table（tb_loaded）设置到当前module的table中，key值为Enum名。</li>
 <li>完成EndEnum后，设置CSharp的ypeTraits<t>.Check和StackTraits<t>.Push。</li>
+<li>L.BeginStaticLibs(&mldr;)
+<ul>
+<li>调用lua的tolua_beginstaticclass，创建一个table（tb_loaded）加入loaded中。</li>
+<li>设置table（tb_loaded）的name、__index、__newindex。</li>
+</ul>
+</li>
+<li>L.EndStaticLibs()
+<ul>
+<li>调用lua的tolua_endstaticclass方法，设置当前的table（tb_loaded）的metatable为自身，再设置到当前module的table中，key值为类名。</li>
 </ul>
 </li>
 </ul>
@@ -389,6 +394,33 @@ post-container">
 			UnityEngine.Space 
 				table = {},
 				metatable = ref_SpaceEnum
+
+			UnityEngine.Application
+				table = {
+					.name = &quot;UnityEngine.Application&quot;,
+					&amp;tag = 1,
+
+					Quit = CSharp的UnityEngine_ApplicationWrap.Quit,
+					Unload = CSharp的UnityEngine_ApplicationWrap.Unload,
+					...
+
+					&amp;gettag = {
+						isPlaying = CSharp的UnityEngine_ApplicationWrap.get_isPlaying,
+						isFocused = CSharp的UnityEngine_ApplicationWrap.get_isFocused,
+						buildGUID = CSharp的UnityEngine_ApplicationWrap.get_buildGUID,
+						runInBackground = CSharp的UnityEngine_ApplicationWrap.get_runInBackground,
+						...
+					},
+
+					&amp;settag = {
+						runInBackground = CSharp的UnityEngine_ApplicationWrap.set_runInBackground,
+						...
+					},
+
+					__index = tolua.c中的static_index_event,
+					__newindex = tolua.c中的static_newindex_event,
+				}
+				metatable = table
 		},	
 
 		...
@@ -442,42 +474,6 @@ post-container">
 	}
 
 	...
-</code></pre><ul>
-<li>lua 侧检查某个 C# 类、方法、属性、字段是否有生成 Wrap ，可以通过以下方式：</li>
-</ul>
-<pre tabindex=0><code>	local function TypeWrapped(typeName)
-		local wrap = false
-		local wrapType = _G
-		local result = pcall(function()
-			for key in string.gmatch(typeName, &quot;[^%.]+&quot;) do 
-				wrapType = wrapType[key]
-			end
-			wrap = wrapType ~= nil and wrapType ~= _G 
-		end)
-		if not wrap then
-			wrapType = nil
-		end
-		return wrap, wrapType
-	end
-
-	local function PropertyOrFieldWrapped(wrapType, memberName)
-		local wrap = false
-		if wrapType ~= nil then
-			local gettag = wrapType[tolua.gettag]
-			if gettag ~= nil and gettag[memberName] ~= nil then
-				wrap = true
-			end
-		end
-		return wrap
-	end
-
-	local function MethodWrapped(wrapType, methodName)
-		local wrap = false
-		if wrapType ~= nil and wrapType[methodName] ~= nil then
-			wrap = true
-		end
-		return wrap
-	end
 </code></pre><ul>
 <li>DelegateFactory 对委托相关的类型进行管理</li>
 </ul>
@@ -1590,7 +1586,7 @@ public class TestInject : MonoBehaviour
 </li>
 <li>InjectionBridgeInfo.lua
 <ul>
-<li>记录CSharp侧能进行热修复的方法和对应的索引index。</li>
+<li>记录 CSharp 侧能进行热修复的方法和对应的索引 index。</li>
 </ul>
 </li>
 </ul>
@@ -1600,7 +1596,405 @@ public class TestInject : MonoBehaviour
 <img src="/img/Lua/ToLua/Inject.png?raw=true" alt=Inject.png>
 </li>
 </ul>
-<h3 id=生成工具>生成工具</h3>
+<h3 id=运行时-wrap-检查>运行时 Wrap 检查</h3>
+<ul>
+<li>在项目上线后，一般不会进行强更换包，而是选择出增量包进行更新，所以有些 C# 的方法仅在新包中才有，但 lua 脚本通常是全版本共用的，因此调用新方法时需要进行判断，判断方式有：
+<ul>
+<li>增加版本号管理，根据版本号来确定是否能调用。</li>
+<li>检查脚本是否已经有生成 Wrap ，生成了才能调用。</li>
+</ul>
+</li>
+<li>使用版本号管理时，需要定义很多的版本号，当发布多个渠道时，则版本号需要保持一致，需要有较好的管理流程。然而，如果出现某些地方直接调用新的 C# 方法的情况，通常不太容易发现，因为本地开发工程都是具有新方法的，所以往往会等到发布后，线上使用旧包的玩家才会发现报错。基于此，需要在代码执行的时候就增加检查。</li>
+</ul>
+<h4 id=初始化-2>初始化</h4>
+<ul>
+<li>创建一个表 <code>WrapHelper</code> ，用于存储所有需要检查的类型，设置其元表的 __index 方法为：</li>
+</ul>
+<pre tabindex=0><code>    local WrapHelperMetatable = {}
+    WrapHelperMetatable.__index = function(tb, key)
+        Error(string.format(&quot;判断 C# 是否生成 Wrap 的方法 WrapHelper.%s 未在 WrapHelper.Init 中初始化，请检查！&quot; , tostring(key)))
+    end
+</code></pre><ul>
+<li>设置类型检查的方法 <code>TypeWrapped</code> ：</li>
+</ul>
+<pre tabindex=0><code>	local function TypeWrapped(typeName)
+		local wrap = false
+		local wrapType = _G
+		local result = pcall(function()
+			for key in string.gmatch(typeName, &quot;[^%.]+&quot;) do 
+				wrapType = wrapType[key]
+			end
+			wrap = wrapType ~= nil and wrapType ~= _G 
+		end)
+		if not wrap then
+			wrapType = nil
+		end
+		if not wrap then
+			Log(string.format( &quot;C# 类没有生成 Wrap ！ 类名: %s&quot;,tostring(typeName)))
+		end
+		return wrap, wrapType
+	end
+</code></pre><ul>
+<li>设置成员检查的方法 <code>MemberWrapped</code> ：</li>
+</ul>
+<pre tabindex=0><code>	local function MemberWrapped(wrapType, typeName, memberName)
+		local wrap = false
+		local depth = 100
+		local result = pcall(function()
+			local tb = getmetatable(wrapType)
+			while tb ~= nil and depth &gt; 0 do
+				local value = rawget(tb, memberName)
+				if value ~= nil then
+					wrap = true
+					break
+				end
+				local tget = rawget(tb, tolua.gettag)
+				if tget ~= nil then
+					value = rawget(tget, memberName)
+					if value ~= nil then
+						wrap = true
+						break
+					end
+				end
+				-- 静态类的 metatable 和 table 相同，不需要嵌套检查
+				local mt = getmetatable(tb)
+				if mt == tb then
+					wrap = false
+					break
+				end
+				tb = mt
+				-- 深度限制，防止嵌套太深或者死循环
+				depth = depth - 1
+			end
+		end)
+		if depth &lt;= 0 then
+			Error(string.format( &quot;检测 C# 类的成员生成 Wrap 超出深度! 类名: %s ，成员名: %s &quot;,tostring(typeName), tostring(memberName)))
+		end
+		if not wrap then
+			Log(string.format( &quot;C# 类的成员没有生成 Wrap ! 类名: %s ，成员名: %s &quot;,tostring(typeName), tostring(memberName)))
+		end
+		return wrap
+	end
+</code></pre><ul>
+<li>此时 <code>WrapHelper</code> 结构如下：</li>
+</ul>
+<pre tabindex=0><code>	table = {
+
+		TypeWrapped = TypeWrapped 方法，用于检查类型是否生成 Wrap
+		MemberWrapped = MemberWrapped 方法，用于检查成员是否生成 Wrap
+	}
+	metatable = WrapHelperMetatable
+</code></pre><h4 id=注册-c-类型和成员检测>注册 C# 类型和成员检测</h4>
+<ul>
+<li>在开发过程中，当需要添加新的 C# 类、方法、属性等时，需要将其注册到检测列表中。每个类型创建一个注册方法，并在初始化完成后调用。以 <code>UnityEngine.UIVertex</code> 为例，其注册方法如下：</li>
+</ul>
+<pre tabindex=0><code>	local function Register_UIVertexWrap()
+		-- 类型全名
+		local typeFullName = &quot;UnityEngine.UIVertex&quot;
+		-- 新添加 Wrap 的成员
+		local memberNames = {}
+		rawset(memberNames, &quot;New&quot;, true)
+		rawset(memberNames, &quot;__tostring&quot;, true)
+		rawset(memberNames, &quot;position&quot;, true)
+		rawset(memberNames, &quot;normal&quot;, true)
+		rawset(memberNames, &quot;tangent&quot;, true)
+		rawset(memberNames, &quot;color&quot;, true)
+		rawset(memberNames, &quot;uv0&quot;, true)
+		rawset(memberNames, &quot;uv1&quot;, true)
+		rawset(memberNames, &quot;uv2&quot;, true)
+		rawset(memberNames, &quot;uv3&quot;, true)
+		rawset(memberNames, &quot;simpleVert&quot;, true)
+		-- 注册类型和对应成员
+		Register(typeFullName, memberNames)
+	end
+</code></pre><ul>
+<li>注册方法 <code>Register</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>	-- 进行 Wrap 检查的次数记录
+	local m_WrapCheck = {}
+	-- C# 需要判断的成员
+	local m_Members = {}
+	-- 调用堆栈信息
+	local m_DebugInfo = {}
+
+	local function Register(typeFullName, memberNames)
+		local typeName = GetTypeName(typeFullName)
+		local isTypeWrapped, wrapType = TypeWrapped(typeFullName)
+		-- 设置类型的注册判断 key
+		if rawget(WrapHelper, typeName .. &quot;Wrap&quot;) then
+			Error(string.format(&quot;重复设置 WrapHelper.%sWrap，请检查！&quot;, tostring(typeName)))
+		end
+		rawset(WrapHelper, typeName .. &quot;Wrap&quot;, isTypeWrapped)
+
+		-- 设置注册的类型的 table
+		if rawget(WrapHelper, typeName) ~= nil then
+			Error(string.format(&quot;重复设置 WrapHelper.%s，请检查！&quot;, tostring(typeName)))
+		end
+		local typeTable = {}
+		rawset(WrapHelper, typeName, typeTable)
+		local typeMetatable = {}
+		setmetatable(typeTable, typeMetatable)
+
+		- 设置注册的类型中的成员
+		for i, memberName in ipairs(memberNames) do
+			if memberName ~= nil then
+				-- 设置 WrapHelper.`类型名`.`成员名`Wrap
+				local isMemberWrapped =  MemberWrapped(wrapType, typeName, memberName)
+				if rawget(typeMetatable, memberName .. &quot;Wrap&quot;) then
+					Error(string.format(&quot;重复设置 WrapHelper.%s.%sWrap ，请检查！&quot; , tostring(typeName), tostring(memberName)))
+				end
+				rawset(typeMetatable, memberName .. &quot;Wrap&quot;, isMemberWrapped)
+
+				-- 设置 WrapHelper.`类型名`.`成员名`
+				if rawget(typeMetatable, memberName) then
+					Error(string.format(&quot;重复设置 WrapHelper.%s.%s ，请检查！&quot; , tostring(typeName), tostring(memberName)))
+				end
+				rawset(typeMetatable, memberName, isMemberWrapped)
+			end
+		end
+
+		-- debug 版本才进行调用环境检测，release 版本只做类型注册检查
+		if IsDebug() then
+			m_Members = memberNames
+			rawset(typeMetatable, &quot;.name&quot;, typeName)
+			rawset(typeMetatable, &quot;__index&quot;, function(tb, key)
+				local mt = getmetatable(tb)
+				local typeName = rawget(mt, &quot;.name&quot;)
+				local value = rawget(mt, key)
+				if value ~= nil then
+					-- 判断成员 key 是否需要进行检查，只有 debug 版本下成员名的 key 值才需要检查
+					if NeedCheck(mt, key) then
+						-- 上次调用的结果是否合法
+						local lastCallLegal = true
+						local wrapCheck = m_WrapCheck[typeName]
+						if wrapCheck == nil then
+							wrapCheck = {}
+							m_WrapCheck[typeName] = wrapCheck
+						end
+						if value == true then
+							local count = wrapCheck[key] or 0
+							-- 已经生成 Wrap 的成员，每次调用 WrapHelper 时调用次数 +1，每次访问实际成员时调用次数 -1
+							count = count + 1
+							if count &gt; 1 then
+								-- 如果调用次数超过 1 ，表示上次调用 WrapHelper 后没有访问实际成员
+								count = 1
+								lastCallLegal = false
+							end
+							wrapCheck[key] = count
+						else
+							-- 没有生成 Wrap 的成员，都不应该实际访问，故不需要设置检查次数，如果有访问则表示 WrapHelper 的调用逻辑错误
+						end
+
+						if not lastCallLegal then
+							local debugInfo = m_DebugInfo[typeName][key]
+							Error(string.format(&quot;调用 WrapHelper.%s.%s 判断的地方没有获取对应对象，请改为使用 WrapHelper.%s.%sWrap 方法判断！\n %s:%s in function '%s'&quot;, typeName, key, typeName, key, tostring(debugInfo.short_src), tostring(debugInfo.currentline), tostring(debugInfo.name)))
+						end
+						-- 设置调用堆栈信息
+						local debugInfo = m_DebugInfo[typeName]
+						if debugInfo == nil then
+							debugInfo = {}
+							m_DebugInfo[typeName] = debugInfo
+						end
+						debugInfo[key] = debug.getinfo(2, &quot;nSl&quot;)
+					end
+					return value
+				else
+					Error(string.format(&quot;判断 C# 是否生成 Wrap 的方法 WrapHelper.%s.%s 未在 WrapHelper.Init 中初始化，请检查！&quot; , tostring(typeName), tostring(key)))
+					return nil
+				end
+			end)
+
+			-- 修改 C# 类型生成 Wrap 后的 __index 和 __newindex
+			WrapIndexAndNewIndex(wrapType, typeName, typeMetatable)
+			-- 修改 C# 类型生成 Wrap 后的方法
+			WrapFunction(wrapType, typeName)
+		else
+			-- 发布版本仅检查是否有进行初始化，以及返回 Wrap 结果，防止 WrapHelper 的调用错误
+			rawset(typeMetatable, &quot;__index&quot;, function(tb, key)
+				local mt = getmetatable(tb)
+				local value = rawget(mt, key)
+				if value ~= nil then
+					return value
+				else
+					Error(string.format(&quot;判断 C# 是否生成 Wrap 的方法 WrapHelper.%s.%s 未在 WrapHelper.Init 中初始化，请检查！&quot; , tostring(typeName), tostring(key)))
+					return nil
+				end
+			end)
+		end
+
+	end
+
+	-- 获取类名的简写
+	local function GetTypeName(typeFullName)
+		local typeName = nil
+		for name in string.gmatch(typeFullName, &quot;[^%.]+&quot;) do 
+			typeName = name
+		end
+		return typeName
+	end
+</code></pre><ul>
+<li>其中，<code>NeedCheck</code> 方法，用于判断当前成员是否需要进行检查，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>	local function NeedCheck(typeMetatable, key)
+		if IsDebug() then
+			-- key 值没有设置过则不需要检查
+			if rawget(typeMetatable, key) == nil then
+				return false
+			end
+			local typeName = rawget(typeMetatable, &quot;.name&quot;)
+			local result = m_Members[typeName][key]
+			-- key 值如果不为成员名则不需要检查
+			if result == nil then
+				return false
+			end
+			return true
+		else
+			return false
+		end
+	end
+</code></pre><ul>
+<li><code>WrapIndexAndNewIndex</code> 方法，用于设置成员实际调用时的检查，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>local function WrapIndexAndNewIndex(wrapType, typeName, typeMetatable)
+    if IsDebug() then
+        if wrapType == nil then
+            return
+        end
+        local mt = getmetatable(wrapType)
+        local __index = mt.__index
+        rawset(mt, &quot;__index&quot;, function(tb, key)
+            -- 判断当前 key 值是否需要进行调用环境检测
+            local needCheck = NeedCheck(typeMetatable, key)
+            if needCheck then
+				-- 如果需要检查，则进行一次合法性检查
+                IsLegalCall(typeName, key)
+            end
+            local result = {__index(tb, key)}
+            if needCheck then
+                -- tolua 的方法调用一次后，__index 会将方法设置到 table 上，下次调用不再访问 __index
+                if type(tb) == &quot;table&quot; then
+                    local func = rawget(tb, key)
+                    if func ~= nil then
+                        if type(func) == &quot;function&quot; then
+                            local newFunc = function(...)
+                                IsLegalCall(typeName, key)
+                                return func(...)
+                            end
+                            rawset(tb, key, newFunc)
+                        else
+                            Log(string.format(&quot;C# 生成 Wrap 到 table 中的 key 不为方法：类名: %s ，成员名：%s ，类型： %s&quot;, tostring(typeName), tostring(key), type(value)))
+                        end
+                    end
+                end
+            end
+            return unpack(result)
+        end)
+        local __newindex = mt.__newindex
+        rawset(mt, &quot;__newindex&quot;, function(tb, key, value)
+            -- 判断当前 key 值是否需要进行调用环境检测
+            local needCheck = NeedCheck(typeMetatable, key)
+            if needCheck then
+                IsLegalCall(typeName, key)
+            end
+            __newindex(tb, key, value)
+        end)
+    end
+end
+</code></pre><ul>
+<li>合法性检查方法 <code>IsLegalCall</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>	local function IsLegalCall(typeName, memberName)
+		if IsDebug() then
+			local wrapCheck = m_WrapCheck[typeName]
+			if wrapCheck ~= nil then
+				local count = wrapCheck[memberName]
+				if count and count &gt; 0 then
+					wrapCheck[memberName] = count - 1
+					return true
+				end
+			end
+			Error(string.format(&quot;调用新增的 C# 方法或变量未使用 if WrapHelper.%s.%s then 做版本容错判断，请修改！\n%s&quot;, tostring(typeName), tostring(memberName), debug.traceback()))
+			return false
+		else
+			return true
+		end
+	end
+</code></pre><ul>
+<li>debug 版本中，每一次调用 C# 的成员，都需要在调用前通过 WrapHelper 做一次检查，才能保证调用是合法的。如果调用的成员在后续会多次使用，则进行一次判断后，需要在实际调用成员时将结果缓存起来，后续则不再重新调用成员。</li>
+<li>然而，由于静态类的成员直接存储在 table 中，且 metatable 为 table 本身，所以调用方法时不会触发 __index ，故还需要使用 <code>WrapFunction</code> 方法，对静态类的方法进行特殊处理，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>local function WrapFunction(wrapType, typeName)
+    if IsDebug() then
+        if wrapType == nil then
+            return
+        end
+        if type(wrapType) == &quot;table&quot; then
+            local tb = wrapType
+            for key, value in pairs(wrapType) do
+                if type(value) == &quot;function&quot; then
+                    local func = value
+                    local newFunc = function(...)
+                        IsLegalCall(typeName, key)
+                        return func(...)
+                    end
+                    rawset(tb, key, newFunc)
+                end
+            end
+        end
+    end
+end
+</code></pre><ul>
+<li>静态类的属性则和常规类属性调用流程一样，不需要做特殊处理。</li>
+<li>注册完成后，<code>WrapHelper</code> 的结构如下：</li>
+</ul>
+<pre tabindex=0><code>	table = {
+		
+		m_WrapCheck = 进行 Wrap 检查的次数记录表
+		m_Members = C# 需要判断的成员表
+		m_DebugInfo = 调用堆栈信息记录表
+
+		TypeWrapped = 用于检查类型是否生成 Wrap 的方法
+		MemberWrapped = 用于检查成员是否生成 Wrap 的方法
+		Register = 注册 C# 类的具体实现方法
+		GetTypeName = 获取类名简写的方法
+		NeedCheck = 判断当前成员是否需要进行检查的方法
+		IsLegalCall = 用于检查调用是否合法的方法
+		WrapIndexAndNewIndex = 设置成员实际调用时的检查方法
+		WrapFunction = 设置静态类方法的检查方法
+		IsDebug = 判断是否为 debug 版本的方法，根据项目需求自定义		
+
+		Register_XXXWrap = 自定义的 C# 的 xxx 类的注册方法
+		...
+	}
+	metatable = WrapHelperMetatable
+</code></pre><h4 id=设置检查方法调用>设置检查方法调用</h4>
+<ul>
+<li>调用注册过的 C# 方法如下：</li>
+</ul>
+<pre tabindex=0><code>	if WrapHelper.类名.方法名/属性名/变量名 then
+		类名.方法名(...)
+		local value = 类名.属性名
+	end
+</code></pre><ul>
+<li>以 <code>UnityEngine.UIVertex</code> 为例，调用其 <code>position</code> 属性的方法如下：</li>
+</ul>
+<pre tabindex=0><code>	if WrapHelper.UnityEngine.UIVertex.position then
+		local pos = obj.position
+	end
+
+</code></pre><ul>
+<li>如果仅需要判断是否有注册，而不需要进行实际调用，则：</li>
+</ul>
+<pre tabindex=0><code>	if WrapHelper.类名.方法名/属性名/变量名 + Wrap then
+		-- 执行其他逻辑
+	end
+</code></pre><ul>
+<li>如：</li>
+</ul>
+<pre tabindex=0><code>	if WrapHelper.UnityEngine.UIVertex.positionWrap then
+		print(&quot;UnityEngine.UIVertex.position 已生成 Wrap&quot;)
+	end
+</code></pre><h3 id=生成工具>生成工具</h3>
 <ul>
 <li>（待补充）</li>
 </ul>
