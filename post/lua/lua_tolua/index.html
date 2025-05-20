@@ -1932,12 +1932,15 @@ end
             local tb = wrapType
             for key, value in pairs(wrapType) do
                 if type(value) == &quot;function&quot; then
-                    local func = value
-                    local newFunc = function(...)
-                        IsLegalCall(typeName, key)
-                        return func(...)
-                    end
-                    rawset(tb, key, newFunc)
+					local needCheck = NeedCheck(typeMetatable, key)
+            		if needCheck then
+						local func = value
+						local newFunc = function(...)
+							IsLegalCall(typeName, key)
+							return func(...)
+						end
+						rawset(tb, key, newFunc)
+					end
                 end
             end
         end
