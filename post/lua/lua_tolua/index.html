@@ -1923,7 +1923,7 @@ end
 <li>debug 版本中，每一次调用 C# 的成员，都需要在调用前通过 WrapHelper 做一次检查，才能保证调用是合法的。如果调用的成员在后续会多次使用，则进行一次判断后，需要在实际调用成员时将结果缓存起来，后续则不再重新调用成员。</li>
 <li>然而，由于静态类的成员直接存储在 table 中，且 metatable 为 table 本身，所以调用方法时不会触发 __index ，故还需要使用 <code>WrapFunction</code> 方法，对静态类的方法进行特殊处理，其实现如下：</li>
 </ul>
-<pre tabindex=0><code>local function WrapFunction(wrapType, typeName)
+<pre tabindex=0><code>local function WrapFunction(wrapType, typeName, typeMetatable)
     if IsDebug() then
         if wrapType == nil then
             return
