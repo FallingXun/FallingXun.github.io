@@ -1999,6 +1999,16 @@ end
 <pre tabindex=0><code>	if WrapHelper.UnityEngine.UIVertex.positionWrap then
 		print(&quot;UnityEngine.UIVertex.position 已生成 Wrap&quot;)
 	end
+</code></pre><h4 id=list-和-dictionary>List 和 Dictionary</h4>
+<ul>
+<li>由于 <code>System.Collections.Generic.List&lt;T></code> 和 <code>System_Collections_Generic_Dictionary&lt;T1, T2></code> 的实例类型在没有 Wrap 时候，会通过 <code>GetMissMetaReference</code> 方法返回泛型类型，即实际访问时，调用的是 <code>System_Collections_Generic_ListWrap</code> 和 <code>System_Collections_Generic_DictionaryWrap</code> 中的方法和属性。因此，对其实例类型注册成员检测时，仅需要注册实例创建方法 <code>New</code> 即可，如：</li>
+</ul>
+<pre tabindex=0><code>	local function Register_Dictionary_int_intWrap()
+		local typeFullName = &quot;System.Collections.Generic.Dictionary_int_int&quot;
+		local memberNames = {}
+		rawset(memberNames, &quot;New&quot;, true)
+		Register(typeFullName, memberNames)
+	end
 </code></pre><h3 id=生成工具>生成工具</h3>
 <ul>
 <li>（待补充）</li>
