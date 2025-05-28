@@ -1692,18 +1692,19 @@ public class TestInject : MonoBehaviour
 		-- 类型全名
 		local typeFullName = &quot;UnityEngine.UIVertex&quot;
 		-- 新添加 Wrap 的成员
-		local memberNames = {}
-		rawset(memberNames, &quot;New&quot;, true)
-		rawset(memberNames, &quot;__tostring&quot;, true)
-		rawset(memberNames, &quot;position&quot;, true)
-		rawset(memberNames, &quot;normal&quot;, true)
-		rawset(memberNames, &quot;tangent&quot;, true)
-		rawset(memberNames, &quot;color&quot;, true)
-		rawset(memberNames, &quot;uv0&quot;, true)
-		rawset(memberNames, &quot;uv1&quot;, true)
-		rawset(memberNames, &quot;uv2&quot;, true)
-		rawset(memberNames, &quot;uv3&quot;, true)
-		rawset(memberNames, &quot;simpleVert&quot;, true)
+		local memberNames = {
+			New = true,
+			__tostring = true,
+			position = true,
+			normal = true,
+			tangent = true,
+			color = true,
+			uv0 = true,
+			uv1 = true,
+			uv2 = true,
+			uv3 = true,
+			simpleVert = true,
+		}
 		-- 注册类型和对应成员
 		Register(typeFullName, memberNames)
 	end
@@ -1853,51 +1854,75 @@ public class TestInject : MonoBehaviour
 		end
 	end
 </code></pre><ul>
-<li><code>WrapIndexAndNewIndex</code> 方法，用于设置成员实际调用时的检查，其实现如下：</li>
+<li><code>WrapMember</code> 方法，用于设置成员实际调用时的检查，其实现如下：</li>
 </ul>
-<pre tabindex=0><code>local function WrapIndexAndNewIndex(wrapType, typeName, typeMetatable)
+<pre tabindex=0><code>local function WrapMember(wrapType, typeName, memberName, typeMetatable)
     if IsDebug() then
         if wrapType == nil then
             return
         end
         local mt = getmetatable(wrapType)
-        local __index = mt.__index
-        rawset(mt, &quot;__index&quot;, function(tb, key)
-            -- 判断当前 key 值是否需要进行调用环境检测
-            local needCheck = NeedCheck(typeMetatable, key)
-            if needCheck then
-				-- 如果需要检查，则进行一次合法性检查
-                IsLegalCall(typeName, key)
-            end
-            local result = {__index(tb, key)}
-            if needCheck then
-                -- tolua 的方法调用一次后，__index 会将方法设置到 table 上，下次调用不再访问 __index
-                if type(tb) == &quot;table&quot; then
-                    local func = rawget(tb, key)
-                    if func ~= nil then
-                        if type(func) == &quot;function&quot; then
-                            local newFunc = function(...)
-                                IsLegalCall(typeName, key)
-                                return func(...)
-                            end
-                            rawset(tb, key, newFunc)
-                        else
-                            Log(string.format(&quot;C# 生成 Wrap 到 table 中的 key 不为方法：类名: %s ，成员名：%s ，类型： %s&quot;, tostring(typeName), tostring(key), type(value)))
-                        end
+        local value = rawget(mt, memberName)
+        if value ~= nil then
+			-- 当前成员为方法，对方法进行包装
+            if type(value) == &quot;function&quot; then
+                local func = value
+                local newFunc = function(...)
+                    local needCheck = NeedCheck(typeMetatable, memberName)
+                    if needCheck then
+                        IsLegalCall(typeName, memberName)
                     end
+                    return func(...)
+                end
+                rawset(mt, memberName, newFunc)
+            else
+				-- 当前成员不为方法，通常为常量对象，需要先移除对象的 key 值，改为和属性一样的调用方式，才能使用方法包装
+                rawset(mt, memberName, nil)
+                local tget = rawget(mt, tolua.gettag)
+                if(tget == nil) then
+                    tget = {}
+                    rawset(mt, tolua.gettag, tget)
+                end
+                local get = function(...)
+                    local needCheck = NeedCheck(typeMetatable, memberName)
+                    if needCheck then
+                        IsLegalCall(typeName, memberName)
+                    end
+                    return value
+                end
+                rawset(tget, memberName, get)
+            end
+        else
+			-- 当前成员不为方法或常量，检查是否为属性或字段，再进行包装
+            local tget = rawget(mt, tolua.gettag)
+            if tget ~= nil then
+                local get = rawget(tget, memberName)
+                if get ~= nil then
+                    local newGet = function(...)
+                        local needCheck = NeedCheck(typeMetatable, memberName)
+                        if needCheck then
+                            IsLegalCall(typeName, memberName)
+                        end
+                        return get(...)
+                    end
+                    rawset(tget, memberName, newGet)
                 end
             end
-            return unpack(result)
-        end)
-        local __newindex = mt.__newindex
-        rawset(mt, &quot;__newindex&quot;, function(tb, key, value)
-            -- 判断当前 key 值是否需要进行调用环境检测
-            local needCheck = NeedCheck(typeMetatable, key)
-            if needCheck then
-                IsLegalCall(typeName, key)
+            local tset = rawget(mt, tolua.settag)
+            if tset ~= nil then
+                local set = rawget(tset, memberName)
+                if set ~= nil then
+                    local newSet = function(...)
+                        local needCheck = NeedCheck(typeMetatable, memberName)
+                        if needCheck then
+                            IsLegalCall(typeName, memberName)
+                        end
+                        set(...)
+                    end
+                    rawset(tset, memberName, newSet)
+                end
             end
-            __newindex(tb, key, value)
-        end)
+        end
     end
 end
 </code></pre><ul>
@@ -1921,33 +1946,6 @@ end
 	end
 </code></pre><ul>
 <li>debug 版本中，每一次调用 C# 的成员，都需要在调用前通过 WrapHelper 做一次检查，才能保证调用是合法的。如果调用的成员在后续会多次使用，则进行一次判断后，需要在实际调用成员时将结果缓存起来，后续则不再重新调用成员。</li>
-<li>然而，由于静态类的成员直接存储在 table 中，且 metatable 为 table 本身，所以调用方法时不会触发 __index ，故还需要使用 <code>WrapFunction</code> 方法，对静态类的方法进行特殊处理，其实现如下：</li>
-</ul>
-<pre tabindex=0><code>local function WrapFunction(wrapType, typeName, typeMetatable)
-    if IsDebug() then
-        if wrapType == nil then
-            return
-        end
-        if type(wrapType) == &quot;table&quot; then
-            local tb = wrapType
-            for key, value in pairs(wrapType) do
-                if type(value) == &quot;function&quot; then
-					local needCheck = NeedCheck(typeMetatable, key)
-            		if needCheck then
-						local func = value
-						local newFunc = function(...)
-							IsLegalCall(typeName, key)
-							return func(...)
-						end
-						rawset(tb, key, newFunc)
-					end
-                end
-            end
-        end
-    end
-end
-</code></pre><ul>
-<li>静态类的属性则和常规类属性调用流程一样，不需要做特殊处理。</li>
 <li>注册完成后，<code>WrapHelper</code> 的结构如下：</li>
 </ul>
 <pre tabindex=0><code>	table = {
@@ -1962,8 +1960,7 @@ end
 		GetTypeName = 获取类名简写的方法
 		NeedCheck = 判断当前成员是否需要进行检查的方法
 		IsLegalCall = 用于检查调用是否合法的方法
-		WrapIndexAndNewIndex = 设置成员实际调用时的检查方法
-		WrapFunction = 设置静态类方法的检查方法
+		WrapMember = 设置成员实际调用时的检查方法
 		IsDebug = 判断是否为 debug 版本的方法，根据项目需求自定义		
 		Log = 输出提示信息方法，根据项目需求自定义	
 		Error = 输出错误信息方法，根据项目需求自定义	
@@ -2005,8 +2002,9 @@ end
 </ul>
 <pre tabindex=0><code>	local function Register_Dictionary_int_intWrap()
 		local typeFullName = &quot;System.Collections.Generic.Dictionary_int_int&quot;
-		local memberNames = {}
-		rawset(memberNames, &quot;New&quot;, true)
+		local memberNames = {
+			New = true,
+		}
 		Register(typeFullName, memberNames)
 	end
 </code></pre><h3 id=生成工具>生成工具</h3>
