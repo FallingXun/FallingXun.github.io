@@ -1,0 +1,561 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="算法篇 — NavMesh 导航">
+<meta property="og:title" content="算法篇 — NavMesh 导航">
+<meta property="twitter:title" content="算法篇 — NavMesh 导航">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>算法篇 — NavMesh 导航-</title>
+<link rel=canonical href=/post/algorithm/algorithm_navmeshnavigation/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+<li>
+<a href=/categories/googleplay%E7%B3%BB%E5%88%97>googleplay系列</a>
+</li>
+<li>
+<a href=/categories/lua%E7%B3%BB%E5%88%97>lua系列</a>
+</li>
+<li>
+<a href=/categories/tmp%E7%B3%BB%E5%88%97>tmp系列</a>
+</li>
+<li>
+<a href=/categories/unity%E7%B3%BB%E5%88%97>unity系列</a>
+</li>
+<li>
+<a href=/categories/%E5%9B%BE%E5%BD%A2%E5%AD%A6%E7%B3%BB%E5%88%97>图形学系列</a>
+</li>
+<li>
+<a href=/categories/%E6%B8%B2%E6%9F%93%E7%B3%BB%E5%88%97>渲染系列</a>
+</li>
+<li>
+<a href=/categories/%E7%AE%97%E6%B3%95%E7%B3%BB%E5%88%97>算法系列</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/algorithm title=Algorithm>
+Algorithm
+</a>
+</div>
+<h1>算法篇 — NavMesh 导航</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Monday, June 9, 2025
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>Navmesh 寻路是游戏开发中常用的寻路算法，本文将基于 Recast Navigation 源码进行分析。</p>
+<h3 id=简介>简介</h3>
+<ul>
+<li>以格子为基础的 A* 算法是游戏中最常用的寻路算法，随着游戏的发展，地图也在不断变化。随着地图的增大，A* 算法的开放列表也跟着增大，导致寻路效率已经达不到要求，因此出现了 JPS 算法进行改进。</li>
+<li>相比传统网格地图寻路，导航网格（NavMesh）节点数量大幅减少，搜索空间缩小，能更快找到路径，在大规模复杂场景中优势明显，因此得到了广泛应用。</li>
+<li><a href=https://github.com/recastnavigation/recastnavigation>Recast Navigation</a>源码中，NavMesh 导航主要由两部分组成：
+<ul>
+<li>Recast ：生成导航网格。</li>
+<li>Detour ：寻路。</li>
+</ul>
+</li>
+</ul>
+<h3 id=寻路>寻路</h3>
+<ul>
+<li>地图生成导航网格后，地图就拆分成众多形状各异的多边形，此时寻路的主要步骤为：
+<ul>
+<li>找到出发点和目标点所在的多边形。</li>
+<li>找到一条最短的多边形路径。</li>
+<li>从多边形路径中得到一条最短的路径。</li>
+</ul>
+</li>
+</ul>
+<h4 id=查询点所在多边形>查询点所在多边形</h4>
+<ul>
+<li>查询点所在多边形，主要通过 <code>dtNavMeshQuery*</code> 对象的 <code>findNearestPoly</code> 方法实现，其代码如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+
+...
+
+dtStatus dtNavMeshQuery::findNearestPoly(const float* center, const float* halfExtents,
+										 const dtQueryFilter* filter,
+										 dtPolyRef* nearestRef, float* nearestPt) const
+{
+	return findNearestPoly(center, halfExtents, filter, nearestRef, nearestPt, NULL);
+}
+
+dtStatus dtNavMeshQuery::findNearestPoly(const float* center, const float* halfExtents,
+										 const dtQueryFilter* filter,
+										 dtPolyRef* nearestRef, float* nearestPt, bool* isOverPoly) const
+{
+	dtAssert(m_nav);
+
+	if (!nearestRef)
+		return DT_FAILURE | DT_INVALID_PARAM;
+
+	// queryPolygons below will check rest of params
+	
+	dtFindNearestPolyQuery query(this, center);
+
+	dtStatus status = queryPolygons(center, halfExtents, filter, &amp;query);
+	if (dtStatusFailed(status))
+		return status;
+
+	*nearestRef = query.nearestRef();
+	// Only override nearestPt if we actually found a poly so the nearest point
+	// is valid.
+	if (nearestPt &amp;&amp; *nearestRef)
+	{
+		dtVcopy(nearestPt, query.nearestPoint());
+		if (isOverPoly)
+			*isOverPoly = query.isOverPoly();
+	}
+	
+	return DT_SUCCESS;
+}
+
+...
+</code></pre><ul>
+<li>创建一个 <code>dtFindNearestPolyQuery</code> 的查询对象 <code>query</code> ，通过点的位置 <code>center</code> 和半径尺寸 <code>halfExtents</code> ，调用 <code>queryPolygons</code> 方法查询最近的多边形，找到了就将结果设置到 <code>nearestRef</code> 和 <code>nearestPt</code>。<code>queryPolygons</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+
+...
+
+dtStatus dtNavMeshQuery::queryPolygons(const float* center, const float* halfExtents,
+									   const dtQueryFilter* filter, dtPolyQuery* query) const
+{
+	dtAssert(m_nav);
+
+	if (!center || !dtVisfinite(center) ||
+		!halfExtents || !dtVisfinite(halfExtents) ||
+		!filter || !query)
+	{
+		return DT_FAILURE | DT_INVALID_PARAM;
+	}
+
+	float bmin[3], bmax[3];
+	dtVsub(bmin, center, halfExtents);
+	dtVadd(bmax, center, halfExtents);
+	
+	// Find tiles the query touches.
+	int minx, miny, maxx, maxy;
+	m_nav-&gt;calcTileLoc(bmin, &amp;minx, &amp;miny);
+	m_nav-&gt;calcTileLoc(bmax, &amp;maxx, &amp;maxy);
+
+	static const int MAX_NEIS = 32;
+	const dtMeshTile* neis[MAX_NEIS];
+	
+	for (int y = miny; y &lt;= maxy; ++y)
+	{
+		for (int x = minx; x &lt;= maxx; ++x)
+		{
+			const int nneis = m_nav-&gt;getTilesAt(x,y,neis,MAX_NEIS);
+			for (int j = 0; j &lt; nneis; ++j)
+			{
+				queryPolygonsInTile(neis[j], bmin, bmax, filter, query);
+			}
+		}
+	}
+	
+	return DT_SUCCESS;
+}
+
+...
+</code></pre><ul>
+<li>查询的过程主要有以下步骤：
+<ul>
+<li>通过查询点 <code>center</code> 和半径尺寸 <code>halfExtents</code> 的加减计算，得到要查询的范围大小。</li>
+<li>通过 <code>calTileLoc</code> 方法，将范围的 <code>x</code> 和 <code>z</code> 坐标转化为整数类型的瓦片坐标。</li>
+<li>遍历所有瓦片坐标，通过 <code>getTilesAt</code> 方法找到每一个坐标对应的所有瓦片对象。</li>
+<li>对每一个瓦片对象，调用 <code>queryPolygonsInTile</code> 方法查找最近的多边形。</li>
+</ul>
+</li>
+<li><code>getTilesAt</code> 的方法如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+
+...
+
+inline int  computeTileHash(int x, int y, const int mask)
+{
+	const unsigned int h1 = 0x8da6b343; // Large multiplicative constants;
+	const unsigned int h2 = 0xd8163841; // here arbitrarily chosen primes
+	unsigned int n = h1 * x + h2 * y;
+	return (int)(n &amp; mask);
+}
+
+...
+
+int dtNavMesh::getTilesAt(const int x, const int y, dtMeshTile const** tiles, const int maxTiles) const
+{
+	int n = 0;
+	
+	// Find tile based on hash.
+	int h = computeTileHash(x,y,m_tileLutMask);
+	dtMeshTile* tile = m_posLookup[h];
+	while (tile)
+	{
+		if (tile-&gt;header &amp;&amp;
+			tile-&gt;header-&gt;x == x &amp;&amp;
+			tile-&gt;header-&gt;y == y)
+		{
+			if (n &lt; maxTiles)
+				tiles[n++] = tile;
+		}
+		tile = tile-&gt;next;
+	}
+	
+	return n;
+}
+
+...
+</code></pre><ul>
+<li>通过 <code>computeTileHash</code> 方法计算哈希值，再通过 <code>m_posLookup</code> 数组找到对应的瓦片对象。如果坐标相同，则加入到瓦片对象数组中。其中 <code>h1</code> 和 <code>h2</code> 为两个任意选择的大素数，为了得到一个均匀分布的哈希值。</li>
+<li><code>queryPolygonsInTile</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+
+...
+
+void dtNavMeshQuery::queryPolygonsInTile(const dtMeshTile* tile, const float* qmin, const float* qmax,
+										 const dtQueryFilter* filter, dtPolyQuery* query) const
+{
+	dtAssert(m_nav);
+	static const int batchSize = 32;
+	dtPolyRef polyRefs[batchSize];
+	dtPoly* polys[batchSize];
+	int n = 0;
+
+	if (tile-&gt;bvTree)
+	{
+		const dtBVNode* node = &amp;tile-&gt;bvTree[0];
+		const dtBVNode* end = &amp;tile-&gt;bvTree[tile-&gt;header-&gt;bvNodeCount];
+		const float* tbmin = tile-&gt;header-&gt;bmin;
+		const float* tbmax = tile-&gt;header-&gt;bmax;
+		const float qfac = tile-&gt;header-&gt;bvQuantFactor;
+
+		// Calculate quantized box
+		unsigned short bmin[3], bmax[3];
+		// dtClamp query box to world box.
+		float minx = dtClamp(qmin[0], tbmin[0], tbmax[0]) - tbmin[0];
+		float miny = dtClamp(qmin[1], tbmin[1], tbmax[1]) - tbmin[1];
+		float minz = dtClamp(qmin[2], tbmin[2], tbmax[2]) - tbmin[2];
+		float maxx = dtClamp(qmax[0], tbmin[0], tbmax[0]) - tbmin[0];
+		float maxy = dtClamp(qmax[1], tbmin[1], tbmax[1]) - tbmin[1];
+		float maxz = dtClamp(qmax[2], tbmin[2], tbmax[2]) - tbmin[2];
+		// Quantize
+		bmin[0] = (unsigned short)(qfac * minx) &amp; 0xfffe;
+		bmin[1] = (unsigned short)(qfac * miny) &amp; 0xfffe;
+		bmin[2] = (unsigned short)(qfac * minz) &amp; 0xfffe;
+		bmax[0] = (unsigned short)(qfac * maxx + 1) | 1;
+		bmax[1] = (unsigned short)(qfac * maxy + 1) | 1;
+		bmax[2] = (unsigned short)(qfac * maxz + 1) | 1;
+
+		// Traverse tree
+		const dtPolyRef base = m_nav-&gt;getPolyRefBase(tile);
+		while (node &lt; end)
+		{
+			const bool overlap = dtOverlapQuantBounds(bmin, bmax, node-&gt;bmin, node-&gt;bmax);
+			const bool isLeafNode = node-&gt;i &gt;= 0;
+
+			if (isLeafNode &amp;&amp; overlap)
+			{
+				dtPolyRef ref = base | (dtPolyRef)node-&gt;i;
+				if (filter-&gt;passFilter(ref, tile, &amp;tile-&gt;polys[node-&gt;i]))
+				{
+					polyRefs[n] = ref;
+					polys[n] = &amp;tile-&gt;polys[node-&gt;i];
+
+					if (n == batchSize - 1)
+					{
+						query-&gt;process(tile, polys, polyRefs, batchSize);
+						n = 0;
+					}
+					else
+					{
+						n++;
+					}
+				}
+			}
+
+			if (overlap || isLeafNode)
+				node++;
+			else
+			{
+				const int escapeIndex = -node-&gt;i;
+				node += escapeIndex;
+			}
+		}
+	}
+	else
+	{
+		float bmin[3], bmax[3];
+		const dtPolyRef base = m_nav-&gt;getPolyRefBase(tile);
+		for (int i = 0; i &lt; tile-&gt;header-&gt;polyCount; ++i)
+		{
+			dtPoly* p = &amp;tile-&gt;polys[i];
+			// Do not return off-mesh connection polygons.
+			if (p-&gt;getType() == DT_POLYTYPE_OFFMESH_CONNECTION)
+				continue;
+			// Must pass filter
+			const dtPolyRef ref = base | (dtPolyRef)i;
+			if (!filter-&gt;passFilter(ref, tile, p))
+				continue;
+			// Calc polygon bounds.
+			const float* v = &amp;tile-&gt;verts[p-&gt;verts[0]*3];
+			dtVcopy(bmin, v);
+			dtVcopy(bmax, v);
+			for (int j = 1; j &lt; p-&gt;vertCount; ++j)
+			{
+				v = &amp;tile-&gt;verts[p-&gt;verts[j]*3];
+				dtVmin(bmin, v);
+				dtVmax(bmax, v);
+			}
+			if (dtOverlapBounds(qmin, qmax, bmin, bmax))
+			{
+				polyRefs[n] = ref;
+				polys[n] = p;
+
+				if (n == batchSize - 1)
+				{
+					query-&gt;process(tile, polys, polyRefs, batchSize);
+					n = 0;
+				}
+				else
+				{
+					n++;
+				}
+			}
+		}
+	}
+
+	// Process the last polygons that didn't make a full batch.
+	if (n &gt; 0)
+		query-&gt;process(tile, polys, polyRefs, n);
+}
+
+...
+</code></pre><ul>
+<li><code>queryPolygonsInTile</code> 的主要步骤为：</li>
+<li>对瓦片中的每个多边形，计算其包围盒，判断是否与查询的区域相交。
+<ul>
+<li>如果瓦片采用了 BVH 结构管理，则仅需要查找和查询区域相交的子树。</li>
+</ul>
+</li>
+<li>对于相交的多边形，如果通过了过滤器，则加入到 <code>polyRefs</code> 和 <code>polys</code> 中。</li>
+<li>当累计多边形数量达到 <code>batchSize</code> 时，调用 <code>query->process</code> 方法进行批处理。</li>
+<li><code>query->process</code> 方法的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+
+...
+
+class dtFindNearestPolyQuery : public dtPolyQuery
+{
+    ...
+
+    void process(const dtMeshTile* tile, dtPoly** polys, dtPolyRef* refs, int count)
+	{
+		dtIgnoreUnused(polys);
+
+		for (int i = 0; i &lt; count; ++i)
+		{
+			dtPolyRef ref = refs[i];
+			float closestPtPoly[3];
+			float diff[3];
+			bool posOverPoly = false;
+			float d;
+			m_query-&gt;closestPointOnPoly(ref, m_center, closestPtPoly, &amp;posOverPoly);
+
+			// If a point is directly over a polygon and closer than
+			// climb height, favor that instead of straight line nearest point.
+			dtVsub(diff, m_center, closestPtPoly);
+			if (posOverPoly)
+			{
+				d = dtAbs(diff[1]) - tile-&gt;header-&gt;walkableClimb;
+				d = d &gt; 0 ? d*d : 0;			
+			}
+			else
+			{
+				d = dtVlenSqr(diff);
+			}
+			
+			if (d &lt; m_nearestDistanceSqr)
+			{
+				dtVcopy(m_nearestPoint, closestPtPoly);
+
+				m_nearestDistanceSqr = d;
+				m_nearestRef = ref;
+				m_overPoly = posOverPoly;
+			}
+		}
+	}
+};
+
+...
+</code></pre><ul>
+<li><code>process</code> 的主要步骤为：
+<ul>
+<li>通过 <code>closestPointOnPoly</code> 方法计算每一个多边形上和查询点距离最近的点 <code>closestPtPoly</code>，且检查查询点是否在多边形的 <code>xz</code> 投影平面上。</li>
+<li>计算最近点到查询点的向量差。</li>
+<li>如果查询点在多边形的 <code>xz</code> 投影平面上，则查询点和最近点的距离 <code>d</code> 计算方式为：
+<ul>
+<li>如果向量差的垂直距离 <code>y</code> 不大于瓦片的可行走高度 <code>walkableClimb</code>，则查询点和最近点的距离 <code>d</code> 为 0 。</li>
+<li>如果向量差的垂直距离 <code>y</code> 大于瓦片的可行走高度 <code>walkableClimb</code>，则查询点和最近点的距离 <code>d</code> 为超过部分的平方。</li>
+</ul>
+</li>
+<li>如果查询点不在多边形的 <code>xz</code> 投影平面上，则查询点和最近点的距离为向量差的长度平方。</li>
+<li>如果距离 <code>d</code> 比当前最近距离 <code>m_nearestDistanceSqr</code> 小，则更新最近距离和最近多边形。</li>
+</ul>
+</li>
+<li><code>closestPointOnPoly</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+
+...
+
+void dtNavMesh::closestPointOnPoly(dtPolyRef ref, const float* pos, float* closest, bool* posOverPoly) const
+{
+	const dtMeshTile* tile = 0;
+	const dtPoly* poly = 0;
+	getTileAndPolyByRefUnsafe(ref, &amp;tile, &amp;poly);
+
+	dtVcopy(closest, pos);
+	if (getPolyHeight(tile, poly, pos, &amp;closest[1]))
+	{
+		if (posOverPoly)
+			*posOverPoly = true;
+		return;
+	}
+
+	if (posOverPoly)
+		*posOverPoly = false;
+
+	// Off-mesh connections don't have detail polygons.
+	if (poly-&gt;getType() == DT_POLYTYPE_OFFMESH_CONNECTION)
+	{
+		const float* v0 = &amp;tile-&gt;verts[poly-&gt;verts[0]*3];
+		const float* v1 = &amp;tile-&gt;verts[poly-&gt;verts[1]*3];
+		float t;
+		dtDistancePtSegSqr2D(pos, v0, v1, t);
+		dtVlerp(closest, v0, v1, t);
+		return;
+	}
+
+	// Outside poly that is not an offmesh connection.
+	closestPointOnDetailEdges&lt;true&gt;(tile, poly, pos, closest);
+}
+
+...
+</code></pre><h4 id=寻找最短多边形路径>寻找最短多边形路径</h4>
+<h4 id=寻找最短路径>寻找最短路径</h4>
+<h3 id=参考>参考</h3>
+<ul>
+<li><a href=https://github.com/recastnavigation/recastnavigation>Github - Recast Navigation</a></li>
+<li></li>
+</ul>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/algorithm/algorithm_scalarquantization/ data-toggle=tooltip data-placement=top title="算法篇 — Scalar Quantization">&larr;
+Previous Post</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2025
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>
