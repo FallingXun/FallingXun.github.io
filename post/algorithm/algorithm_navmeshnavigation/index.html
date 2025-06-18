@@ -124,6 +124,7 @@ post-container">
 </li>
 </ul>
 <h4 id=查询点所在多边形>查询点所在多边形</h4>
+<h5 id=dtnavmeshqueryfindnearestpoly>dtNavMeshQuery::findNearestPoly</h5>
 <ul>
 <li>查询点所在多边形，主要通过 <code>dtNavMeshQuery*</code> 对象的 <code>findNearestPoly</code> 方法实现，其代码如下：</li>
 </ul>
@@ -170,7 +171,11 @@ dtStatus dtNavMeshQuery::findNearestPoly(const float* center, const float* halfE
 
 ...
 </code></pre><ul>
-<li>创建一个 <code>dtFindNearestPolyQuery</code> 的查询对象 <code>query</code> ，通过点的位置 <code>center</code> 和半径尺寸 <code>halfExtents</code> ，调用 <code>queryPolygons</code> 方法查询最近的多边形，找到了就将结果设置到 <code>nearestRef</code> 和 <code>nearestPt</code>。<code>queryPolygons</code> 的实现如下：</li>
+<li>创建一个 <code>dtFindNearestPolyQuery</code> 的查询对象 <code>query</code> ，通过点的位置 <code>center</code> 和半径尺寸 <code>halfExtents</code> ，调用 <code>queryPolygons</code> 方法查询最近的多边形，找到了就将结果设置到 <code>nearestRef</code> 和 <code>nearestPt</code>。</li>
+</ul>
+<h5 id=dtnavmeshqueryquerypolygons>dtNavMeshQuery::queryPolygons</h5>
+<ul>
+<li><code>queryPolygons</code> 的实现如下：</li>
 </ul>
 <pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
 
@@ -225,6 +230,9 @@ dtStatus dtNavMeshQuery::queryPolygons(const float* center, const float* halfExt
 <li>对每一个瓦片对象，调用 <code>queryPolygonsInTile</code> 方法查找最近的多边形。</li>
 </ul>
 </li>
+</ul>
+<h5 id=dtnavmeshgettilesat>dtNavMesh::getTilesAt</h5>
+<ul>
 <li><code>getTilesAt</code> 的方法如下：</li>
 </ul>
 <pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
@@ -266,6 +274,9 @@ int dtNavMesh::getTilesAt(const int x, const int y, dtMeshTile const** tiles, co
 ...
 </code></pre><ul>
 <li>通过 <code>computeTileHash</code> 方法计算哈希值，再通过 <code>m_posLookup</code> 数组找到对应的瓦片对象。如果坐标相同，则加入到瓦片对象数组中。其中 <code>h1</code> 和 <code>h2</code> 为两个任意选择的大素数，为了得到一个均匀分布的哈希值。</li>
+</ul>
+<h5 id=dtnavmeshqueryquerypolygonsintile>dtNavMeshQuery::queryPolygonsInTile</h5>
+<ul>
 <li><code>queryPolygonsInTile</code> 的实现如下：</li>
 </ul>
 <pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
@@ -399,6 +410,9 @@ void dtNavMeshQuery::queryPolygonsInTile(const dtMeshTile* tile, const float* qm
 </li>
 <li>对于相交的多边形，如果通过了过滤器，则加入到 <code>polyRefs</code> 和 <code>polys</code> 中。</li>
 <li>当累计多边形数量达到 <code>batchSize</code> 时，调用 <code>query->process</code> 方法进行批处理。</li>
+</ul>
+<h5 id=dtfindnearestpolyqueryprocess>dtFindNearestPolyQuery::process</h5>
+<ul>
 <li><code>query->process</code> 方法的实现如下：</li>
 </ul>
 <pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
@@ -463,9 +477,12 @@ class dtFindNearestPolyQuery : public dtPolyQuery
 <li>如果距离 <code>d</code> 比当前最近距离 <code>m_nearestDistanceSqr</code> 小，则更新最近距离和最近多边形。</li>
 </ul>
 </li>
-<li><code>closestPointOnPoly</code> 的实现如下：</li>
 </ul>
-<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+<h5 id=dtnavmeshclosestpointonpoly>dtNavMesh::closestPointOnPoly</h5>
+<ul>
+<li><code>closestPointOnPoly</code> 方法的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMesh.cpp
 
 ...
 
@@ -499,6 +516,178 @@ void dtNavMesh::closestPointOnPoly(dtPolyRef ref, const float* pos, float* close
 
 	// Outside poly that is not an offmesh connection.
 	closestPointOnDetailEdges&lt;true&gt;(tile, poly, pos, closest);
+}
+
+...
+</code></pre><ul>
+<li>查找多边形最近的点，主要分几类：
+<ul>
+<li>查询点在多边形的 <code>xz</code> 投影平面区域，通过 <code>getPolyHeight</code> 计算。</li>
+<li>查询点不在多边形的 <code>xz</code> 投影平面区域的网格外连接（Off-mesh connections，即不直接连接的区域），通过 <code>dtDistancePtSegSqr2D</code> 计算距离，再插值得到最近点。</li>
+<li>查询点不在多边形的 <code>xz</code> 投影平面区域的非网格外连接，通过 <code>closestPointOnDetailEdges</code> 计算。</li>
+</ul>
+</li>
+</ul>
+<h5 id=dtnavmeshgetpolyheight>dtNavMesh::getPolyHeight</h5>
+<ul>
+<li><code>getPolyHeight</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+
+...
+
+bool dtNavMesh::getPolyHeight(const dtMeshTile* tile, const dtPoly* poly, const float* pos, float* height) const
+{
+	// Off-mesh connections do not have detail polys and getting height
+	// over them does not make sense.
+	if (poly-&gt;getType() == DT_POLYTYPE_OFFMESH_CONNECTION)
+		return false;
+
+	const unsigned int ip = (unsigned int)(poly - tile-&gt;polys);
+	const dtPolyDetail* pd = &amp;tile-&gt;detailMeshes[ip];
+	
+	float verts[DT_VERTS_PER_POLYGON*3];	
+	const int nv = poly-&gt;vertCount;
+	for (int i = 0; i &lt; nv; ++i)
+		dtVcopy(&amp;verts[i*3], &amp;tile-&gt;verts[poly-&gt;verts[i]*3]);
+	
+	if (!dtPointInPolygon(pos, verts, nv))
+		return false;
+
+	if (!height)
+		return true;
+	
+	// Find height at the location.
+	for (int j = 0; j &lt; pd-&gt;triCount; ++j)
+	{
+		const unsigned char* t = &amp;tile-&gt;detailTris[(pd-&gt;triBase+j)*4];
+		const float* v[3];
+		for (int k = 0; k &lt; 3; ++k)
+		{
+			if (t[k] &lt; poly-&gt;vertCount)
+				v[k] = &amp;tile-&gt;verts[poly-&gt;verts[t[k]]*3];
+			else
+				v[k] = &amp;tile-&gt;detailVerts[(pd-&gt;vertBase+(t[k]-poly-&gt;vertCount))*3];
+		}
+		float h;
+		if (dtClosestHeightPointTriangle(pos, v[0], v[1], v[2], h))
+		{
+			*height = h;
+			return true;
+		}
+	}
+
+	// If all triangle checks failed above (can happen with degenerate triangles
+	// or larger floating point values) the point is on an edge, so just select
+	// closest. This should almost never happen so the extra iteration here is
+	// ok.
+	float closest[3];
+	closestPointOnDetailEdges&lt;false&gt;(tile, poly, pos, closest);
+	*height = closest[1];
+	return true;
+}
+
+...
+</code></pre><ul>
+<li>首先，通过 <code>dtPointInPolygon</code> 方法，检查查询点是否在多边形的 <code>xz</code> 投影平面上。</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourCommon.cpp
+
+...
+
+bool dtPointInPolygon(const float* pt, const float* verts, const int nverts)
+{
+	// TODO: Replace pnpoly with triArea2D tests?
+	int i, j;
+	bool c = false;
+	for (i = 0, j = nverts-1; i &lt; nverts; j = i++)
+	{
+		const float* vi = &amp;verts[i*3];
+		const float* vj = &amp;verts[j*3];
+		if (((vi[2] &gt; pt[2]) != (vj[2] &gt; pt[2])) &amp;&amp;
+			(pt[0] &lt; (vj[0]-vi[0]) * (pt[2]-vi[2]) / (vj[2]-vi[2]) + vi[0]) )
+			c = !c;
+	}
+	return c;
+}
+
+...
+</code></pre><ul>
+<li>遍历多边形的每条边，当查询点的 <code>z</code> 坐标在边的 <code>z</code> 坐标范围内，且从查询点沿x轴正方向的射线和多边形的交点为奇数，则查询点在多边形内（射线法）。计算交点的方式为：
+<ul>
+<li>计算边 <code>ij</code> 上，当 <code>z</code> 坐标为 <code>pt[2]</code> 时的 <code>x</code> 坐标 <code>pt'[0]</code>，即
+<img src="/img/Algorithm/NavmeshNavigation/Math_1.png?raw=true" alt=Math_1.png>
+</li>
+<li>如果 <code>pt'[0] > pt[0]</code> ，则表示射线与多边形有交点。</li>
+</ul>
+</li>
+<li>确定查询点在多边形投影面上后，则遍历多边形的每个三角面，通过 <code>dtClosestHeightPointTriangle</code> 方法检查查询点所属的三角面投影面。</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourCommon.cpp
+
+...
+
+bool dtClosestHeightPointTriangle(const float* p, const float* a, const float* b, const float* c, float&amp; h)
+{
+	const float EPS = 1e-6f;
+	float v0[3], v1[3], v2[3];
+
+	dtVsub(v0, c, a);
+	dtVsub(v1, b, a);
+	dtVsub(v2, p, a);
+
+	// Compute scaled barycentric coordinates
+	float denom = v0[0] * v1[2] - v0[2] * v1[0];
+	if (fabsf(denom) &lt; EPS)
+		return false;
+
+	float u = v1[2] * v2[0] - v1[0] * v2[2];
+	float v = v0[0] * v2[2] - v0[2] * v2[0];
+
+	if (denom &lt; 0) {
+		denom = -denom;
+		u = -u;
+		v = -v;
+	}
+
+	// If point lies inside the triangle, return interpolated ycoord.
+	if (u &gt;= 0.0f &amp;&amp; v &gt;= 0.0f &amp;&amp; (u + v) &lt;= denom) {
+		h = a[1] + (v0[1] * u + v1[1] * v) / denom;
+		return true;
+	}
+	return false;
+}
+
+...
+</code></pre><ul>
+<li>对于一个三角形 <code>abc</code> ，先通过向量 <code>ac</code> 和 <code>ab</code> 的叉乘得到投影面上的面积（2倍），太小的直接剔除，再计算三角形 <code>abp</code> 和 <code>acp</code> 对应的面积。</li>
+<li>如果 <code>abp</code> 和 <code>acp</code> 的面积同为正或负，且面积和不超过 <code>abc</code> ，则表示点 <code>p</code> 在三角形 <code>abc</code> 内。</li>
+<li>对于三角形内的任意一点 <code>p</code>，可以表示为三个顶点的线性组合，即
+<img src="/img/Algorithm/NavmeshNavigation/Math_2.png?raw=true" alt=Math_2.png>
+<img src="/img/Algorithm/NavmeshNavigation/Math_3.png?raw=true" alt=Math_3.png>
+因此通过插值可以得到点 <code>p</code> 的 <code>y</code> 坐标。</li>
+<li>如果查询点没有找到归属的三角面，则需要通过 <code>closestPointOnDetailEdges</code> 方法计算最近点。</li>
+<li>由于查询点在多边形投影面上，所以最近点的 <code>xz</code> 坐标和查询点相同，仅计算垂直距离。</li>
+</ul>
+<h5 id=dtdistanceptsegsqr2d>dtDistancePtSegSqr2D</h5>
+<pre tabindex=0><code>// Detour/Source/DetourCommon.cpp
+
+...
+
+float dtDistancePtSegSqr2D(const float* pt, const float* p, const float* q, float&amp; t)
+{
+	float pqx = q[0] - p[0];
+	float pqz = q[2] - p[2];
+	float dx = pt[0] - p[0];
+	float dz = pt[2] - p[2];
+	float d = pqx*pqx + pqz*pqz;
+	t = pqx*dx + pqz*dz;
+	if (d &gt; 0) t /= d;
+	if (t &lt; 0) t = 0;
+	else if (t &gt; 1) t = 1;
+	dx = p[0] + t*pqx - pt[0];
+	dz = p[2] + t*pqz - pt[2];
+	return dx*dx + dz*dz;
 }
 
 ...
