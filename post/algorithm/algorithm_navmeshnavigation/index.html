@@ -7,16 +7,16 @@
 <meta property="og:type" content="article">
 <meta property="og:image" content="https://fallingxun.github.io//">
 <meta property="twitter:image" content="https://fallingxun.github.io//">
-<meta name=title content="算法篇 — NavMesh 导航">
-<meta property="og:title" content="算法篇 — NavMesh 导航">
-<meta property="twitter:title" content="算法篇 — NavMesh 导航">
+<meta name=title content="算法篇 — NavMesh 导航 — 寻路">
+<meta property="og:title" content="算法篇 — NavMesh 导航 — 寻路">
+<meta property="twitter:title" content="算法篇 — NavMesh 导航 — 寻路">
 <meta name=description content>
 <meta property="og:description" content>
 <meta property="twitter:description" content>
 <meta property="twitter:card" content="summary">
 <meta name=keyword content>
 <link rel="shortcut icon" href=/img/favicon.ico>
-<title>算法篇 — NavMesh 导航-</title>
+<title>算法篇 — NavMesh 导航 — 寻路-</title>
 <link rel=canonical href=/post/algorithm/algorithm_navmeshnavigation/>
 <link rel=stylesheet href=/css/iDisqus.min.css>
 <link rel=stylesheet href=/css/bootstrap.min.css>
@@ -82,7 +82,7 @@
 Algorithm
 </a>
 </div>
-<h1>算法篇 — NavMesh 导航</h1>
+<h1>算法篇 — NavMesh 导航 — 寻路</h1>
 <h2 class=subheading></h2>
 <span class=meta>
 Posted by
@@ -124,7 +124,19 @@ post-container">
 </li>
 </ul>
 <h4 id=查询点所在多边形>查询点所在多边形</h4>
-<h5 id=dtnavmeshqueryfindnearestpoly>dtNavMeshQuery::findNearestPoly</h5>
+<ul>
+<li>查询点所在多边形的方法主要流程如下：</li>
+</ul>
+<pre tabindex=0><code>dtNavMeshQuery::findNearestPoly（查找点最近的多边形）
+|——dtNavMeshQuery::queryPolygons（根据点和半径，查找最近的多边形）
+    |——dtNavMesh::getTilesAt（根据点查找所属的瓦片）
+    |——dtNavMeshQuery::queryPolygonsInTile（根据查询的最大最小范围，从瓦片的所有多边形中找到和查询点最近的多边形）
+        |——dtFindNearestPolyQuery::process（对一批多边形，查询其中和查询点最近的多边形）
+            |——dtNavMesh::closestPointOnPoly（在多边形中找到距离查询点最近的点，以及查询点是否在多边形 xz 投影平面内）
+                |——dtNavMesh::getPolyHeight（检查点是否在多边形投影平面内，以及点所在的三角面的高度）
+                |——dtDistancePtSegSqr2D（计算点到线段距离的平方）
+                |——closestPointOnDetailEdges（从细节边中找到和查询点最近的点）
+</code></pre><h5 id=dtnavmeshqueryfindnearestpoly>dtNavMeshQuery::findNearestPoly</h5>
 <ul>
 <li>查询点所在多边形，主要通过 <code>dtNavMeshQuery*</code> 对象的 <code>findNearestPoly</code> 方法实现，其代码如下：</li>
 </ul>
@@ -235,7 +247,7 @@ dtStatus dtNavMeshQuery::queryPolygons(const float* center, const float* halfExt
 <ul>
 <li><code>getTilesAt</code> 的方法如下：</li>
 </ul>
-<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+<pre tabindex=0><code>// Detour/Source/DetourNavMesh.cpp
 
 ...
 
@@ -532,7 +544,7 @@ void dtNavMesh::closestPointOnPoly(dtPolyRef ref, const float* pos, float* close
 <ul>
 <li><code>getPolyHeight</code> 的实现如下：</li>
 </ul>
-<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+<pre tabindex=0><code>// Detour/Source/DetourNavMesh.cpp
 
 ...
 
@@ -670,6 +682,9 @@ bool dtClosestHeightPointTriangle(const float* p, const float* a, const float* b
 <li>由于查询点在多边形投影面上，所以最近点的 <code>xz</code> 坐标和查询点相同，仅计算垂直距离。</li>
 </ul>
 <h5 id=dtdistanceptsegsqr2d>dtDistancePtSegSqr2D</h5>
+<ul>
+<li><code>dtDistancePtSegSqr2D</code> 用于计算查询点 <code>pt</code> 到线段 <code>pq</code> 的距离（平方值），其实现如下：</li>
+</ul>
 <pre tabindex=0><code>// Detour/Source/DetourCommon.cpp
 
 ...
@@ -691,7 +706,83 @@ float dtDistancePtSegSqr2D(const float* pt, const float* p, const float* q, floa
 }
 
 ...
-</code></pre><h4 id=寻找最短多边形路径>寻找最短多边形路径</h4>
+</code></pre><ul>
+<li>主要思路是，计算点 <code>pt</code> 在线段 <code>pq</code> 上的投影位置，然后计算该位置到点 <code>pt</code> 的距离，即为查询点到线段 <code>pq</code> 的距离。投影位置的长度为
+<img src="/img/Algorithm/NavmeshNavigation/Math_4.png?raw=true" alt=Math_4.png>
+</li>
+<li>投影点在线段 <code>pq</code> 上的比例为
+<img src="/img/Algorithm/NavmeshNavigation/Math_5.png?raw=true" alt=Math_4.png>
+</li>
+<li>因此投影点的坐标可以通过比例和点 <code>p</code> 坐标插值计算得到，从而可以得到查询点到线段的距离。</li>
+</ul>
+<h5 id=closestpointondetailedges>closestPointOnDetailEdges</h5>
+<ul>
+<li><code>closestPointOnDetailEdges</code> 用于计算细节边到查询点的最近点，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMesh.cpp
+
+...
+
+	template&lt;bool onlyBoundary&gt;
+	void closestPointOnDetailEdges(const dtMeshTile* tile, const dtPoly* poly, const float* pos, float* closest)
+	{
+		const unsigned int ip = (unsigned int)(poly - tile-&gt;polys);
+		const dtPolyDetail* pd = &amp;tile-&gt;detailMeshes[ip];
+
+		float dmin = FLT_MAX;
+		float tmin = 0;
+		const float* pmin = 0;
+		const float* pmax = 0;
+
+		for (int i = 0; i &lt; pd-&gt;triCount; i++)
+		{
+			const unsigned char* tris = &amp;tile-&gt;detailTris[(pd-&gt;triBase + i) * 4];
+			const int ANY_BOUNDARY_EDGE =
+				(DT_DETAIL_EDGE_BOUNDARY &lt;&lt; 0) |
+				(DT_DETAIL_EDGE_BOUNDARY &lt;&lt; 2) |
+				(DT_DETAIL_EDGE_BOUNDARY &lt;&lt; 4);
+			if (onlyBoundary &amp;&amp; (tris[3] &amp; ANY_BOUNDARY_EDGE) == 0)
+				continue;
+
+			const float* v[3];
+			for (int j = 0; j &lt; 3; ++j)
+			{
+				if (tris[j] &lt; poly-&gt;vertCount)
+					v[j] = &amp;tile-&gt;verts[poly-&gt;verts[tris[j]] * 3];
+				else
+					v[j] = &amp;tile-&gt;detailVerts[(pd-&gt;vertBase + (tris[j] - poly-&gt;vertCount)) * 3];
+			}
+
+			for (int k = 0, j = 2; k &lt; 3; j = k++)
+			{
+				if ((dtGetDetailTriEdgeFlags(tris[3], j) &amp; DT_DETAIL_EDGE_BOUNDARY) == 0 &amp;&amp;
+					(onlyBoundary || tris[j] &lt; tris[k]))
+				{
+					// Only looking at boundary edges and this is internal, or
+					// this is an inner edge that we will see again or have already seen.
+					continue;
+				}
+
+				float t;
+				float d = dtDistancePtSegSqr2D(pos, v[j], v[k], t);
+				if (d &lt; dmin)
+				{
+					dmin = d;
+					tmin = t;
+					pmin = v[j];
+					pmax = v[k];
+				}
+			}
+		}
+
+		dtVlerp(closest, pmin, pmax, tmin);
+	}
+
+...
+</code></pre><ul>
+<li>在细节边上找最近点，使用的也是 <code>dtDistancePtSegSqr2D</code> 方法。对多个细节边上的最近点，取投影距离最小的点作为最终的最近点。</li>
+</ul>
+<h4 id=寻找最短多边形路径>寻找最短多边形路径</h4>
 <h4 id=寻找最短路径>寻找最短路径</h4>
 <h3 id=参考>参考</h3>
 <ul>

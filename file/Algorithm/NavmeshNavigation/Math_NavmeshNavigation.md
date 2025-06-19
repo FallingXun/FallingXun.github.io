@@ -1,29 +1,19 @@
-- Math_Lambert
+- Math_1
 ```math
-\bold c_{diffuse} = (\bold c_{light} \cdot \bold m_{diffuse})\max{(0, n \cdot I)}
+v_{pt'[0]} = \frac{v_{j[0]} - v_{i[0]}}{v_{j[2]} - v_{i[2]}} \cdot (v_{pt[2]} - v_{i[2]}) + v_{i[0]}
 ```
 
-- Math_HalfLambert
+- Math_2
 ```math
-\bold c_{diffuse} = (\bold c_{light} \cdot \bold m_{diffuse})(\alpha (\bold{\hat{n}} \cdot \bold I) + \beta)
+\bold{p} = \alpha\bold{a} + \beta\bold{b} + \gamma\bold{c}
 ```
 
-- Math_Phong
+- Math_3
 ```math
-\bold c_{specular} = (\bold c_{light} \cdot \bold m_{specular})\max{(0, \bold{\hat{v}} \cdot \bold r)} ^ {m_{glass}}
+\alpha = \frac{S_{\Delta pbc}}{S_{\Delta abc}}, \beta = \frac{S_{\Delta pca}}{S_{\Delta abc}}, \gamma = \frac{S_{\Delta pab}}{S_{\Delta abc}}
 ```
 
-- Math_BlinnPhong
+- Math_4
 ```math
-\bold c_{specular} = (\bold c_{light} \cdot \bold m_{specular})\max{(0, \bold{\hat n} \cdot \bold{\hat h})} ^ {m_{glass}}
-```
-
-- Math_BlinnPhong_h
-```math
-\bold{\hat h} = \frac{\bold{\hat v} + \bold{\hat I}}{| \bold{\hat v} + \bold{\hat I} |}
-```
-
-- Math_SchlickFresnel
-```math
-F_{schlick}(\bold v , \bold n) = F_0 + (1 - F_0)(1 - \bold v \cdot \bold n)^5 
+|pq| \cdot cos\theta = \frac{|pq| \cdot |pp_t| \cdot cos\theta}{|pp_t|} = \frac{\bold{p}\bold{q} \cdot \bold{p}\bold{p_t}}{|pp_t|}
 ```
