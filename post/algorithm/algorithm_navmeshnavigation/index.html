@@ -102,7 +102,7 @@ Monday, June 9, 2025
 col-md-10 col-md-offset-1
 post-container">
 <p>Navmesh 寻路是游戏开发中常用的寻路算法，本文将基于 Recast Navigation 源码进行分析。</p>
-<h3 id=简介>简介</h3>
+<h2 id=简介>简介</h2>
 <ul>
 <li>以格子为基础的 A* 算法是游戏中最常用的寻路算法，随着游戏的发展，地图也在不断变化。随着地图的增大，A* 算法的开放列表也跟着增大，导致寻路效率已经达不到要求，因此出现了 JPS 算法进行改进。</li>
 <li>相比传统网格地图寻路，导航网格（NavMesh）节点数量大幅减少，搜索空间缩小，能更快找到路径，在大规模复杂场景中优势明显，因此得到了广泛应用。</li>
@@ -113,7 +113,7 @@ post-container">
 </ul>
 </li>
 </ul>
-<h3 id=寻路>寻路</h3>
+<h2 id=寻路>寻路</h2>
 <ul>
 <li>地图生成导航网格后，地图就拆分成众多形状各异的多边形，此时寻路的主要步骤为：
 <ul>
@@ -123,7 +123,7 @@ post-container">
 </ul>
 </li>
 </ul>
-<h4 id=查询点所在多边形>查询点所在多边形</h4>
+<h3 id=查询点所在多边形>查询点所在多边形</h3>
 <ul>
 <li>查询点所在多边形的方法主要流程如下：</li>
 </ul>
@@ -136,7 +136,7 @@ post-container">
                 |——dtNavMesh::getPolyHeight（检查点是否在多边形投影平面内，以及点所在的三角面的高度）
                 |——dtDistancePtSegSqr2D（计算点到线段距离的平方）
                 |——closestPointOnDetailEdges（从细节边中找到和查询点最近的点）
-</code></pre><h5 id=dtnavmeshqueryfindnearestpoly>dtNavMeshQuery::findNearestPoly</h5>
+</code></pre><h4 id=dtnavmeshqueryfindnearestpoly>dtNavMeshQuery::findNearestPoly</h4>
 <ul>
 <li>查询点所在多边形，主要通过 <code>dtNavMeshQuery*</code> 对象的 <code>findNearestPoly</code> 方法实现，其代码如下：</li>
 </ul>
@@ -185,7 +185,7 @@ dtStatus dtNavMeshQuery::findNearestPoly(const float* center, const float* halfE
 </code></pre><ul>
 <li>创建一个 <code>dtFindNearestPolyQuery</code> 的查询对象 <code>query</code> ，通过点的位置 <code>center</code> 和半径尺寸 <code>halfExtents</code> ，调用 <code>queryPolygons</code> 方法查询最近的多边形，找到了就将结果设置到 <code>nearestRef</code> 和 <code>nearestPt</code>。</li>
 </ul>
-<h5 id=dtnavmeshqueryquerypolygons>dtNavMeshQuery::queryPolygons</h5>
+<h4 id=dtnavmeshqueryquerypolygons>dtNavMeshQuery::queryPolygons</h4>
 <ul>
 <li><code>queryPolygons</code> 的实现如下：</li>
 </ul>
@@ -243,7 +243,7 @@ dtStatus dtNavMeshQuery::queryPolygons(const float* center, const float* halfExt
 </ul>
 </li>
 </ul>
-<h5 id=dtnavmeshgettilesat>dtNavMesh::getTilesAt</h5>
+<h4 id=dtnavmeshgettilesat>dtNavMesh::getTilesAt</h4>
 <ul>
 <li><code>getTilesAt</code> 的方法如下：</li>
 </ul>
@@ -287,7 +287,7 @@ int dtNavMesh::getTilesAt(const int x, const int y, dtMeshTile const** tiles, co
 </code></pre><ul>
 <li>通过 <code>computeTileHash</code> 方法计算哈希值，再通过 <code>m_posLookup</code> 数组找到对应的瓦片对象。如果坐标相同，则加入到瓦片对象数组中。其中 <code>h1</code> 和 <code>h2</code> 为两个任意选择的大素数，为了得到一个均匀分布的哈希值。</li>
 </ul>
-<h5 id=dtnavmeshqueryquerypolygonsintile>dtNavMeshQuery::queryPolygonsInTile</h5>
+<h4 id=dtnavmeshqueryquerypolygonsintile>dtNavMeshQuery::queryPolygonsInTile</h4>
 <ul>
 <li><code>queryPolygonsInTile</code> 的实现如下：</li>
 </ul>
@@ -423,7 +423,7 @@ void dtNavMeshQuery::queryPolygonsInTile(const dtMeshTile* tile, const float* qm
 <li>对于相交的多边形，如果通过了过滤器，则加入到 <code>polyRefs</code> 和 <code>polys</code> 中。</li>
 <li>当累计多边形数量达到 <code>batchSize</code> 时，调用 <code>query->process</code> 方法进行批处理。</li>
 </ul>
-<h5 id=dtfindnearestpolyqueryprocess>dtFindNearestPolyQuery::process</h5>
+<h4 id=dtfindnearestpolyqueryprocess>dtFindNearestPolyQuery::process</h4>
 <ul>
 <li><code>query->process</code> 方法的实现如下：</li>
 </ul>
@@ -490,7 +490,7 @@ class dtFindNearestPolyQuery : public dtPolyQuery
 </ul>
 </li>
 </ul>
-<h5 id=dtnavmeshclosestpointonpoly>dtNavMesh::closestPointOnPoly</h5>
+<h4 id=dtnavmeshclosestpointonpoly>dtNavMesh::closestPointOnPoly</h4>
 <ul>
 <li><code>closestPointOnPoly</code> 方法的实现如下：</li>
 </ul>
@@ -540,7 +540,7 @@ void dtNavMesh::closestPointOnPoly(dtPolyRef ref, const float* pos, float* close
 </ul>
 </li>
 </ul>
-<h5 id=dtnavmeshgetpolyheight>dtNavMesh::getPolyHeight</h5>
+<h4 id=dtnavmeshgetpolyheight>dtNavMesh::getPolyHeight</h4>
 <ul>
 <li><code>getPolyHeight</code> 的实现如下：</li>
 </ul>
@@ -681,7 +681,7 @@ bool dtClosestHeightPointTriangle(const float* p, const float* a, const float* b
 <li>如果查询点没有找到归属的三角面，则需要通过 <code>closestPointOnDetailEdges</code> 方法计算最近点。</li>
 <li>由于查询点在多边形投影面上，所以最近点的 <code>xz</code> 坐标和查询点相同，仅计算垂直距离。</li>
 </ul>
-<h5 id=dtdistanceptsegsqr2d>dtDistancePtSegSqr2D</h5>
+<h4 id=dtdistanceptsegsqr2d>dtDistancePtSegSqr2D</h4>
 <ul>
 <li><code>dtDistancePtSegSqr2D</code> 用于计算查询点 <code>pt</code> 到线段 <code>pq</code> 的距离（平方值），其实现如下：</li>
 </ul>
@@ -715,7 +715,7 @@ float dtDistancePtSegSqr2D(const float* pt, const float* p, const float* q, floa
 </li>
 <li>因此投影点的坐标可以通过比例和点 <code>p</code> 坐标插值计算得到，从而可以得到查询点到线段的距离。</li>
 </ul>
-<h5 id=closestpointondetailedges>closestPointOnDetailEdges</h5>
+<h4 id=closestpointondetailedges>closestPointOnDetailEdges</h4>
 <ul>
 <li><code>closestPointOnDetailEdges</code> 用于计算细节边到查询点的最近点，其实现如下：</li>
 </ul>
@@ -782,9 +782,223 @@ float dtDistancePtSegSqr2D(const float* pt, const float* p, const float* q, floa
 </code></pre><ul>
 <li>在细节边上找最近点，使用的也是 <code>dtDistancePtSegSqr2D</code> 方法。对多个细节边上的最近点，取投影距离最小的点作为最终的最近点。</li>
 </ul>
-<h4 id=寻找最短多边形路径>寻找最短多边形路径</h4>
-<h4 id=寻找最短路径>寻找最短路径</h4>
-<h3 id=参考>参考</h3>
+<h3 id=寻找最短多边形路径>寻找最短多边形路径</h3>
+<ul>
+<li>寻找最短多边形路径的方法主要流程如下：</li>
+</ul>
+<pre tabindex=0><code>dtNavMeshQuery::findPath
+|——dtNavMeshQuery::getEdgeMidPoint
+|   |——dtNavMeshQuery::getPortalPoints
+|——dtQueryFilter::getCost
+|——dtNavMeshQuery::getPathToNode
+</code></pre><h4 id=dtnavmeshqueryfindpath>dtNavMeshQuery::findPath</h4>
+<ul>
+<li><code>findPath</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+
+...
+
+dtStatus dtNavMeshQuery::findPath(dtPolyRef startRef, dtPolyRef endRef,
+								  const float* startPos, const float* endPos,
+								  const dtQueryFilter* filter,
+								  dtPolyRef* path, int* pathCount, const int maxPath) const
+{
+	dtAssert(m_nav);
+	dtAssert(m_nodePool);
+	dtAssert(m_openList);
+
+	if (!pathCount)
+		return DT_FAILURE | DT_INVALID_PARAM;
+
+	*pathCount = 0;
+	
+	// Validate input
+	if (!m_nav-&gt;isValidPolyRef(startRef) || !m_nav-&gt;isValidPolyRef(endRef) ||
+		!startPos || !dtVisfinite(startPos) ||
+		!endPos || !dtVisfinite(endPos) ||
+		!filter || !path || maxPath &lt;= 0)
+	{
+		return DT_FAILURE | DT_INVALID_PARAM;
+	}
+
+	if (startRef == endRef)
+	{
+		path[0] = startRef;
+		*pathCount = 1;
+		return DT_SUCCESS;
+	}
+	
+	m_nodePool-&gt;clear();
+	m_openList-&gt;clear();
+	
+	dtNode* startNode = m_nodePool-&gt;getNode(startRef);
+	dtVcopy(startNode-&gt;pos, startPos);
+	startNode-&gt;pidx = 0;
+	startNode-&gt;cost = 0;
+	startNode-&gt;total = dtVdist(startPos, endPos) * H_SCALE;
+	startNode-&gt;id = startRef;
+	startNode-&gt;flags = DT_NODE_OPEN;
+	m_openList-&gt;push(startNode);
+	
+	dtNode* lastBestNode = startNode;
+	float lastBestNodeCost = startNode-&gt;total;
+	
+	bool outOfNodes = false;
+	
+	while (!m_openList-&gt;empty())
+	{
+		// Remove node from open list and put it in closed list.
+		dtNode* bestNode = m_openList-&gt;pop();
+		bestNode-&gt;flags &amp;= ~DT_NODE_OPEN;
+		bestNode-&gt;flags |= DT_NODE_CLOSED;
+		
+		// Reached the goal, stop searching.
+		if (bestNode-&gt;id == endRef)
+		{
+			lastBestNode = bestNode;
+			break;
+		}
+		
+		// Get current poly and tile.
+		// The API input has been checked already, skip checking internal data.
+		const dtPolyRef bestRef = bestNode-&gt;id;
+		const dtMeshTile* bestTile = 0;
+		const dtPoly* bestPoly = 0;
+		m_nav-&gt;getTileAndPolyByRefUnsafe(bestRef, &amp;bestTile, &amp;bestPoly);
+		
+		// Get parent poly and tile.
+		dtPolyRef parentRef = 0;
+		const dtMeshTile* parentTile = 0;
+		const dtPoly* parentPoly = 0;
+		if (bestNode-&gt;pidx)
+			parentRef = m_nodePool-&gt;getNodeAtIdx(bestNode-&gt;pidx)-&gt;id;
+		if (parentRef)
+			m_nav-&gt;getTileAndPolyByRefUnsafe(parentRef, &amp;parentTile, &amp;parentPoly);
+		
+		for (unsigned int i = bestPoly-&gt;firstLink; i != DT_NULL_LINK; i = bestTile-&gt;links[i].next)
+		{
+			dtPolyRef neighbourRef = bestTile-&gt;links[i].ref;
+			
+			// Skip invalid ids and do not expand back to where we came from.
+			if (!neighbourRef || neighbourRef == parentRef)
+				continue;
+			
+			// Get neighbour poly and tile.
+			// The API input has been checked already, skip checking internal data.
+			const dtMeshTile* neighbourTile = 0;
+			const dtPoly* neighbourPoly = 0;
+			m_nav-&gt;getTileAndPolyByRefUnsafe(neighbourRef, &amp;neighbourTile, &amp;neighbourPoly);			
+			
+			if (!filter-&gt;passFilter(neighbourRef, neighbourTile, neighbourPoly))
+				continue;
+
+			// deal explicitly with crossing tile boundaries
+			unsigned char crossSide = 0;
+			if (bestTile-&gt;links[i].side != 0xff)
+				crossSide = bestTile-&gt;links[i].side &gt;&gt; 1;
+
+			// get the node
+			dtNode* neighbourNode = m_nodePool-&gt;getNode(neighbourRef, crossSide);
+			if (!neighbourNode)
+			{
+				outOfNodes = true;
+				continue;
+			}
+			
+			// If the node is visited the first time, calculate node position.
+			if (neighbourNode-&gt;flags == 0)
+			{
+				getEdgeMidPoint(bestRef, bestPoly, bestTile,
+								neighbourRef, neighbourPoly, neighbourTile,
+								neighbourNode-&gt;pos);
+			}
+
+			// Calculate cost and heuristic.
+			float cost = 0;
+			float heuristic = 0;
+			
+			// Special case for last node.
+			if (neighbourRef == endRef)
+			{
+				// Cost
+				const float curCost = filter-&gt;getCost(bestNode-&gt;pos, neighbourNode-&gt;pos,
+													  parentRef, parentTile, parentPoly,
+													  bestRef, bestTile, bestPoly,
+													  neighbourRef, neighbourTile, neighbourPoly);
+				const float endCost = filter-&gt;getCost(neighbourNode-&gt;pos, endPos,
+													  bestRef, bestTile, bestPoly,
+													  neighbourRef, neighbourTile, neighbourPoly,
+													  0, 0, 0);
+				
+				cost = bestNode-&gt;cost + curCost + endCost;
+				heuristic = 0;
+			}
+			else
+			{
+				// Cost
+				const float curCost = filter-&gt;getCost(bestNode-&gt;pos, neighbourNode-&gt;pos,
+													  parentRef, parentTile, parentPoly,
+													  bestRef, bestTile, bestPoly,
+													  neighbourRef, neighbourTile, neighbourPoly);
+				cost = bestNode-&gt;cost + curCost;
+				heuristic = dtVdist(neighbourNode-&gt;pos, endPos)*H_SCALE;
+			}
+
+			const float total = cost + heuristic;
+			
+			// The node is already in open list and the new result is worse, skip.
+			if ((neighbourNode-&gt;flags &amp; DT_NODE_OPEN) &amp;&amp; total &gt;= neighbourNode-&gt;total)
+				continue;
+			// The node is already visited and process, and the new result is worse, skip.
+			if ((neighbourNode-&gt;flags &amp; DT_NODE_CLOSED) &amp;&amp; total &gt;= neighbourNode-&gt;total)
+				continue;
+			
+			// Add or update the node.
+			neighbourNode-&gt;pidx = m_nodePool-&gt;getNodeIdx(bestNode);
+			neighbourNode-&gt;id = neighbourRef;
+			neighbourNode-&gt;flags = (neighbourNode-&gt;flags &amp; ~DT_NODE_CLOSED);
+			neighbourNode-&gt;cost = cost;
+			neighbourNode-&gt;total = total;
+			
+			if (neighbourNode-&gt;flags &amp; DT_NODE_OPEN)
+			{
+				// Already in open, update node location.
+				m_openList-&gt;modify(neighbourNode);
+			}
+			else
+			{
+				// Put the node in open list.
+				neighbourNode-&gt;flags |= DT_NODE_OPEN;
+				m_openList-&gt;push(neighbourNode);
+			}
+			
+			// Update nearest node to target so far.
+			if (heuristic &lt; lastBestNodeCost)
+			{
+				lastBestNodeCost = heuristic;
+				lastBestNode = neighbourNode;
+			}
+		}
+	}
+
+    	dtStatus status = getPathToNode(lastBestNode, path, pathCount, maxPath);
+
+	if (lastBestNode-&gt;id != endRef)
+		status |= DT_PARTIAL_RESULT;
+
+	if (outOfNodes)
+		status |= DT_OUT_OF_NODES;
+	
+	return status;
+}
+
+...
+</code></pre><h4 id=dtnavmeshquerygetedgemidpoint>dtNavMeshQuery::getEdgeMidPoint</h4>
+<h4 id=dtqueryfiltergetcost>dtQueryFilter::getCost</h4>
+<h4 id=dtnavmeshquerygetpathtonode>dtNavMeshQuery::getPathToNode</h4>
+<h3 id=寻找最短路径>寻找最短路径</h3>
+<h2 id=参考>参考</h2>
 <ul>
 <li><a href=https://github.com/recastnavigation/recastnavigation>Github - Recast Navigation</a></li>
 <li></li>
