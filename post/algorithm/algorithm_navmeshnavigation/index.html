@@ -994,10 +994,225 @@ dtStatus dtNavMeshQuery::findPath(dtPolyRef startRef, dtPolyRef endRef,
 }
 
 ...
-</code></pre><h4 id=dtnavmeshquerygetedgemidpoint>dtNavMeshQuery::getEdgeMidPoint</h4>
+</code></pre><ul>
+<li><code>findPath</code> 寻路方法核心为 A* 算法，主要步骤如下：
+<ul>
+<li>初始化节点对象池 <code>m_nodePool</code> 和开放列表 <code>m_openList</code> 。</li>
+<li>从节点对象池中获取起点多边形的节点，设置节点的信息，包括：
+<ul>
+<li>父节点 id ：<code>pidx</code> 。</li>
+<li>当前节点的代价：<code>cost</code> 。</li>
+<li>总代价：<code>total</code> 。</li>
+<li>节点 id ：<code>id</code> 。</li>
+<li>节点访问标记：<code>flags</code>。</li>
+</ul>
+</li>
+<li>将起始节点加入开放列表中。</li>
+<li>从开放列表中取出一个节点，对节点做检查。
+<ul>
+<li>如果节点为终点，则结束处理。</li>
+<li>遍历节点所在多边形的每一个共享边，找到共享边对应的邻居多边形。</li>
+<li>根据邻居多边形的 id 和共享边，从节点对象池中获取邻居节点。</li>
+<li>通过 <code>getEdgeMidPoint</code> 方法，计算邻居节点的位置（共享边的中点）。</li>
+<li>通过 <code>getCost</code> 方法，计算当前节点到邻居节点的代价。</li>
+<li>计算邻居节点的位置和目标位置的距离，乘上 <code>H_SCALE</code> 系数，作为启发式预估代价。</li>
+<li>总代价为当前代价和预估代价之和。</li>
+<li>更新邻居节点的信息。</li>
+<li>将邻居节点加入开放列表中。</li>
+<li>比较邻居节点和最近节点的预估代价，如果邻居节点的预估代价更小，则更新最近节点为邻居节点。</li>
+<li>从开放列表中取下一个节点，继续上述处理。</li>
+</ul>
+</li>
+<li>通过 <code>getPathToNode</code> 方法，将最近节点进行递归，得到最终路径。</li>
+</ul>
+</li>
+</ul>
+<h4 id=dtnavmeshquerygetedgemidpoint>dtNavMeshQuery::getEdgeMidPoint</h4>
+<ul>
+<li><code>getEdgeMidPoint</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+
+...
+
+dtStatus dtNavMeshQuery::getEdgeMidPoint(dtPolyRef from, const dtPoly* fromPoly, const dtMeshTile* fromTile,
+										 dtPolyRef to, const dtPoly* toPoly, const dtMeshTile* toTile,
+										 float* mid) const
+{
+	float left[3], right[3];
+	if (dtStatusFailed(getPortalPoints(from, fromPoly, fromTile, to, toPoly, toTile, left, right)))
+		return DT_FAILURE | DT_INVALID_PARAM;
+	mid[0] = (left[0]+right[0])*0.5f;
+	mid[1] = (left[1]+right[1])*0.5f;
+	mid[2] = (left[2]+right[2])*0.5f;
+	return DT_SUCCESS;
+}
+
+...
+</code></pre><ul>
+<li>通过 <code>getPortalPoints</code> 方法，计算两个多边形共享边的左右顶点，根据左右顶点计算共享边的中点。</li>
+<li><code>getPortalPoints</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+
+...
+
+dtStatus dtNavMeshQuery::getPortalPoints(dtPolyRef from, const dtPoly* fromPoly, const dtMeshTile* fromTile,
+										 dtPolyRef to, const dtPoly* toPoly, const dtMeshTile* toTile,
+										 float* left, float* right) const
+{
+	// Find the link that points to the 'to' polygon.
+	const dtLink* link = 0;
+	for (unsigned int i = fromPoly-&gt;firstLink; i != DT_NULL_LINK; i = fromTile-&gt;links[i].next)
+	{
+		if (fromTile-&gt;links[i].ref == to)
+		{
+			link = &amp;fromTile-&gt;links[i];
+			break;
+		}
+	}
+	if (!link)
+		return DT_FAILURE | DT_INVALID_PARAM;
+	
+	// Handle off-mesh connections.
+	if (fromPoly-&gt;getType() == DT_POLYTYPE_OFFMESH_CONNECTION)
+	{
+		// Find link that points to first vertex.
+		for (unsigned int i = fromPoly-&gt;firstLink; i != DT_NULL_LINK; i = fromTile-&gt;links[i].next)
+		{
+			if (fromTile-&gt;links[i].ref == to)
+			{
+				const int v = fromTile-&gt;links[i].edge;
+				dtVcopy(left, &amp;fromTile-&gt;verts[fromPoly-&gt;verts[v]*3]);
+				dtVcopy(right, &amp;fromTile-&gt;verts[fromPoly-&gt;verts[v]*3]);
+				return DT_SUCCESS;
+			}
+		}
+		return DT_FAILURE | DT_INVALID_PARAM;
+	}
+	
+	if (toPoly-&gt;getType() == DT_POLYTYPE_OFFMESH_CONNECTION)
+	{
+		for (unsigned int i = toPoly-&gt;firstLink; i != DT_NULL_LINK; i = toTile-&gt;links[i].next)
+		{
+			if (toTile-&gt;links[i].ref == from)
+			{
+				const int v = toTile-&gt;links[i].edge;
+				dtVcopy(left, &amp;toTile-&gt;verts[toPoly-&gt;verts[v]*3]);
+				dtVcopy(right, &amp;toTile-&gt;verts[toPoly-&gt;verts[v]*3]);
+				return DT_SUCCESS;
+			}
+		}
+		return DT_FAILURE | DT_INVALID_PARAM;
+	}
+	
+	// Find portal vertices.
+	const int v0 = fromPoly-&gt;verts[link-&gt;edge];
+	const int v1 = fromPoly-&gt;verts[(link-&gt;edge+1) % (int)fromPoly-&gt;vertCount];
+	dtVcopy(left, &amp;fromTile-&gt;verts[v0*3]);
+	dtVcopy(right, &amp;fromTile-&gt;verts[v1*3]);
+	
+	// If the link is at tile boundary, dtClamp the vertices to
+	// the link width.
+	if (link-&gt;side != 0xff)
+	{
+		// Unpack portal limits.
+		if (link-&gt;bmin != 0 || link-&gt;bmax != 255)
+		{
+			const float s = 1.0f/255.0f;
+			const float tmin = link-&gt;bmin*s;
+			const float tmax = link-&gt;bmax*s;
+			dtVlerp(left, &amp;fromTile-&gt;verts[v0*3], &amp;fromTile-&gt;verts[v1*3], tmin);
+			dtVlerp(right, &amp;fromTile-&gt;verts[v0*3], &amp;fromTile-&gt;verts[v1*3], tmax);
+		}
+	}
+	
+	
+    return DT_SUCCESS;
+}
+...
+</code></pre><ul>
+<li>对于网格外连接，则遍历多边形的所有连接，找到连接多边形的边，其左右顶点都为该顶点。</li>
+<li>对于非网格外连接，则连接边的首顶点为左顶点，尾顶点为右顶点。</li>
+</ul>
 <h4 id=dtqueryfiltergetcost>dtQueryFilter::getCost</h4>
+<ul>
+<li><code>getCost</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+
+...
+
+inline float dtQueryFilter::getCost(const float* pa, const float* pb,
+									const dtPolyRef /*prevRef*/, const dtMeshTile* /*prevTile*/, const dtPoly* /*prevPoly*/,
+									const dtPolyRef /*curRef*/, const dtMeshTile* /*curTile*/, const dtPoly* curPoly,
+									const dtPolyRef /*nextRef*/, const dtMeshTile* /*nextTile*/, const dtPoly* /*nextPoly*/) const
+{
+	return dtVdist(pa, pb) * m_areaCost[curPoly-&gt;getArea()];
+}
+
+...
+</code></pre><ul>
+<li>两个点的代价，为两点之间的距离，乘上当前多边形所属区域对应的区域代价。</li>
+</ul>
 <h4 id=dtnavmeshquerygetpathtonode>dtNavMeshQuery::getPathToNode</h4>
+<ul>
+<li><code>getPathToNode</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+
+...
+
+dtStatus dtNavMeshQuery::getPathToNode(dtNode* endNode, dtPolyRef* path, int* pathCount, int maxPath) const
+{
+	// Find the length of the entire path.
+	dtNode* curNode = endNode;
+	int length = 0;
+	do
+	{
+		length++;
+		curNode = m_nodePool-&gt;getNodeAtIdx(curNode-&gt;pidx);
+	} while (curNode);
+
+	// If the path cannot be fully stored then advance to the last node we will be able to store.
+	curNode = endNode;
+	int writeCount;
+	for (writeCount = length; writeCount &gt; maxPath; writeCount--)
+	{
+		dtAssert(curNode);
+
+		curNode = m_nodePool-&gt;getNodeAtIdx(curNode-&gt;pidx);
+	}
+
+	// Write path
+	for (int i = writeCount - 1; i &gt;= 0; i--)
+	{
+		dtAssert(curNode);
+
+		path[i] = curNode-&gt;id;
+		curNode = m_nodePool-&gt;getNodeAtIdx(curNode-&gt;pidx);
+	}
+
+	dtAssert(!curNode);
+
+	*pathCount = dtMin(length, maxPath);
+
+	if (length &gt; maxPath)
+		return DT_SUCCESS | DT_BUFFER_TOO_SMALL;
+
+	return DT_SUCCESS;
+}
+...
+</code></pre><ul>
+<li>当寻路找到目标节点后，需要找到完整的路径。通过递归获取节点的父节点，则可以得到一条从起始点出发的完整路径。</li>
+</ul>
 <h3 id=寻找最短路径>寻找最短路径</h3>
+<ul>
+<li>通过上一步的寻路，可以得到一条多边形路径，从起始点开始，经过每一条共享边的中点，直到目标点，如图所示：
+<img src="/img/Algorithm/NavmeshNavigation/Nav_1.png?raw=true" alt=Nav_1.png>
+</li>
+<li>可以看到，尽管找到了一条路径，但可以发现，如果沿着路径 A ~ G 前进，并不是最短路径，所以还需要通过 <code>findStraightPath</code> 方法进一步进行路径优化。</li>
+</ul>
 <h2 id=参考>参考</h2>
 <ul>
 <li><a href=https://github.com/recastnavigation/recastnavigation>Github - Recast Navigation</a></li>
