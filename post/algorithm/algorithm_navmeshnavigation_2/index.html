@@ -1,0 +1,539 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="算法篇 — NavMesh 导航 — （2）生成导航网格">
+<meta property="og:title" content="算法篇 — NavMesh 导航 — （2）生成导航网格">
+<meta property="twitter:title" content="算法篇 — NavMesh 导航 — （2）生成导航网格">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>算法篇 — NavMesh 导航 — （2）生成导航网格-</title>
+<link rel=canonical href=/post/algorithm/algorithm_navmeshnavigation_2/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+<li>
+<a href=/categories/googleplay%E7%B3%BB%E5%88%97>googleplay系列</a>
+</li>
+<li>
+<a href=/categories/lua%E7%B3%BB%E5%88%97>lua系列</a>
+</li>
+<li>
+<a href=/categories/tmp%E7%B3%BB%E5%88%97>tmp系列</a>
+</li>
+<li>
+<a href=/categories/unity%E7%B3%BB%E5%88%97>unity系列</a>
+</li>
+<li>
+<a href=/categories/%E5%9B%BE%E5%BD%A2%E5%AD%A6%E7%B3%BB%E5%88%97>图形学系列</a>
+</li>
+<li>
+<a href=/categories/%E6%B8%B2%E6%9F%93%E7%B3%BB%E5%88%97>渲染系列</a>
+</li>
+<li>
+<a href=/categories/%E7%AE%97%E6%B3%95%E7%B3%BB%E5%88%97>算法系列</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/algorithm title=Algorithm>
+Algorithm
+</a>
+</div>
+<h1>算法篇 — NavMesh 导航 — （2）生成导航网格</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Monday, July 7, 2025
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>Navmesh 的寻路依赖于导航网格的生成，本文将基于 Recast Navigation 源码进行分析。</p>
+<h3 id=简介>简介</h3>
+<h4 id=初始化生成配置>初始化生成配置</h4>
+<ul>
+<li>导航网格的生成配置结构 <code>rcConfig</code> 如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Include/Recast.h
+
+...
+
+struct rcConfig
+{
+	/// The width of the field along the x-axis. [Limit: &gt;= 0] [Units: vx]
+	int width;
+
+	/// The height of the field along the z-axis. [Limit: &gt;= 0] [Units: vx]
+	int height;
+	
+	/// The width/height size of tile's on the xz-plane. [Limit: &gt;= 0] [Units: vx]
+	int tileSize;
+	
+	/// The size of the non-navigable border around the heightfield. [Limit: &gt;=0] [Units: vx]
+	int borderSize;
+
+	/// The xz-plane cell size to use for fields. [Limit: &gt; 0] [Units: wu] 
+	float cs;
+
+	/// The y-axis cell size to use for fields. [Limit: &gt; 0] [Units: wu]
+	float ch;
+
+	/// The minimum bounds of the field's AABB. [(x, y, z)] [Units: wu]
+	float bmin[3]; 
+
+	/// The maximum bounds of the field's AABB. [(x, y, z)] [Units: wu]
+	float bmax[3];
+
+	/// The maximum slope that is considered walkable. [Limits: 0 &lt;= value &lt; 90] [Units: Degrees] 
+	float walkableSlopeAngle;
+
+	/// Minimum floor to 'ceiling' height that will still allow the floor area to 
+	/// be considered walkable. [Limit: &gt;= 3] [Units: vx] 
+	int walkableHeight;
+	
+	/// Maximum ledge height that is considered to still be traversable. [Limit: &gt;=0] [Units: vx] 
+	int walkableClimb;
+	
+	/// The distance to erode/shrink the walkable area of the heightfield away from 
+	/// obstructions.  [Limit: &gt;=0] [Units: vx] 
+	int walkableRadius;
+	
+	/// The maximum allowed length for contour edges along the border of the mesh. [Limit: &gt;=0] [Units: vx] 
+	int maxEdgeLen;
+	
+	/// The maximum distance a simplified contour's border edges should deviate 
+	/// the original raw contour. [Limit: &gt;=0] [Units: vx]
+	float maxSimplificationError;
+	
+	/// The minimum number of cells allowed to form isolated island areas. [Limit: &gt;=0] [Units: vx] 
+	int minRegionArea;
+	
+	/// Any regions with a span count smaller than this value will, if possible, 
+	/// be merged with larger regions. [Limit: &gt;=0] [Units: vx] 
+	int mergeRegionArea;
+	
+	/// The maximum number of vertices allowed for polygons generated during the 
+	/// contour to polygon conversion process. [Limit: &gt;= 3] 
+	int maxVertsPerPoly;
+	
+	/// Sets the sampling distance to use when generating the detail mesh.
+	/// (For height detail only.) [Limits: 0 or &gt;= 0.9] [Units: wu] 
+	float detailSampleDist;
+	
+	/// The maximum distance the detail mesh surface should deviate from heightfield
+	/// data. (For height detail only.) [Limit: &gt;=0] [Units: wu] 
+	float detailSampleMaxError;
+};
+
+...
+</code></pre><ul>
+<li><code>rcConfig</code> 参数的含义如下：
+<ul>
+<li><code>width</code>
+<ul>
+<li>场在 x 轴上的宽度。</li>
+</ul>
+</li>
+<li><code>height</code>
+<ul>
+<li>场在 z 轴上的高度。</li>
+</ul>
+</li>
+<li><code>tileSize</code>
+<ul>
+<li>xz 平面上的瓦片大小。</li>
+</ul>
+</li>
+<li><code>borderSize</code>
+<ul>
+<li>高度场不可导航边界的大小。</li>
+</ul>
+</li>
+<li><code>cs</code>
+<ul>
+<li>场在 xz 平面上的单元格大小。</li>
+</ul>
+</li>
+<li><code>ch</code>
+<ul>
+<li>场在 y 轴上的单元格大小。</li>
+</ul>
+</li>
+<li><code>bmin[3]</code>
+<ul>
+<li>场的 AABB 包围盒的最小边界。</li>
+</ul>
+</li>
+<li><code>bmax[3]</code>
+<ul>
+<li>场的 AABB 包围盒的最大边界。</li>
+</ul>
+</li>
+<li><code>walkableSlopeAngle</code>
+<ul>
+<li>可行走的最大斜坡角度（0° ~ 90°）。</li>
+</ul>
+</li>
+<li><code>walkableHeight</code>
+<ul>
+<li>可行走的最小高度（地面到天花板的距离，>= 3）。</li>
+</ul>
+</li>
+<li><code>walkableClimb</code>
+<ul>
+<li>可通行的最大高度。</li>
+</ul>
+</li>
+<li><code>walkableRadius</code>
+<ul>
+<li>在生成可行走区域时，需要从障碍物边缘向内收缩（侵蚀）的距离。</li>
+</ul>
+</li>
+<li><code>maxEdgeLen</code>
+<ul>
+<li>轮廓边缘在网格边界上的最大长度。</li>
+</ul>
+</li>
+<li><code>maxSimplificationError</code>
+<ul>
+<li>简化后的轮廓边缘和原轮廓的最大允许偏差。。</li>
+</ul>
+</li>
+<li><code>minRegionArea</code>
+<ul>
+<li>形成孤岛区域的最小单元格数量。</li>
+</ul>
+</li>
+<li><code>mergeRegionArea</code>
+<ul>
+<li>区域包含的单元格数量少于该值时，尝试将此区域合并到更大的相邻区域。</li>
+</ul>
+</li>
+<li><code>maxVertsPerPoly</code>
+<ul>
+<li>单个多边形的最大顶点数（>= 3）。</li>
+</ul>
+</li>
+<li><code>detailSampleDist</code>
+<ul>
+<li>生成细节网格（高度细节）的采样间距（0 或 >= 0.9）。</li>
+</ul>
+</li>
+<li><code>detailSampleMaxError</code>
+<ul>
+<li>细节网格（高度细节）表面与原始高度场数据的最大允许偏差。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id=光栅化输入的多边形汤>光栅化输入的多边形汤</h4>
+<ul>
+<li>输入的原始 3D 模型数据，通常是一组无序的三角形（或其他多边形），没有明确的拓扑结构或层级关系，这些多边形可能重叠、重复或不封闭，统称为多边形汤。</li>
+</ul>
+<h5 id=标记可行走三角面>标记可行走三角面</h5>
+<ul>
+<li>通过 <code>rcMarkWalkableTriangles</code> 方法，将坡度小于 <code>walkableSlopeAngle</code> 的三角面标记为可行走区域，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/Recast.cpp
+
+...
+
+void rcMarkWalkableTriangles(rcContext* context, const float walkableSlopeAngle,
+                             const float* verts, const int numVerts,
+                             const int* tris, const int numTris,
+                             unsigned char* triAreaIDs)
+{
+	rcIgnoreUnused(context);
+	rcIgnoreUnused(numVerts);
+
+	const float walkableThr = cosf(walkableSlopeAngle / 180.0f * RC_PI);
+
+	float norm[3];
+
+	for (int i = 0; i &lt; numTris; ++i)
+	{
+		const int* tri = &amp;tris[i * 3];
+		calcTriNormal(&amp;verts[tri[0] * 3], &amp;verts[tri[1] * 3], &amp;verts[tri[2] * 3], norm);
+		// Check if the face is walkable.
+		if (norm[1] &gt; walkableThr)
+		{
+			triAreaIDs[i] = RC_WALKABLE_AREA;
+		}
+	}
+}
+
+...
+</code></pre><ul>
+<li>其中，<code>calcTriNormal</code> 方法用于计算三角面的归一化法线。三角面和法线的示意图如下：
+<img src="/img/Algorithm/NavmeshNavigation/Nav2_1.png?raw=true" alt=Nav2_1.png>
+</li>
+<li>三角面和 xz 平面的夹角即为坡度 θ，而法线和 y 轴的夹角也为 θ。由于法线为归一化，则法线在 y 轴上的投影即为 <code>cosθ</code>。随着坡度 θ 增大，<code>cosθ</code> 逐渐减小，当坡度 θ 小于 <code>walkableSlopeAngle</code> 时，该三角面则为可行走区域，即
+<img src="/img/Algorithm/NavmeshNavigation/Nav2_1.png?raw=true" alt=Nav2_1.png>
+</li>
+</ul>
+<h5 id=光栅化三角面>光栅化三角面</h5>
+<ul>
+<li>光栅化三角面的过程，主要是对每个三角面，通过 <code>rasterizeTri</code> 方法进行处理，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastRasterization.cpp
+
+static bool rasterizeTri(const float* v0, const float* v1, const float* v2,
+                         const unsigned char areaID, rcHeightfield&amp; heightfield,
+                         const float* heightfieldBBMin, const float* heightfieldBBMax,
+                         const float cellSize, const float inverseCellSize, const float inverseCellHeight,
+                         const int flagMergeThreshold)
+{
+	// Calculate the bounding box of the triangle.
+	float triBBMin[3];
+	rcVcopy(triBBMin, v0);
+	rcVmin(triBBMin, v1);
+	rcVmin(triBBMin, v2);
+
+	float triBBMax[3];
+	rcVcopy(triBBMax, v0);
+	rcVmax(triBBMax, v1);
+	rcVmax(triBBMax, v2);
+
+	// If the triangle does not touch the bounding box of the heightfield, skip the triangle.
+	if (!overlapBounds(triBBMin, triBBMax, heightfieldBBMin, heightfieldBBMax))
+	{
+		return true;
+	}
+
+	const int w = heightfield.width;
+	const int h = heightfield.height;
+	const float by = heightfieldBBMax[1] - heightfieldBBMin[1];
+
+	// Calculate the footprint of the triangle on the grid's z-axis
+	int z0 = (int)((triBBMin[2] - heightfieldBBMin[2]) * inverseCellSize);
+	int z1 = (int)((triBBMax[2] - heightfieldBBMin[2]) * inverseCellSize);
+
+	// use -1 rather than 0 to cut the polygon properly at the start of the tile
+	z0 = rcClamp(z0, -1, h - 1);
+	z1 = rcClamp(z1, 0, h - 1);
+
+	// Clip the triangle into all grid cells it touches.
+	float buf[7 * 3 * 4];
+	float* in = buf;
+	float* inRow = buf + 7 * 3;
+	float* p1 = inRow + 7 * 3;
+	float* p2 = p1 + 7 * 3;
+
+	rcVcopy(&amp;in[0], v0);
+	rcVcopy(&amp;in[1 * 3], v1);
+	rcVcopy(&amp;in[2 * 3], v2);
+	int nvRow;
+	int nvIn = 3;
+
+	for (int z = z0; z &lt;= z1; ++z)
+	{
+		// Clip polygon to row. Store the remaining polygon as well
+		const float cellZ = heightfieldBBMin[2] + (float)z * cellSize;
+		dividePoly(in, nvIn, inRow, &amp;nvRow, p1, &amp;nvIn, cellZ + cellSize, RC_AXIS_Z);
+		rcSwap(in, p1);
+		
+		if (nvRow &lt; 3)
+		{
+			continue;
+		}
+		if (z &lt; 0)
+		{
+			continue;
+		}
+		
+		// find X-axis bounds of the row
+		float minX = inRow[0];
+		float maxX = inRow[0];
+		for (int vert = 1; vert &lt; nvRow; ++vert)
+		{
+			if (minX &gt; inRow[vert * 3])
+			{
+				minX = inRow[vert * 3];
+			}
+			if (maxX &lt; inRow[vert * 3])
+			{
+				maxX = inRow[vert * 3];
+			}
+		}
+		int x0 = (int)((minX - heightfieldBBMin[0]) * inverseCellSize);
+		int x1 = (int)((maxX - heightfieldBBMin[0]) * inverseCellSize);
+		if (x1 &lt; 0 || x0 &gt;= w)
+		{
+			continue;
+		}
+		x0 = rcClamp(x0, -1, w - 1);
+		x1 = rcClamp(x1, 0, w - 1);
+
+		int nv;
+		int nv2 = nvRow;
+
+		for (int x = x0; x &lt;= x1; ++x)
+		{
+			// Clip polygon to column. store the remaining polygon as well
+			const float cx = heightfieldBBMin[0] + (float)x * cellSize;
+			dividePoly(inRow, nv2, p1, &amp;nv, p2, &amp;nv2, cx + cellSize, RC_AXIS_X);
+			rcSwap(inRow, p2);
+			
+			if (nv &lt; 3)
+			{
+				continue;
+			}
+			if (x &lt; 0)
+			{
+				continue;
+			}
+			
+			// Calculate min and max of the span.
+			float spanMin = p1[1];
+			float spanMax = p1[1];
+			for (int vert = 1; vert &lt; nv; ++vert)
+			{
+				spanMin = rcMin(spanMin, p1[vert * 3 + 1]);
+				spanMax = rcMax(spanMax, p1[vert * 3 + 1]);
+			}
+			spanMin -= heightfieldBBMin[1];
+			spanMax -= heightfieldBBMin[1];
+			
+			// Skip the span if it's completely outside the heightfield bounding box
+			if (spanMax &lt; 0.0f)
+			{
+				continue;
+			}
+			if (spanMin &gt; by)
+			{
+				continue;
+			}
+			
+			// Clamp the span to the heightfield bounding box.
+			if (spanMin &lt; 0.0f)
+			{
+				spanMin = 0;
+			}
+			if (spanMax &gt; by)
+			{
+				spanMax = by;
+			}
+
+			// Snap the span to the heightfield height grid.
+			unsigned short spanMinCellIndex = (unsigned short)rcClamp((int)floorf(spanMin * inverseCellHeight), 0, RC_SPAN_MAX_HEIGHT);
+			unsigned short spanMaxCellIndex = (unsigned short)rcClamp((int)ceilf(spanMax * inverseCellHeight), (int)spanMinCellIndex + 1, RC_SPAN_MAX_HEIGHT);
+
+			if (!addSpan(heightfield, x, z, spanMinCellIndex, spanMaxCellIndex, areaID, flagMergeThreshold))
+			{
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+...
+</code></pre><h3 id=参考>参考</h3>
+<ul>
+<li><a href=https://github.com/recastnavigation/recastnavigation>Github - Recast Navigation</a></li>
+</ul>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/algorithm/algorithm_navmeshnavigation_1/ data-toggle=tooltip data-placement=top title="算法篇 — NavMesh 导航 — （1）寻路">&larr;
+Previous Post</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2025
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>
