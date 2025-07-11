@@ -184,12 +184,12 @@ struct rcConfig
 <ul>
 <li><code>width</code>
 <ul>
-<li>场在 x 轴上的宽度。</li>
+<li>场在 x 轴上的宽度，由网格包围盒的宽度换算成单元格表示。</li>
 </ul>
 </li>
 <li><code>height</code>
 <ul>
-<li>场在 z 轴上的高度。</li>
+<li>场在 z 轴上的高度，由网格包围盒的高度换算成单元格表示。</li>
 </ul>
 </li>
 <li><code>tileSize</code>
@@ -321,9 +321,7 @@ void rcMarkWalkableTriangles(rcContext* context, const float walkableSlopeAngle,
 <li>其中，<code>calcTriNormal</code> 方法用于计算三角面的归一化法线。三角面和法线的示意图如下：
 <img src="/img/Algorithm/NavmeshNavigation/Nav2_1.png?raw=true" alt=Nav2_1.png>
 </li>
-<li>三角面和 xz 平面的夹角即为坡度 θ，而法线和 y 轴的夹角也为 θ。由于法线为归一化，则法线在 y 轴上的投影即为 <code>cosθ</code>。随着坡度 θ 增大，<code>cosθ</code> 逐渐减小，当坡度 θ 小于 <code>walkableSlopeAngle</code> 时，该三角面则为可行走区域，即
-<img src="/img/Algorithm/NavmeshNavigation/Nav2_1.png?raw=true" alt=Nav2_1.png>
-</li>
+<li>三角面和 xz 平面的夹角即为坡度 θ，而法线和 y 轴的夹角也为 θ。由于法线为归一化，则法线在 y 轴上的投影即为 <code>cosθ</code>。随着坡度 θ 增大，<code>cosθ</code> 逐渐减小，当坡度 θ 小于 <code>walkableSlopeAngle</code> 时，该三角面则为可行走区域，将三角面的 <code>areaID</code> 设置为 <code>RC_WALKABLE_AREA</code>。</li>
 </ul>
 <h5 id=光栅化三角面>光栅化三角面</h5>
 <ul>
@@ -483,7 +481,211 @@ static bool rasterizeTri(const float* v0, const float* v1, const float* v2,
 }
 
 ...
-</code></pre><h3 id=参考>参考</h3>
+</code></pre><ul>
+<li>光栅化过程就是将三角面沿着 z 轴和 x 轴进行切分，再计算 y 高度，从而得到多个长方体，主要步骤如下：
+<ul>
+<li>计算三角面包围盒的最大最小值，检查包围盒是否和高度场的包围盒有交集，无交集则不需要处理。</li>
+<li>将三角面包围盒的 z 坐标最大最小值，以高度场包围盒 z 坐标最小值为基准，转化为单元格 z' 表示。</li>
+<li>将 z' 最小值限制为 [-1, heightfield.height - 1] ，最大值限制为 [0, heightfield.height - 1] 。</li>
+<li>遍历 z' 坐标最小值到最大值区间，通过 <code>dividePoly</code> 方法，将三角面按单元格 z' 切分成多个多边形。</li>
+<li>对每个切分后的多边形，计算包围盒的 x 坐标最大最小值，，以高度场包围盒 x 坐标最小值为基准，转化为单元格 x' 表示。</li>
+<li>将 x' 最小值限制为 [-1, heightfield.width - 1] , 最大值限制为 [0, heightfield.width - 1] 。</li>
+<li>遍历 x' 坐标最小值到最大值区间，通过 <code>dividePoly</code> 方法，将多边形按单元格 x' 坐标再切分成多个子多边形。</li>
+<li>对每个子多边形，计算顶点的 y 坐标最大最小值，以高度场包围盒 y 坐标最小值为基准。</li>
+<li>将顶点 y 坐标最大最小值，转换成单元格索引 y' 表示，最小值为 [0, <code>RC_SPAN_MAX_HEIGHT</code>] ，最大值为 [最小值 + 1, <code>RC_SPAN_MAX_HEIGHT</code>] 。</li>
+<li>调用 <code>addSpan</code> 方法，将当前 x' 、z' 对应的单元格的 y' 索引区间，加入到高度场中。</li>
+</ul>
+</li>
+<li>分割多边形方法 <code>dividePoly</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastRasterization.cpp
+
+static void dividePoly(const float* inVerts, int inVertsCount,
+                       float* outVerts1, int* outVerts1Count,
+                       float* outVerts2, int* outVerts2Count,
+                       float axisOffset, rcAxis axis)
+{
+	rcAssert(inVertsCount &lt;= 12);
+	
+	// How far positive or negative away from the separating axis is each vertex.
+	float inVertAxisDelta[12];
+	for (int inVert = 0; inVert &lt; inVertsCount; ++inVert)
+	{
+		inVertAxisDelta[inVert] = axisOffset - inVerts[inVert * 3 + axis];
+	}
+
+	int poly1Vert = 0;
+	int poly2Vert = 0;
+	for (int inVertA = 0, inVertB = inVertsCount - 1; inVertA &lt; inVertsCount; inVertB = inVertA, ++inVertA)
+	{
+		// If the two vertices are on the same side of the separating axis
+		bool sameSide = (inVertAxisDelta[inVertA] &gt;= 0) == (inVertAxisDelta[inVertB] &gt;= 0);
+
+		if (!sameSide)
+		{
+			float s = inVertAxisDelta[inVertB] / (inVertAxisDelta[inVertB] - inVertAxisDelta[inVertA]);
+			outVerts1[poly1Vert * 3 + 0] = inVerts[inVertB * 3 + 0] + (inVerts[inVertA * 3 + 0] - inVerts[inVertB * 3 + 0]) * s;
+			outVerts1[poly1Vert * 3 + 1] = inVerts[inVertB * 3 + 1] + (inVerts[inVertA * 3 + 1] - inVerts[inVertB * 3 + 1]) * s;
+			outVerts1[poly1Vert * 3 + 2] = inVerts[inVertB * 3 + 2] + (inVerts[inVertA * 3 + 2] - inVerts[inVertB * 3 + 2]) * s;
+			rcVcopy(&amp;outVerts2[poly2Vert * 3], &amp;outVerts1[poly1Vert * 3]);
+			poly1Vert++;
+			poly2Vert++;
+			
+			// add the inVertA point to the right polygon. Do NOT add points that are on the dividing line
+			// since these were already added above
+			if (inVertAxisDelta[inVertA] &gt; 0)
+			{
+				rcVcopy(&amp;outVerts1[poly1Vert * 3], &amp;inVerts[inVertA * 3]);
+				poly1Vert++;
+			}
+			else if (inVertAxisDelta[inVertA] &lt; 0)
+			{
+				rcVcopy(&amp;outVerts2[poly2Vert * 3], &amp;inVerts[inVertA * 3]);
+				poly2Vert++;
+			}
+		}
+		else
+		{
+			// add the inVertA point to the right polygon. Addition is done even for points on the dividing line
+			if (inVertAxisDelta[inVertA] &gt;= 0)
+			{
+				rcVcopy(&amp;outVerts1[poly1Vert * 3], &amp;inVerts[inVertA * 3]);
+				poly1Vert++;
+				if (inVertAxisDelta[inVertA] != 0)
+				{
+					continue;
+				}
+			}
+			rcVcopy(&amp;outVerts2[poly2Vert * 3], &amp;inVerts[inVertA * 3]);
+			poly2Vert++;
+		}
+	}
+
+	*outVerts1Count = poly1Vert;
+	*outVerts2Count = poly2Vert;
+}
+
+...
+</code></pre><ul>
+<li>分割多边形的主要步骤为：
+<ul>
+<li>沿指定轴 <code>axis</code> 方向，计算分割面和每个顶点的的指定轴坐标差值，用于确定顶点是否在分割面以内。</li>
+<li>遍历每一个顶点，根据当前顶点 A 和上一个顶点 B所处位置进行处理。
+<ul>
+<li>如果 A 、B 处在分割面两侧:
+<ul>
+<li>计算 B 点到分割面的距离占 AB 到分割面距离和的比例。</li>
+<li>根据比例，通过 A 、B 的坐标插值得到 AB 和分割面的交点 C 坐标。</li>
+<li>将 C 点加入到分割面内顶点列表 <code>outVerts1</code> 和分割面外顶点列表 <code>outVerts2</code> 中。</li>
+<li>根据 A 点和分割面的位置关系，将 A 点加入到对应顶点列表中。</li>
+</ul>
+</li>
+<li>如果 A 、B 处在分割面内侧，将 A 点加入到分割面内顶点列表 <code>outVerts1</code> 。</li>
+<li>如果 A 、B 处在分割面外侧，将 A 点加入到分割面外顶点列表 <code>outVerts2</code> 。
+<img src="/img/Algorithm/NavmeshNavigation/Nav2_1.gif?raw=true" alt=Nav2_1.png>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>高度场添加跨度信息 <code>addSpan</code> 方法的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastRasterization.cpp
+
+
+
+
+                   const int x, const int z,
+                   const unsigned short min, const unsigned short max,
+                   const unsigned char areaID, const int flagMergeThreshold)
+{
+   // Create the new span.
+   rcSpan* newSpan = allocSpan(heightfield);
+   if (newSpan == NULL)
+   {
+   	return false;
+   }
+   newSpan-&gt;smin = min;
+   newSpan-&gt;smax = max;
+   newSpan-&gt;area = areaID;
+   newSpan-&gt;next = NULL;
+   
+   const int columnIndex = x + z * heightfield.width;
+   rcSpan* previousSpan = NULL;
+   rcSpan* currentSpan = heightfield.spans[columnIndex];
+   
+   // Insert the new span, possibly merging it with existing spans.
+   while (currentSpan != NULL)
+   {
+   	if (currentSpan-&gt;smin &gt; newSpan-&gt;smax)
+   	{
+   		// Current span is completely after the new span, break.
+   		break;
+   	}
+   	
+   	if (currentSpan-&gt;smax &lt; newSpan-&gt;smin)
+   	{
+   		// Current span is completely before the new span.  Keep going.
+   		previousSpan = currentSpan;
+   		currentSpan = currentSpan-&gt;next;
+   	}
+   	else
+   	{
+   		// The new span overlaps with an existing span.  Merge them.
+   		if (currentSpan-&gt;smin &lt; newSpan-&gt;smin)
+   		{
+   			newSpan-&gt;smin = currentSpan-&gt;smin;
+   		}
+   		if (currentSpan-&gt;smax &gt; newSpan-&gt;smax)
+   		{
+   			newSpan-&gt;smax = currentSpan-&gt;smax;
+   		}
+   		
+   		// Merge flags.
+   		if (rcAbs((int)newSpan-&gt;smax - (int)currentSpan-&gt;smax) &lt;= flagMergeThreshold)
+   		{
+   			// Higher area ID numbers indicate higher resolution priority.
+   			newSpan-&gt;area = rcMax(newSpan-&gt;area, currentSpan-&gt;area);
+   		}
+   		
+   		// Remove the current span since it's now merged with newSpan.
+   		// Keep going because there might be other overlapping spans that also need to be merged.
+   		rcSpan* next = currentSpan-&gt;next;
+   		freeSpan(heightfield, currentSpan);
+   		if (previousSpan)
+   		{
+   			previousSpan-&gt;next = next;
+   		}
+   		else
+   		{
+   			heightfield.spans[columnIndex] = next;
+   		}
+   		currentSpan = next;
+   	}
+   }
+   
+   // Insert new span after prev
+   if (previousSpan != NULL)
+   {
+   	newSpan-&gt;next = previousSpan-&gt;next;
+   	previousSpan-&gt;next = newSpan;
+   }
+   else
+   {
+   	// This span should go before the others in the list
+   	newSpan-&gt;next = heightfield.spans[columnIndex];
+   	heightfield.spans[columnIndex] = newSpan;
+   }
+
+
+}
+
+
+</code></pre><ul>
+<li>跨度信息即多边形的 y' 格子坐标跨度，在高度场中，跨度信息通过链表存储，记录了每一个 x&rsquo;z' 单元格的所有跨度区间，区间按坐标从小到大顺序存储。插入新区间时，同样需要保持从小到大的顺序，找到插入位置。如果新区间和原有区间有相交，则会将两个区间进行合并。</li>
+</ul>
+<h4 id=过滤可行走表面>过滤可行走表面</h4>
+<h3 id=参考>参考</h3>
 <ul>
 <li><a href=https://github.com/recastnavigation/recastnavigation>Github - Recast Navigation</a></li>
 </ul>
