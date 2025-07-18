@@ -229,12 +229,12 @@ struct rcConfig
 </li>
 <li><code>walkableHeight</code>
 <ul>
-<li>可行走的最小高度（地面到天花板的距离，>= 3）。</li>
+<li>行走时地面到天花板的最小距离（>= 3）。</li>
 </ul>
 </li>
 <li><code>walkableClimb</code>
 <ul>
-<li>可通行的最大高度。</li>
+<li>可跨越的最大高度。</li>
 </ul>
 </li>
 <li><code>walkableRadius</code>
@@ -282,7 +282,7 @@ struct rcConfig
 </ul>
 <h4 id=光栅化输入的多边形汤>光栅化输入的多边形汤</h4>
 <ul>
-<li>输入的原始 3D 模型数据，通常是一组无序的三角形（或其他多边形），没有明确的拓扑结构或层级关系，这些多边形可能重叠、重复或不封闭，统称为多边形汤。</li>
+<li>输入的原始 3D 模型数据，通常是一组无序的三角形（或其他多边形），没有明确的拓扑结构或层级关系，这些多边形可能重叠、重复或不封闭，统称为多边形汤，光栅化过程需要对这一组三角形做处理。</li>
 </ul>
 <h5 id=标记可行走三角面>标记可行走三角面</h5>
 <ul>
@@ -322,6 +322,7 @@ void rcMarkWalkableTriangles(rcContext* context, const float walkableSlopeAngle,
 <img src="/img/Algorithm/NavmeshNavigation/Nav2_1.png?raw=true" alt=Nav2_1.png>
 </li>
 <li>三角面和 xz 平面的夹角即为坡度 θ，而法线和 y 轴的夹角也为 θ。由于法线为归一化，则法线在 y 轴上的投影即为 <code>cosθ</code>。随着坡度 θ 增大，<code>cosθ</code> 逐渐减小，当坡度 θ 小于 <code>walkableSlopeAngle</code> 时，该三角面则为可行走区域，将三角面的 <code>areaID</code> 设置为 <code>RC_WALKABLE_AREA</code>。</li>
+<li>光栅化前先对坡度较大的三角面进行过滤，比起光栅化后再对每一个单元格进行坡度判断，可以减少较多的计算量。</li>
 </ul>
 <h5 id=光栅化三角面>光栅化三角面</h5>
 <ul>
@@ -685,6 +686,195 @@ static void dividePoly(const float* inVerts, int inVertsCount,
 <li>跨度信息即多边形的 y' 格子坐标跨度，在高度场中，跨度信息通过链表存储，记录了每一个 x&rsquo;z' 单元格的所有跨度区间，区间按坐标从小到大顺序存储。插入新区间时，同样需要保持从小到大的顺序，找到插入位置。如果新区间和原有区间有相交，则会将两个区间进行合并。</li>
 </ul>
 <h4 id=过滤可行走表面>过滤可行走表面</h4>
+<ul>
+<li>在三角面上行走，需要满足几个主要情况：
+<ul>
+<li>三角面的坡度较平缓，过于陡峭的坡度无法行走。</li>
+<li>相邻三角面高度差较低，支持对象跨越。</li>
+<li>相邻三角面的天花板和地面之间的最小距离足够大，支持对象通过。</li>
+</ul>
+</li>
+<li>坡度的过滤在光栅化过程已经完成，此阶段不需要再处理。另外两个条件，通过三个过滤方式来处理。</li>
+</ul>
+<h5 id=处理低悬挂可行走障碍物>处理低悬挂可行走障碍物</h5>
+<ul>
+<li>通过 <code>rcFilterLowHangingWalkableObstacles</code> 方法，进行低悬挂可行走障碍物的处理，其实现如下:</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastFilter.cpp
+
+...
+
+void rcFilterLowHangingWalkableObstacles(rcContext* context, const int walkableClimb, rcHeightfield&amp; heightfield)
+{
+	rcAssert(context);
+
+	rcScopedTimer timer(context, RC_TIMER_FILTER_LOW_OBSTACLES);
+
+	const int xSize = heightfield.width;
+	const int zSize = heightfield.height;
+
+	for (int z = 0; z &lt; zSize; ++z)
+	{
+		for (int x = 0; x &lt; xSize; ++x)
+		{
+			rcSpan* previousSpan = NULL;
+			bool previousWasWalkable = false;
+			unsigned char previousAreaID = RC_NULL_AREA;
+
+			// For each span in the column...
+			for (rcSpan* span = heightfield.spans[x + z * xSize]; span != NULL; previousSpan = span, span = span-&gt;next)
+			{
+				const bool walkable = span-&gt;area != RC_NULL_AREA;
+
+				// If current span is not walkable, but there is walkable span just below it and the height difference
+				// is small enough for the agent to walk over, mark the current span as walkable too.
+				if (!walkable &amp;&amp; previousWasWalkable &amp;&amp; (int)span-&gt;smax - (int)previousSpan-&gt;smax &lt;= walkableClimb)
+				{
+					span-&gt;area = previousAreaID;
+				}
+
+				// Copy the original walkable value regardless of whether we changed it.
+				// This prevents multiple consecutive non-walkable spans from being erroneously marked as walkable.
+				previousWasWalkable = walkable;
+				previousAreaID = span-&gt;area;
+			}
+		}
+	}
+}
+
+...
+</code></pre><ul>
+<li>检查 xz 平面的每个单元格的跨度列表，跨度列表是从小到大排序的，当前跨度不可行走时，如果上一个跨度可行走，且当前跨度的地面 <code>span->max</code> 和上一个跨度 <code>previousSpan->max</code> 的地面差不超过可跨域距离 <code>walkableClimb</code> ，则将当前跨度 <code>span->area</code> 标记为可行走区域。</li>
+<li>加入此检查，可以避免角色因低障碍物（如：门槛、小台阶等）而受到阻挡无法行走，以及对于一些悬挂的障碍（如：桥梁、屋檐）等，可以支持角色跨越通过。</li>
+</ul>
+<h5 id=处理边缘跨度>处理边缘跨度</h5>
+<ul>
+<li>处理边缘跨度的方法 <code>rcFilterLedgeSpans</code> 如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastFilter.cpp
+
+...
+
+void rcFilterLedgeSpans(rcContext* context, const int walkableHeight, const int walkableClimb, rcHeightfield&amp; heightfield)
+{
+	rcAssert(context);
+	
+	rcScopedTimer timer(context, RC_TIMER_FILTER_BORDER);
+
+	const int xSize = heightfield.width;
+	const int zSize = heightfield.height;
+	
+	// Mark spans that are adjacent to a ledge as unwalkable..
+	for (int z = 0; z &lt; zSize; ++z)
+	{
+		for (int x = 0; x &lt; xSize; ++x)
+		{
+			for (rcSpan* span = heightfield.spans[x + z * xSize]; span; span = span-&gt;next)
+			{
+				// Skip non-walkable spans.
+				if (span-&gt;area == RC_NULL_AREA)
+				{
+					continue;
+				}
+
+				const int floor = (int)(span-&gt;smax);
+				const int ceiling = span-&gt;next ? (int)(span-&gt;next-&gt;smin) : MAX_HEIGHTFIELD_HEIGHT;
+
+				// The difference between this walkable area and the lowest neighbor walkable area.
+				// This is the difference between the current span and all neighbor spans that have
+				// enough space for an agent to move between, but not accounting at all for surface slope.
+				int lowestNeighborFloorDifference = MAX_HEIGHTFIELD_HEIGHT;
+
+				// Min and max height of accessible neighbours.
+				int lowestTraversableNeighborFloor = span-&gt;smax;
+				int highestTraversableNeighborFloor = span-&gt;smax;
+
+				for (int direction = 0; direction &lt; 4; ++direction)
+				{
+					const int neighborX = x + rcGetDirOffsetX(direction);
+					const int neighborZ = z + rcGetDirOffsetY(direction);
+
+					// Skip neighbours which are out of bounds.
+					if (neighborX &lt; 0 || neighborZ &lt; 0 || neighborX &gt;= xSize || neighborZ &gt;= zSize)
+					{
+						lowestNeighborFloorDifference = -walkableClimb - 1;
+						break;
+					}
+
+					const rcSpan* neighborSpan = heightfield.spans[neighborX + neighborZ * xSize];
+
+					// The most we can step down to the neighbor is the walkableClimb distance.
+					// Start with the area under the neighbor span
+					int neighborCeiling = neighborSpan ? (int)neighborSpan-&gt;smin : MAX_HEIGHTFIELD_HEIGHT;
+
+					// Skip neighbour if the gap between the spans is too small.
+					if (rcMin(ceiling, neighborCeiling) - floor &gt;= walkableHeight)
+					{
+						lowestNeighborFloorDifference = (-walkableClimb - 1);
+						break;
+					}
+
+					// For each span in the neighboring column...
+					for (; neighborSpan != NULL; neighborSpan = neighborSpan-&gt;next)
+					{
+						const int neighborFloor = (int)neighborSpan-&gt;smax;
+						neighborCeiling = neighborSpan-&gt;next ? (int)neighborSpan-&gt;next-&gt;smin : MAX_HEIGHTFIELD_HEIGHT;
+
+						// Only consider neighboring areas that have enough overlap to be potentially traversable.
+						if (rcMin(ceiling, neighborCeiling) - rcMax(floor, neighborFloor) &lt; walkableHeight)
+						{
+							// No space to traverse between them.
+							continue;
+						}
+
+						const int neighborFloorDifference = neighborFloor - floor;
+						lowestNeighborFloorDifference = rcMin(lowestNeighborFloorDifference, neighborFloorDifference);
+
+						// Find min/max accessible neighbor height.
+						// Only consider neighbors that are at most walkableClimb away.
+						if (rcAbs(neighborFloorDifference) &lt;= walkableClimb)
+						{
+							// There is space to move to the neighbor cell and the slope isn't too much.
+							lowestTraversableNeighborFloor = rcMin(lowestTraversableNeighborFloor, neighborFloor);
+							highestTraversableNeighborFloor = rcMax(highestTraversableNeighborFloor, neighborFloor);
+						}
+						else if (neighborFloorDifference &lt; -walkableClimb)
+						{
+							// We already know this will be considered a ledge span so we can early-out
+							break;
+						}
+					}
+				}
+
+				// The current span is close to a ledge if the magnitude of the drop to any neighbour span is greater than the walkableClimb distance.
+				// That is, there is a gap that is large enough to let an agent move between them, but the drop (surface slope) is too large to allow it.
+				// (If this is the case, then biggestNeighborStepDown will be negative, so compare against the negative walkableClimb as a means of checking
+				// the magnitude of the delta)
+				if (lowestNeighborFloorDifference &lt; -walkableClimb)
+				{
+					span-&gt;area = RC_NULL_AREA;
+				}
+				// If the difference between all neighbor floors is too large, this is a steep slope, so mark the span as an unwalkable ledge.
+				else if (highestTraversableNeighborFloor - lowestTraversableNeighborFloor &gt; walkableClimb)
+				{
+					span-&gt;area = RC_NULL_AREA;
+				}
+			}
+		}
+	}
+}
+
+...
+</code></pre><ul>
+<li>和低障碍处理类似，需要对 xz 平面上，每一个单元格的跨度列表 <code>heightfield.spans</code> 中的每一个跨度 <code>span</code> 进行处理，处理流程大致如下：
+<ul>
+<li>下一个跨度的天花板 <code>span->next->smin</code> 和任一邻居跨度列表中的首个跨度天花板 <code>neightborSpan->smin</code>，二者中的较小值，和当前跨度的地面 <code>span->smax</code> 的差值，不小于 <code>walkableHeight</code> 时，表示当前跨度和某个邻居存在较大的高度差，尽管可能只有一个方向存在危险，处于安全考虑，将当前跨度标记为不可行走，避免因局部地形问题卡住。</li>
+<li>检查当前跨度和邻居跨度列表的每个跨度，当两者交集不小于 <code>walkableHeight</code> 且地面高度差不大于 <code>walkableClimb</code> 时，认为此邻居跨度为可行走跨度，从所有可行走邻居跨度中，找出最大和最小的地面高度。</li>
+<li>如果最大最小地面高度差超过 <code>walkableClimb</code> ，则认为当前跨度为一个陡坡，将其 <code>span->area</code> 标记为不可行走。</li>
+</ul>
+</li>
+<li>处理边缘跨度采用保守策略，对于高度差较大的跨度，都选择标记为不可行走，减少特殊地形带来的角色移动表现问题情况的出现。</li>
+</ul>
 <h3 id=参考>参考</h3>
 <ul>
 <li><a href=https://github.com/recastnavigation/recastnavigation>Github - Recast Navigation</a></li>
