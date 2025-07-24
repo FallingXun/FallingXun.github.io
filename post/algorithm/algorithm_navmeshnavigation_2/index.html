@@ -696,9 +696,9 @@ static void dividePoly(const float* inVerts, int inVertsCount,
 </li>
 <li>坡度的过滤在光栅化过程已经完成，此阶段不需要再处理。另外两个条件，通过三个过滤方式来处理。</li>
 </ul>
-<h5 id=处理低悬挂可行走障碍物>处理低悬挂可行走障碍物</h5>
+<h5 id=处理低悬挂障碍物>处理低悬挂障碍物</h5>
 <ul>
-<li>通过 <code>rcFilterLowHangingWalkableObstacles</code> 方法，进行低悬挂可行走障碍物的处理，其实现如下:</li>
+<li>通过 <code>rcFilterLowHangingWalkableObstacles</code> 方法，进行低悬挂障碍物的处理，其实现如下:</li>
 </ul>
 <pre tabindex=0><code>// Recast/Source/RecastFilter.cpp
 
@@ -875,6 +875,44 @@ void rcFilterLedgeSpans(rcContext* context, const int walkableHeight, const int 
 </li>
 <li>处理边缘跨度采用保守策略，对于高度差较大的跨度，都选择标记为不可行走，减少特殊地形带来的角色移动表现问题情况的出现。</li>
 </ul>
+<h5 id=处理低高度跨度>处理低高度跨度</h5>
+<ul>
+<li>低高度跨度处理，主要是为了确保对象有足够空间可以在表面站立，才能够正常行走，通过 <code>rcFilterWalkableLowHeightSpans</code> 方法实现，代码如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastFilter.cpp
+
+...
+
+void rcFilterWalkableLowHeightSpans(rcContext* context, const int walkableHeight, rcHeightfield&amp; heightfield)
+{
+	rcAssert(context);
+	rcScopedTimer timer(context, RC_TIMER_FILTER_WALKABLE);
+
+	const int xSize = heightfield.width;
+	const int zSize = heightfield.height;
+
+	// Remove walkable flag from spans which do not have enough
+	// space above them for the agent to stand there.
+	for (int z = 0; z &lt; zSize; ++z)
+	{
+		for (int x = 0; x &lt; xSize; ++x)
+		{
+			for (rcSpan* span = heightfield.spans[x + z*xSize]; span; span = span-&gt;next)
+			{
+				const int floor = (int)(span-&gt;smax);
+				const int ceiling = span-&gt;next ? (int)(span-&gt;next-&gt;smin) : MAX_HEIGHTFIELD_HEIGHT;
+				if (ceiling - floor &lt; walkableHeight)
+				{
+					span-&gt;area = RC_NULL_AREA;
+				}
+			}
+		}
+	}
+}
+</code></pre><ul>
+<li>低高度跨度处理相对比较简单，就是对每一个跨度做检查，如果当前跨度的天花板（即下一个跨度的最小值 <code>span->next->smin</code>）和地面（<code>span->smax</code>）的高度差小于 <code>walkableHeight</code> ，即当前跨度不支持站立，则标记 <code>span->area</code> 为不可行走。</li>
+</ul>
+<h4 id=将可行走表面划分为简单区域>将可行走表面划分为简单区域</h4>
 <h3 id=参考>参考</h3>
 <ul>
 <li><a href=https://github.com/recastnavigation/recastnavigation>Github - Recast Navigation</a></li>
