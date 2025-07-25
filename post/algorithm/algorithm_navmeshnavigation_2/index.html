@@ -913,7 +913,53 @@ void rcFilterWalkableLowHeightSpans(rcContext* context, const int walkableHeight
 <li>低高度跨度处理相对比较简单，就是对每一个跨度做检查，如果当前跨度的天花板（即下一个跨度的最小值 <code>span->next->smin</code>）和地面（<code>span->smax</code>）的高度差小于 <code>walkableHeight</code> ，即当前跨度不支持站立，则标记 <code>span->area</code> 为不可行走。</li>
 </ul>
 <h4 id=将可行走表面划分为简单区域>将可行走表面划分为简单区域</h4>
-<h3 id=参考>参考</h3>
+<h5 id=建立紧密高度场>建立紧密高度场</h5>
+<ul>
+<li>经过上一步处理后，得到了一个高度场，高度场的结构如下：</li>
+</ul>
+<pre tabindex=0><code>// 高度场
+struct rcHeightfield
+{
+...
+	int width;			/// 高度场的宽度（沿 x 轴的单元格数量）
+	int height;			/// 高度场的宽度（沿 z 轴的单元格数量）
+	float bmin[3];  	/// 高度场在世界空间中的最小边界。 [(x, y, z)]
+	float bmax[3];		/// 高度场在世界空间中的最大边界。 [(x, y, z)]
+	float cs;			/// 每个单元格的大小（在 xz 平面上）
+	float ch;			/// 每个单元格的高度（沿 y 轴的最小增量）
+	rcSpan** spans;		/// 高度场的跨度列表，列表包括所有单元格，每个单元格为一个跨度链表
+
+	rcSpanPool* pools;	/// 跨度链表对象池
+	rcSpan* freelist;	/// 跨度链表对象池的可用跨度对象列表
+...
+};
+</code></pre><ul>
+<li>其中，<code>spans</code> 数组长度为 <code>width * height</code> ，每个元素指向一个 <code>span</code> 链表，数据存储比较离散，不利于后续处理过程频繁访问，因此需要转换成更加紧凑的形式，即紧密高度场，其结构如下：</li>
+</ul>
+<pre tabindex=0><code>// 紧密高度场
+struct rcCompactHeightfield
+{
+	...
+	int width;					/// 同 rcHeightfield::width
+	int height;					/// 同 rcHeightfield::height
+	int spanCount;				/// rcHeightfield 中的跨度总数
+	int walkableHeight;			/// 同 rcConfig::walkableHeight
+	int walkableClimb;			/// 同 rcConfig::walkableClimb
+	int borderSize;				/// 同 rcConfig::borderSize
+	unsigned short maxDistance;	/// 高度场中两个跨度的最大距离
+	unsigned short maxRegions;	/// 高度场中的最大地区id
+	float bmin[3];				/// 同 rcHeightfield
+	float bmax[3];				/// 同 rcHeightfield
+	float cs;					/// 同 rcHeightfield
+	float ch;					/// 同 rcHeightfield
+	rcCompactCell* cells;		/// 单元格数组，数量为 width * height
+	rcCompactSpan* spans;		/// 跨度数组，数量为 spanCount
+	unsigned short* dist;		/// 跨度和边界的距离数组，数量为 spanCount
+	unsigned char* areas;		/// 区域id数组，数量为 spanCount
+	
+	...
+};
+</code></pre><h3 id=参考>参考</h3>
 <ul>
 <li><a href=https://github.com/recastnavigation/recastnavigation>Github - Recast Navigation</a></li>
 </ul>
