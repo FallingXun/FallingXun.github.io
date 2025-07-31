@@ -322,7 +322,7 @@ void rcMarkWalkableTriangles(rcContext* context, const float walkableSlopeAngle,
 <img src="/img/Algorithm/NavmeshNavigation/Nav2_1.png?raw=true" alt=Nav2_1.png>
 </li>
 <li>三角面和 xz 平面的夹角即为坡度 θ，而法线和 y 轴的夹角也为 θ。由于法线为归一化，则法线在 y 轴上的投影即为 <code>cosθ</code>。随着坡度 θ 增大，<code>cosθ</code> 逐渐减小，当坡度 θ 小于 <code>walkableSlopeAngle</code> 时，该三角面则为可行走区域，将三角面的 <code>areaID</code> 设置为 <code>RC_WALKABLE_AREA</code>。</li>
-<li>光栅化前先对坡度较大的三角面进行过滤，比起光栅化后再对每一个单元格进行坡度判断，可以减少较多的计算量。</li>
+<li>光栅化前先对坡度较大的三角面进行过滤，比起光栅化后再对每一个 <code>cell</code> 进行坡度判断，可以减少较多的计算量。</li>
 </ul>
 <h5 id=光栅化三角面>光栅化三角面</h5>
 <ul>
@@ -486,15 +486,15 @@ static bool rasterizeTri(const float* v0, const float* v1, const float* v2,
 <li>光栅化过程就是将三角面沿着 z 轴和 x 轴进行切分，再计算 y 高度，从而得到多个长方体，主要步骤如下：
 <ul>
 <li>计算三角面包围盒的最大最小值，检查包围盒是否和高度场的包围盒有交集，无交集则不需要处理。</li>
-<li>将三角面包围盒的 z 坐标最大最小值，以高度场包围盒 z 坐标最小值为基准，转化为单元格 z' 表示。</li>
+<li>将三角面包围盒的 z 坐标最大最小值，以高度场包围盒 z 坐标最小值为基准，转化为 <code>cell</code> 的 z' 表示。</li>
 <li>将 z' 最小值限制为 [-1, heightfield.height - 1] ，最大值限制为 [0, heightfield.height - 1] 。</li>
-<li>遍历 z' 坐标最小值到最大值区间，通过 <code>dividePoly</code> 方法，将三角面按单元格 z' 切分成多个多边形。</li>
-<li>对每个切分后的多边形，计算包围盒的 x 坐标最大最小值，，以高度场包围盒 x 坐标最小值为基准，转化为单元格 x' 表示。</li>
+<li>遍历 z' 坐标最小值到最大值区间，通过 <code>dividePoly</code> 方法，将三角面按 <code>cell</code> 的 z' 切分成多个多边形。</li>
+<li>对每个切分后的多边形，计算包围盒的 x 坐标最大最小值，，以高度场包围盒 x 坐标最小值为基准，转化为 <code>cell</code> 的 x' 表示。</li>
 <li>将 x' 最小值限制为 [-1, heightfield.width - 1] , 最大值限制为 [0, heightfield.width - 1] 。</li>
-<li>遍历 x' 坐标最小值到最大值区间，通过 <code>dividePoly</code> 方法，将多边形按单元格 x' 坐标再切分成多个子多边形。</li>
+<li>遍历 x' 坐标最小值到最大值区间，通过 <code>dividePoly</code> 方法，将多边形按 <code>cell</code> 的 x' 坐标再切分成多个子多边形。</li>
 <li>对每个子多边形，计算顶点的 y 坐标最大最小值，以高度场包围盒 y 坐标最小值为基准。</li>
-<li>将顶点 y 坐标最大最小值，转换成单元格索引 y' 表示，最小值为 [0, <code>RC_SPAN_MAX_HEIGHT</code>] ，最大值为 [最小值 + 1, <code>RC_SPAN_MAX_HEIGHT</code>] 。</li>
-<li>调用 <code>addSpan</code> 方法，将当前 x' 、z' 对应的单元格的 y' 索引区间，加入到高度场中。</li>
+<li>将顶点 y 坐标最大最小值，转换成 <code>cell</code> 索引 y' 表示，最小值为 [0, <code>RC_SPAN_MAX_HEIGHT</code>] ，最大值为 [最小值 + 1, <code>RC_SPAN_MAX_HEIGHT</code>] 。</li>
+<li>调用 <code>addSpan</code> 方法，将当前 x' 、z' 对应的 <code>cell</code> 的 y' 索引区间，加入到高度场中。</li>
 </ul>
 </li>
 <li>分割多边形方法 <code>dividePoly</code> 的实现如下：</li>
@@ -589,7 +589,7 @@ static void dividePoly(const float* inVerts, int inVertsCount,
 </li>
 </ul>
 </li>
-<li>高度场添加跨度信息 <code>addSpan</code> 方法的实现如下：</li>
+<li>高度场添加 <code>span</code> 信息 <code>addSpan</code> 方法的实现如下：</li>
 </ul>
 <pre tabindex=0><code>// Recast/Source/RecastRasterization.cpp
 
@@ -683,7 +683,7 @@ static void dividePoly(const float* inVerts, int inVertsCount,
 
 
 </code></pre><ul>
-<li>跨度信息即多边形的 y' 格子坐标跨度，在高度场中，跨度信息通过链表存储，记录了每一个 x&rsquo;z' 单元格的所有跨度区间，区间按坐标从小到大顺序存储。插入新区间时，同样需要保持从小到大的顺序，找到插入位置。如果新区间和原有区间有相交，则会将两个区间进行合并。</li>
+<li><code>span</code> 信息即多边形的 y' 格子坐标 <code>span</code>，在高度场中，<code>span</code> 信息通过链表存储，记录了每一个 <code>cell</code> 的所有 <code>span</code> 区间，区间按坐标从小到大顺序存储。插入新区间时，同样需要保持从小到大的顺序，找到插入位置。如果新区间和原有区间有相交，则会将两个区间进行合并。</li>
 </ul>
 <h4 id=过滤可行走表面>过滤可行走表面</h4>
 <ul>
@@ -744,12 +744,12 @@ void rcFilterLowHangingWalkableObstacles(rcContext* context, const int walkableC
 
 ...
 </code></pre><ul>
-<li>检查 xz 平面的每个单元格的跨度列表，跨度列表是从小到大排序的，当前跨度不可行走时，如果上一个跨度可行走，且当前跨度的地面 <code>span->max</code> 和上一个跨度 <code>previousSpan->max</code> 的地面差不超过可跨域距离 <code>walkableClimb</code> ，则将当前跨度 <code>span->area</code> 标记为可行走区域。</li>
+<li>检查 xz 平面的每个 <code>cell</code> 的 <code>span</code> 列表，<code>span</code> 列表是从小到大排序的，当前 <code>span</code> 不可行走时，如果上一个 <code>span</code> 可行走，且当前 <code>span</code> 的地面 <code>span->max</code> 和上一个 <code>span</code> 的地面 <code>previousSpan->max</code> 的差不超过可跨域距离 <code>walkableClimb</code> ，则将当前 <code>span->area</code> 标记为可行走区域。</li>
 <li>加入此检查，可以避免角色因低障碍物（如：门槛、小台阶等）而受到阻挡无法行走，以及对于一些悬挂的障碍（如：桥梁、屋檐）等，可以支持角色跨越通过。</li>
 </ul>
 <h5 id=处理边缘跨度>处理边缘跨度</h5>
 <ul>
-<li>处理边缘跨度的方法 <code>rcFilterLedgeSpans</code> 如下：</li>
+<li>处理边缘 <code>span</code> 的方法 <code>rcFilterLedgeSpans</code> 如下：</li>
 </ul>
 <pre tabindex=0><code>// Recast/Source/RecastFilter.cpp
 
@@ -866,18 +866,18 @@ void rcFilterLedgeSpans(rcContext* context, const int walkableHeight, const int 
 
 ...
 </code></pre><ul>
-<li>和低障碍处理类似，需要对 xz 平面上，每一个单元格的跨度列表 <code>heightfield.spans</code> 中的每一个跨度 <code>span</code> 进行处理，处理流程大致如下：
+<li>和低障碍处理类似，需要对 xz 平面上，每一个 <code>cell</code> 的 <code>span</code> 列表 <code>heightfield.spans</code> 中的每一个 <code>span</code> 进行处理，处理流程大致如下：
 <ul>
 <li>下一个跨度的天花板 <code>span->next->smin</code> 和任一邻居跨度列表中的首个跨度天花板 <code>neightborSpan->smin</code>，二者中的较小值，和当前跨度的地面 <code>span->smax</code> 的差值，不小于 <code>walkableHeight</code> 时，表示当前跨度和某个邻居存在较大的高度差，尽管可能只有一个方向存在危险，处于安全考虑，将当前跨度标记为不可行走，避免因局部地形问题卡住。</li>
 <li>检查当前跨度和邻居跨度列表的每个跨度，当两者交集不小于 <code>walkableHeight</code> 且地面高度差不大于 <code>walkableClimb</code> 时，认为此邻居跨度为可行走跨度，从所有可行走邻居跨度中，找出最大和最小的地面高度。</li>
 <li>如果最大最小地面高度差超过 <code>walkableClimb</code> ，则认为当前跨度为一个陡坡，将其 <code>span->area</code> 标记为不可行走。</li>
 </ul>
 </li>
-<li>处理边缘跨度采用保守策略，对于高度差较大的跨度，都选择标记为不可行走，减少特殊地形带来的角色移动表现问题情况的出现。</li>
+<li>处理边缘 <code>span</code> 采用保守策略，对于高度差较大的 <code>span</code>，都选择标记为不可行走，减少特殊地形带来的角色移动表现问题的出现。</li>
 </ul>
 <h5 id=处理低高度跨度>处理低高度跨度</h5>
 <ul>
-<li>低高度跨度处理，主要是为了确保对象有足够空间可以在表面站立，才能够正常行走，通过 <code>rcFilterWalkableLowHeightSpans</code> 方法实现，代码如下：</li>
+<li>低高度 <code>span</code> 处理，主要是为了确保对象有足够空间可以在表面站立，才能够正常行走，通过 <code>rcFilterWalkableLowHeightSpans</code> 方法实现，代码如下：</li>
 </ul>
 <pre tabindex=0><code>// Recast/Source/RecastFilter.cpp
 
@@ -910,9 +910,9 @@ void rcFilterWalkableLowHeightSpans(rcContext* context, const int walkableHeight
 	}
 }
 </code></pre><ul>
-<li>低高度跨度处理相对比较简单，就是对每一个跨度做检查，如果当前跨度的天花板（即下一个跨度的最小值 <code>span->next->smin</code>）和地面（<code>span->smax</code>）的高度差小于 <code>walkableHeight</code> ，即当前跨度不支持站立，则标记 <code>span->area</code> 为不可行走。</li>
+<li>低高度 <code>span</code> 处理相对比较简单，就是对每一个 <code>span</code> 做检查，如果当前 <code>span</code> 的天花板（即下一个的最小值 <code>span->next->smin</code>）和地面（<code>span->smax</code>）的高度差小于 <code>walkableHeight</code> ，即当前 <code>span</code> 不支持站立，则标记 <code>span->area</code> 为不可行走。</li>
 </ul>
-<h4 id=将可行走表面划分为简单区域>将可行走表面划分为简单区域</h4>
+<h4 id=划分地区>划分地区</h4>
 <h5 id=建立紧密高度场>建立紧密高度场</h5>
 <ul>
 <li>经过上一步处理后，得到了一个高度场，高度场的结构如下：</li>
@@ -932,6 +932,15 @@ struct rcHeightfield
 	rcSpanPool* pools;	/// 跨度链表对象池
 	rcSpan* freelist;	/// 跨度链表对象池的可用跨度对象列表
 ...
+};
+
+
+struct rcSpan
+{
+	unsigned int smin : RC_SPAN_HEIGHT_BITS; /// 跨度的最小值，smin &lt; smax
+	unsigned int smax : RC_SPAN_HEIGHT_BITS; /// 跨度的最大值，smax &lt;= RC_SPAN_MAX_HEIGHT
+	unsigned int area : 6;                   /// 跨度所属区域 id
+	rcSpan* next;                            /// 下一个更高的跨度
 };
 </code></pre><ul>
 <li>其中，<code>spans</code> 数组长度为 <code>width * height</code> ，每个元素指向一个 <code>span</code> 链表，数据存储比较离散，不利于后续处理过程频繁访问，因此需要转换成更加紧凑的形式，即紧密高度场，其结构如下：</li>
@@ -959,10 +968,483 @@ struct rcCompactHeightfield
 	
 	...
 };
-</code></pre><h3 id=参考>参考</h3>
-<ul>
-<li><a href=https://github.com/recastnavigation/recastnavigation>Github - Recast Navigation</a></li>
+
+
+struct rcCompactCell
+{
+	unsigned int index : 24;	/// 当前单元格的首个跨度在的索引 id
+	unsigned int count : 8;		/// 当前单元格的跨度数量
+};
+
+struct rcCompactSpan
+{
+	unsigned short y;			/// 当前跨度的地面高度，即 smax
+	unsigned short reg;			/// 当前跨度所属的地区 id
+	unsigned int con : 24;		/// 连通的邻居数据
+	unsigned int h : 8;			/// 下一跨度的天花板到当前跨度的地面高度差，即 next-&gt;smin - smax
+};
+</code></pre><ul>
+<li></li>
 </ul>
+<p>&mldr;</p>
+<ul>
+<li>
+<p>建立紧密高度场的方法 <code>rcBuildCompactHeightfield</code> 如下：
+bool rcBuildCompactHeightfield(rcContext* context, const int walkableHeight, const int walkableClimb,
+const rcHeightfield& heightfield, rcCompactHeightfield& compactHeightfield)
+{
+&mldr;</p>
+<p>const int MAX_HEIGHT = 0xffff;</p>
+<p>// Fill in cells and spans.
+int currentCellIndex = 0;
+const int numColumns = xSize * zSize;
+for (int columnIndex = 0; columnIndex &lt; numColumns; ++columnIndex)
+{
+const rcSpan* span = heightfield.spans[columnIndex];</p>
+<pre><code>  // If there are no spans at this cell, just leave the data to index=0, count=0.
+  if (span == NULL)
+  {
+  	continue;
+  }
+
+  rcCompactCell&amp; cell = compactHeightfield.cells[columnIndex];
+  cell.index = currentCellIndex;
+  cell.count = 0;
+
+  for (; span != NULL; span = span-&gt;next)
+  {
+  	if (span-&gt;area != RC_NULL_AREA)
+  	{
+  		const int bot = (int)span-&gt;smax;
+  		const int top = span-&gt;next ? (int)span-&gt;next-&gt;smin : MAX_HEIGHT;
+  		compactHeightfield.spans[currentCellIndex].y = (unsigned short)rcClamp(bot, 0, 0xffff);
+  		compactHeightfield.spans[currentCellIndex].h = (unsigned char)rcClamp(top - bot, 0, 0xff);
+  		compactHeightfield.areas[currentCellIndex] = span-&gt;area;
+  		currentCellIndex++;
+  		cell.count++;
+  	}
+  }
+</code></pre>
+<p>}</p>
+<p>// Find neighbour connections.
+const int MAX_LAYERS = RC_NOT_CONNECTED - 1;
+int maxLayerIndex = 0;
+const int zStride = xSize; // for readability
+for (int z = 0; z &lt; zSize; ++z)
+{
+for (int x = 0; x &lt; xSize; ++x)
+{
+const rcCompactCell& cell = compactHeightfield.cells[x + z * zStride];
+for (int i = (int)cell.index, ni = (int)(cell.index + cell.count); i &lt; ni; ++i)
+{
+rcCompactSpan& span = compactHeightfield.spans[i];</p>
+<pre><code>  		for (int dir = 0; dir &lt; 4; ++dir)
+  		{
+  			rcSetCon(span, dir, RC_NOT_CONNECTED);
+  			const int neighborX = x + rcGetDirOffsetX(dir);
+  			const int neighborZ = z + rcGetDirOffsetY(dir);
+  			// First check that the neighbour cell is in bounds.
+  			if (neighborX &lt; 0 || neighborZ &lt; 0 || neighborX &gt;= xSize || neighborZ &gt;= zSize)
+  			{
+  				continue;
+  			}
+
+  			// Iterate over all neighbour spans and check if any of the is
+  			// accessible from current cell.
+  			const rcCompactCell&amp; neighborCell = compactHeightfield.cells[neighborX + neighborZ * zStride];
+  			for (int k = (int)neighborCell.index, nk = (int)(neighborCell.index + neighborCell.count); k &lt; nk; ++k)
+  			{
+  				const rcCompactSpan&amp; neighborSpan = compactHeightfield.spans[k];
+  				const int bot = rcMax(span.y, neighborSpan.y);
+  				const int top = rcMin(span.y + span.h, neighborSpan.y + neighborSpan.h);
+
+  				// Check that the gap between the spans is walkable,
+  				// and that the climb height between the gaps is not too high.
+  				if ((top - bot) &gt;= walkableHeight &amp;&amp; rcAbs((int)neighborSpan.y - (int)span.y) &lt;= walkableClimb)
+  				{
+  					// Mark direction as walkable.
+  					const int layerIndex = k - (int)neighborCell.index;
+  					if (layerIndex &lt; 0 || layerIndex &gt; MAX_LAYERS)
+  					{
+  						maxLayerIndex = rcMax(maxLayerIndex, layerIndex);
+  						continue;
+  					}
+  					rcSetCon(span, dir, layerIndex);
+  					break;
+  				}
+  			}
+  		}
+  	}
+  }
+</code></pre>
+<p>}</p>
+<p>if (maxLayerIndex > MAX_LAYERS)
+{
+context->log(RC_LOG_ERROR, &ldquo;rcBuildCompactHeightfield: Heightfield has too many layers %d (max: %d)&rdquo;,
+maxLayerIndex, MAX_LAYERS);
+}</p>
+<p>return true;
+}</p>
+</li>
+</ul>
+<p>&mldr;</p>
+<pre tabindex=0><code>- 建立过程，每个 `cell` 记录了其中首个 `span` 的索引及 `span` 的数量。所有 `cell` 的 `span` 都存入到 `compactHeightfield.spans` 中，其中 `y` 为当前 `span` 的地面高度 `span-&gt;smax`，`h` 为下一 `span` 的天花板到当前 `span` 地面的高度差 `span-&gt;next-&gt;smin - span-&gt;smax`。
+- 除了设置基础信息外，还需要计算每个 `span` 的连通信息。每个 `span` 会和邻居 `cell` 的 `spans` 列表进行计算，当前 `span` 和邻居连通，需要满足以下条件：
+	- 当前 `span` 和邻居中的任意 `spans[index]` ，两者的天花板高度 `y + h` 最小值和地面高度 `y` 最大值之差，不小于 `walkableHeight`，即存在一个邻居 `span` 可以从当前 `span` 通行。
+	- 当前 `span` 和邻居中的任意 `spans[index]` ，两者的地面高度 `y` 之差，不大于 `walkableClimb`，即存在一个邻居 `span` 可以从当前 `span` 跨过。
+- 设置连通的方法 `rcSetCon` 的实现如下：
+</code></pre><p>// Recast/Include/Recast.h</p>
+<p>&mldr;</p>
+<p>inline void rcSetCon(rcCompactSpan& span, int direction, int neighborIndex)
+{
+const unsigned int shift = (unsigned int)direction * 6;
+const unsigned int con = span.con;
+span.con = (con & ~(0x3f &#171; shift)) | (((unsigned int)neighborIndex & 0x3f) &#171; shift);
+}</p>
+<p>&mldr;</p>
+<pre tabindex=0><code>- 方向为左上右下，分别对应 0 ~ 3 ，每个方向使用一个 6 位的值，代表在邻居 `cell` 中的第几个 `span` ，每个 `cell` 最多能有 62 个 `span` 。
+##### 收缩可行走区域
+- 为了防止移动过程由于太靠近障碍边缘而出现问题，需要将可行走区域沿着障碍边缘进行收缩。收缩过程由 `rcErodeWalkableArea` 方法实现，主要分为三个步骤：
+	- 计算整个区域的边缘 `span` ，其和边缘的距离 `distanceToBoundary[spanIndex]` 设置为 0。
+	- 计算每个非边缘 `span` 和边缘的距离。
+	- 将距离小于阈值（`walkableRadius * 2`）的 `compactHeightfield.areas[spanIndex]` 设置为不可通行。
+- 计算区域边缘的实现如下：
+</code></pre><p>// Recast/Source/RecastArea.cpp</p>
+<p>&mldr;
+bool rcErodeWalkableArea(rcContext* context, const int erosionRadius, rcCompactHeightfield& compactHeightfield)
+{
+rcAssert(context != NULL);</p>
+<pre><code>const int xSize = compactHeightfield.width;
+const int zSize = compactHeightfield.height;
+const int&amp; zStride = xSize; // For readability
+
+rcScopedTimer timer(context, RC_TIMER_ERODE_AREA);
+
+unsigned char* distanceToBoundary = (unsigned char*)rcAlloc(sizeof(unsigned char) * compactHeightfield.spanCount,
+                                                            RC_ALLOC_TEMP);
+if (!distanceToBoundary)
+{
+	context-&gt;log(RC_LOG_ERROR, &quot;erodeWalkableArea: Out of memory 'dist' (%d).&quot;, compactHeightfield.spanCount);
+	return false;
+}
+memset(distanceToBoundary, 0xff, sizeof(unsigned char) * compactHeightfield.spanCount);
+
+// Mark boundary cells.
+for (int z = 0; z &lt; zSize; ++z)
+{
+	for (int x = 0; x &lt; xSize; ++x)
+	{
+		const rcCompactCell&amp; cell = compactHeightfield.cells[x + z * zStride];
+		for (int spanIndex = (int)cell.index, maxSpanIndex = (int)(cell.index + cell.count); spanIndex &lt; maxSpanIndex; ++spanIndex)
+		{
+			if (compactHeightfield.areas[spanIndex] == RC_NULL_AREA)
+			{
+				distanceToBoundary[spanIndex] = 0;
+				continue;
+			}
+			const rcCompactSpan&amp; span = compactHeightfield.spans[spanIndex];
+
+			// Check that there is a non-null adjacent span in each of the 4 cardinal directions.
+			int neighborCount = 0;
+			for (int direction = 0; direction &lt; 4; ++direction)
+			{
+				const int neighborConnection = rcGetCon(span, direction);
+				if (neighborConnection == RC_NOT_CONNECTED)
+				{
+					break;
+				}
+				
+				const int neighborX = x + rcGetDirOffsetX(direction);
+				const int neighborZ = z + rcGetDirOffsetY(direction);
+				const int neighborSpanIndex = (int)compactHeightfield.cells[neighborX + neighborZ * zStride].index + neighborConnection;
+				
+				if (compactHeightfield.areas[neighborSpanIndex] == RC_NULL_AREA)
+				{
+					break;
+				}
+				neighborCount++;
+			}
+			
+			// At least one missing neighbour, so this is a boundary cell.
+			if (neighborCount != 4)
+			{
+				distanceToBoundary[spanIndex] = 0;
+			}
+		}
+	}
+}
+
+...
+</code></pre>
+<p>}
+&mldr;</p>
+<pre tabindex=0><code>- 首先建立了 `distanceToBoundary` 用于记录每个 `span` 和边缘的距离。其中不可行走的 `span`（`area` 为 `RC_NULL_AREA`）即为边缘，将其 `distanceToBoundary[spanIndex]` 设为 0。检查四个邻居方向，如果有一个方向不可行走，则将该 `span` 也视为边缘，设置其距离为 0。
+- 得到所有边缘数据后，就需要计算每个 `span` 和边缘的距离，计算过程如下：
+</code></pre><p>// Recast/Source/RecastArea.cpp</p>
+<p>&mldr;
+bool rcErodeWalkableArea(rcContext* context, const int erosionRadius, rcCompactHeightfield& compactHeightfield)
+{
+&mldr;</p>
+<pre><code>unsigned char newDistance;
+
+// Pass 1
+for (int z = 0; z &lt; zSize; ++z)
+{
+	for (int x = 0; x &lt; xSize; ++x)
+	{
+		const rcCompactCell&amp; cell = compactHeightfield.cells[x + z * zStride];
+		const int maxSpanIndex = (int)(cell.index + cell.count);
+		for (int spanIndex = (int)cell.index; spanIndex &lt; maxSpanIndex; ++spanIndex)
+		{
+			const rcCompactSpan&amp; span = compactHeightfield.spans[spanIndex];
+
+			if (rcGetCon(span, 0) != RC_NOT_CONNECTED)
+			{
+				// (-1,0)
+				const int aX = x + rcGetDirOffsetX(0);
+				const int aY = z + rcGetDirOffsetY(0);
+				const int aIndex = (int)compactHeightfield.cells[aX + aY * xSize].index + rcGetCon(span, 0);
+				const rcCompactSpan&amp; aSpan = compactHeightfield.spans[aIndex];
+				newDistance = (unsigned char)rcMin((int)distanceToBoundary[aIndex] + 2, 255);
+				if (newDistance &lt; distanceToBoundary[spanIndex])
+				{
+					distanceToBoundary[spanIndex] = newDistance;
+				}
+
+				// (-1,-1)
+				if (rcGetCon(aSpan, 3) != RC_NOT_CONNECTED)
+				{
+					const int bX = aX + rcGetDirOffsetX(3);
+					const int bY = aY + rcGetDirOffsetY(3);
+					const int bIndex = (int)compactHeightfield.cells[bX + bY * xSize].index + rcGetCon(aSpan, 3);
+					newDistance = (unsigned char)rcMin((int)distanceToBoundary[bIndex] + 3, 255);
+					if (newDistance &lt; distanceToBoundary[spanIndex])
+					{
+						distanceToBoundary[spanIndex] = newDistance;
+					}
+				}
+			}
+			if (rcGetCon(span, 3) != RC_NOT_CONNECTED)
+			{
+				// (0,-1)
+				const int aX = x + rcGetDirOffsetX(3);
+				const int aY = z + rcGetDirOffsetY(3);
+				const int aIndex = (int)compactHeightfield.cells[aX + aY * xSize].index + rcGetCon(span, 3);
+				const rcCompactSpan&amp; aSpan = compactHeightfield.spans[aIndex];
+				newDistance = (unsigned char)rcMin((int)distanceToBoundary[aIndex] + 2, 255);
+				if (newDistance &lt; distanceToBoundary[spanIndex])
+				{
+					distanceToBoundary[spanIndex] = newDistance;
+				}
+
+				// (1,-1)
+				if (rcGetCon(aSpan, 2) != RC_NOT_CONNECTED)
+				{
+					const int bX = aX + rcGetDirOffsetX(2);
+					const int bY = aY + rcGetDirOffsetY(2);
+					const int bIndex = (int)compactHeightfield.cells[bX + bY * xSize].index + rcGetCon(aSpan, 2);
+					newDistance = (unsigned char)rcMin((int)distanceToBoundary[bIndex] + 3, 255);
+					if (newDistance &lt; distanceToBoundary[spanIndex])
+					{
+						distanceToBoundary[spanIndex] = newDistance;
+					}
+				}
+			}
+		}
+	}
+}
+
+// Pass 2
+for (int z = zSize - 1; z &gt;= 0; --z)
+{
+	for (int x = xSize - 1; x &gt;= 0; --x)
+	{
+		const rcCompactCell&amp; cell = compactHeightfield.cells[x + z * zStride];
+		const int maxSpanIndex = (int)(cell.index + cell.count);
+		for (int spanIndex = (int)cell.index; spanIndex &lt; maxSpanIndex; ++spanIndex)
+		{
+			const rcCompactSpan&amp; span = compactHeightfield.spans[spanIndex];
+
+			if (rcGetCon(span, 2) != RC_NOT_CONNECTED)
+			{
+				// (1,0)
+				const int aX = x + rcGetDirOffsetX(2);
+				const int aY = z + rcGetDirOffsetY(2);
+				const int aIndex = (int)compactHeightfield.cells[aX + aY * xSize].index + rcGetCon(span, 2);
+				const rcCompactSpan&amp; aSpan = compactHeightfield.spans[aIndex];
+				newDistance = (unsigned char)rcMin((int)distanceToBoundary[aIndex] + 2, 255);
+				if (newDistance &lt; distanceToBoundary[spanIndex])
+				{
+					distanceToBoundary[spanIndex] = newDistance;
+				}
+
+				// (1,1)
+				if (rcGetCon(aSpan, 1) != RC_NOT_CONNECTED)
+				{
+					const int bX = aX + rcGetDirOffsetX(1);
+					const int bY = aY + rcGetDirOffsetY(1);
+					const int bIndex = (int)compactHeightfield.cells[bX + bY * xSize].index + rcGetCon(aSpan, 1);
+					newDistance = (unsigned char)rcMin((int)distanceToBoundary[bIndex] + 3, 255);
+					if (newDistance &lt; distanceToBoundary[spanIndex])
+					{
+						distanceToBoundary[spanIndex] = newDistance;
+					}
+				}
+			}
+			if (rcGetCon(span, 1) != RC_NOT_CONNECTED)
+			{
+				// (0,1)
+				const int aX = x + rcGetDirOffsetX(1);
+				const int aY = z + rcGetDirOffsetY(1);
+				const int aIndex = (int)compactHeightfield.cells[aX + aY * xSize].index + rcGetCon(span, 1);
+				const rcCompactSpan&amp; aSpan = compactHeightfield.spans[aIndex];
+				newDistance = (unsigned char)rcMin((int)distanceToBoundary[aIndex] + 2, 255);
+				if (newDistance &lt; distanceToBoundary[spanIndex])
+				{
+					distanceToBoundary[spanIndex] = newDistance;
+				}
+
+				// (-1,1)
+				if (rcGetCon(aSpan, 0) != RC_NOT_CONNECTED)
+				{
+					const int bX = aX + rcGetDirOffsetX(0);
+					const int bY = aY + rcGetDirOffsetY(0);
+					const int bIndex = (int)compactHeightfield.cells[bX + bY * xSize].index + rcGetCon(aSpan, 0);
+					newDistance = (unsigned char)rcMin((int)distanceToBoundary[bIndex] + 3, 255);
+					if (newDistance &lt; distanceToBoundary[spanIndex])
+					{
+						distanceToBoundary[spanIndex] = newDistance;
+					}
+				}
+			}
+		}
+	}
+}
+
+...
+</code></pre>
+<p>}
+&mldr;</p>
+<pre tabindex=0><code>- 计算 `span` 到边缘的最小距离，最简单的做法就是计算其到每个边缘的距离，再从中取出最小值，显然效率非常低。这里使用了 [8SSEDT 光栅扫描算法](https://fallingxun.github.io/post/algorithm/algorithm_edt/) 来优化计算，做了两次扫描，具体流程为：
+	- 从上到下扫描，获取左、左上、上、右上邻居 `span` 的距离，分别加上其到当前 `span` 的距离，取其中最小值作为当前 `span` 的距离。
+	- 从下到上扫描，获取右、右下、下、左下邻居 `span` 的距离，分别加上其到当前 `span` 的距离，取其中最小值作为当前 `span` 的距离。
+- 其中，水平竖直方向的邻居和当前 `span` 的距离设置为 2，对角线邻居和当前 `span` 的距离设置为 3，对角线邻居和水平竖直邻居的距离比为 1.5，接近 1.414，通过近似的结果来避免过程计算中出现频繁开根号的情况。扫描完成后，即可得到整个区域的距离场。
+- 确定每个 `span` 的距离后，即可通过比较距离和阈值的大小，来确定是否可通行，实现如下：
+</code></pre><p>// Recast/Source/RecastArea.cpp</p>
+<p>&mldr;
+bool rcErodeWalkableArea(rcContext* context, const int erosionRadius, rcCompactHeightfield& compactHeightfield)
+{
+&mldr;</p>
+<pre><code>const unsigned char minBoundaryDistance = (unsigned char)(erosionRadius * 2);
+for (int spanIndex = 0; spanIndex &lt; compactHeightfield.spanCount; ++spanIndex)
+{
+	if (distanceToBoundary[spanIndex] &lt; minBoundaryDistance)
+	{
+		compactHeightfield.areas[spanIndex] = RC_NULL_AREA;
+	}
+}
+
+rcFree(distanceToBoundary);
+
+return true;
+</code></pre>
+<p>}
+&mldr;</p>
+<pre tabindex=0><code>- 为了尽可能远离边缘，使用两倍的 `walkableRadius` 作为阈值划分，小于这个值的，该 `span` 的 `area` 都要标记为不可通行。
+##### 标记凸多边形区域
+- 地图编辑过程，可能会预先对一些区域进行标记，如：不可通行、特殊区域（水池、草地等），此时则需要通过 `rcMarkConvexPolyArea` 方法将这些区域更新到 `area` 中，其实现如下：
+</code></pre><p>// Recast/Source/RecastArea.cpp</p>
+<p>&mldr;
+void rcMarkConvexPolyArea(rcContext* context, const float* verts, const int numVerts,
+const float minY, const float maxY, unsigned char areaId,
+rcCompactHeightfield& compactHeightfield)
+{
+rcAssert(context);</p>
+<pre><code>rcScopedTimer timer(context, RC_TIMER_MARK_CONVEXPOLY_AREA);
+
+const int xSize = compactHeightfield.width;
+const int zSize = compactHeightfield.height;
+const int zStride = xSize; // For readability
+
+// Compute the bounding box of the polygon
+float bmin[3];
+float bmax[3];
+rcVcopy(bmin, verts);
+rcVcopy(bmax, verts);
+for (int i = 1; i &lt; numVerts; ++i)
+{
+	rcVmin(bmin, &amp;verts[i * 3]);
+	rcVmax(bmax, &amp;verts[i * 3]);
+}
+bmin[1] = minY;
+bmax[1] = maxY;
+
+// Compute the grid footprint of the polygon 
+int minx = (int)((bmin[0] - compactHeightfield.bmin[0]) / compactHeightfield.cs);
+int miny = (int)((bmin[1] - compactHeightfield.bmin[1]) / compactHeightfield.ch);
+int minz = (int)((bmin[2] - compactHeightfield.bmin[2]) / compactHeightfield.cs);
+int maxx = (int)((bmax[0] - compactHeightfield.bmin[0]) / compactHeightfield.cs);
+int maxy = (int)((bmax[1] - compactHeightfield.bmin[1]) / compactHeightfield.ch);
+int maxz = (int)((bmax[2] - compactHeightfield.bmin[2]) / compactHeightfield.cs);
+
+// Early-out if the polygon lies entirely outside the grid.
+if (maxx &lt; 0) { return; }
+if (minx &gt;= xSize) { return; }
+if (maxz &lt; 0) { return; }
+if (minz &gt;= zSize) { return; }
+
+// Clamp the polygon footprint to the grid
+if (minx &lt; 0) { minx = 0; }
+if (maxx &gt;= xSize) { maxx = xSize - 1; }
+if (minz &lt; 0) { minz = 0; }
+if (maxz &gt;= zSize) { maxz = zSize - 1; }
+
+// TODO: Optimize.
+for (int z = minz; z &lt;= maxz; ++z)
+{
+	for (int x = minx; x &lt;= maxx; ++x)
+	{
+		const rcCompactCell&amp; cell = compactHeightfield.cells[x + z * zStride];
+		const int maxSpanIndex = (int)(cell.index + cell.count);
+		for (int spanIndex = (int)cell.index; spanIndex &lt; maxSpanIndex; ++spanIndex)
+		{
+			rcCompactSpan&amp; span = compactHeightfield.spans[spanIndex];
+
+			// Skip if span is removed.
+			if (compactHeightfield.areas[spanIndex] == RC_NULL_AREA)
+			{
+				continue;
+			}
+
+			// Skip if y extents don't overlap.
+			if ((int)span.y &lt; miny || (int)span.y &gt; maxy)
+			{
+				continue;
+			}
+
+			const float point[] = {
+				compactHeightfield.bmin[0] + ((float)x + 0.5f) * compactHeightfield.cs,
+				0,
+				compactHeightfield.bmin[2] + ((float)z + 0.5f) * compactHeightfield.cs
+			};
+			
+			if (pointInPoly(numVerts, verts, point))
+			{
+				compactHeightfield.areas[spanIndex] = areaId;
+			}
+		}
+	}
+}
+</code></pre>
+<p>}</p>
+<p>&mldr;</p>
+<pre tabindex=0><code>- 根据多边形的顶点，计算出多边形的包围盒信息，找到紧密高度场中对应的 `cell` ，遍历其中的 `span` ，找到可通行且和包围盒相交的 `span`，计算其中心点在 xz 平面上的点。如果该点在多边形的投影面内，则表示该 `span` 属于当前的多边形，将其 `area` 设置为多边形的 `areaId` 。
+##### 建立地区
+###### 分水岭划分
+###### 单调划分
+###### 层划分
+### 参考
+- [Github - Recast Navigation](https://github.com/recastnavigation/recastnavigation) </code></pre>
 <hr>
 <ul class=pager>
 <li class=previous>
