@@ -7,17 +7,17 @@
 <meta property="og:type" content="article">
 <meta property="og:image" content="https://fallingxun.github.io//">
 <meta property="twitter:image" content="https://fallingxun.github.io//">
-<meta name=title content="算法篇 — 曲面细分（Mesh Subdivision）">
-<meta property="og:title" content="算法篇 — 曲面细分（Mesh Subdivision）">
-<meta property="twitter:title" content="算法篇 — 曲面细分（Mesh Subdivision）">
+<meta name=title content="空间数据结构 — BSP">
+<meta property="og:title" content="空间数据结构 — BSP">
+<meta property="twitter:title" content="空间数据结构 — BSP">
 <meta name=description content>
 <meta property="og:description" content>
 <meta property="twitter:description" content>
 <meta property="twitter:card" content="summary">
 <meta name=keyword content>
 <link rel="shortcut icon" href=/img/favicon.ico>
-<title>算法篇 — 曲面细分（Mesh Subdivision）-</title>
-<link rel=canonical href=/post/algorithm/algorithm_meshsubdivision/>
+<title>空间数据结构 — BSP-</title>
+<link rel=canonical href=/todo/spatialdatastructures_bsp/>
 <link rel=stylesheet href=/css/iDisqus.min.css>
 <link rel=stylesheet href=/css/bootstrap.min.css>
 <link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
@@ -82,13 +82,13 @@
 Algorithm
 </a>
 </div>
-<h1>算法篇 — 曲面细分（Mesh Subdivision）</h1>
+<h1>空间数据结构 — BSP</h1>
 <h2 class=subheading></h2>
 <span class=meta>
 Posted by
 Xun
 on
-Monday, June 20, 2022
+Friday, June 2, 2023
 </span>
 </div>
 </div>
@@ -101,32 +101,15 @@ Monday, June 20, 2022
 <div class="col-lg-8 col-lg-offset-2
 col-md-10 col-md-offset-1
 post-container">
-<p>出于性能考虑，模型的面数一般都会有一定限制。然而，当靠近观察时，就能明显看到有很多不光滑的地方。曲面细分方法，通过将原来的面进行调整，可以使原来的面变得平滑，从而提升表现效果。</p>
-<h3 id=简介>简介</h3>
-<ul>
-<li>曲面细分方法，就是将原来的一个面，切分成更细小的多个面，然后调整切分后的面的位置，使得这些新的面和周围的面变得更加平滑。当我们需要近距离观察某个物体的时候，如果保持现有的网格，则会看到很多块状的表现，进行细分后，原来的块状效果大部分都能变成曲面，看起来会更加自然。</li>
-<li>曲面细分算法有：
-<ul>
-<li>Loop 算法</li>
-<li>Catmull-Clark算法</li>
-</ul>
-</li>
-</ul>
-<h3 id=loop-算法>Loop 算法</h3>
-<ul>
-<li>对于所有面都为三角面的模型，常用的曲面细分算法就是 Loop 算法，
-<a href=https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/thesis-10.pdf>https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/thesis-10.pdf</a></li>
-</ul>
-<h3 id=catmull-clark-算法>Catmull-Clark 算法</h3>
-<p><a href=https://people.eecs.berkeley.edu/~sequin/CS284/PAPERS/CatmullClark_SDSurf.pdf>https://people.eecs.berkeley.edu/~sequin/CS284/PAPERS/CatmullClark_SDSurf.pdf</a></p>
+<p>Binary Space Partitioning</p>
 <hr>
 <ul class=pager>
 <li class=previous>
-<a href=/post/algorithm/algorithm_edt/ data-toggle=tooltip data-placement=top title="算法篇 — EDT 欧式距离变换">&larr;
+<a href=/todo/algorithm_meshsubdivision/ data-toggle=tooltip data-placement=top title="算法篇 — 曲面细分（Mesh Subdivision）">&larr;
 Previous Post</a>
 </li>
 <li class=next>
-<a href=/post/algorithm/algorithm_kmp/ data-toggle=tooltip data-placement=top title="算法篇 — KMP 字符串匹配">Next
+<a href=/todo/spatialdatastructures_scenegraphs/ data-toggle=tooltip data-placement=top title="空间数据结构 — 场景图">Next
 Post &rarr;</a>
 </li>
 </ul>
