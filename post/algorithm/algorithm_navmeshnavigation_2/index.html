@@ -1102,7 +1102,7 @@ const unsigned int con = span.con;
 span.con = (con & ~(0x3f &#171; shift)) | (((unsigned int)neighborIndex & 0x3f) &#171; shift);
 }</p>
 <p>&mldr;</p>
-<pre tabindex=0><code>- 方向为左上右下，分别对应 0 ~ 3 ，每个方向使用一个 6 位的值，代表在邻居 `cell` 中的第几个 `span` ，每个 `cell` 最多能有 62 个 `span` 。
+<pre tabindex=0><code>- 方向为左上右下，分别对应 0 ~ 3 ，每个方向使用一个 6 位的值，代表在邻居 `cell` 中的第几个 `span` ，每个 `cell` 最多能有 62 个 `span` 。某个方向设置了连通后，则不再检查该方向后续的 `span`，即取首个可连通的 `span`。
 ##### 收缩可行走区域
 - 为了防止移动过程由于太靠近障碍边缘而出现问题，需要将可行走区域沿着障碍边缘进行收缩。收缩过程由 `rcErodeWalkableArea` 方法实现，主要分为三个步骤：
 	- 计算整个区域的边缘 `span` ，其和边缘的距离 `distanceToBoundary[spanIndex]` 设置为 0。
@@ -2039,10 +2039,26 @@ return count &gt; 0;
 	- 检查 `span` 的八个邻居，如果没有分配过 `region` 或者 `region` 和传入的 `regionId` 相同，则将当前 `span` 的 `region` 设置为传入的 `regionId`，距离设置为 0 。
 	- 如果当前 `span` 设置了 `region`，则将四个邻居中，可行走且大于 `level - 2`，同时还未分配 `region` 的 `span`，设置其 `region` 为 `regionId`，距离设置为 0。
 	- 将处理的邻居 `span` 放入 `stack` 中，循环处理 `stack`，实现传播，直到 `stack` 处理完毕。
-- `mergeAndFilterRegions` 的实现如下：
+- `mergeAndFilterRegions` 使用了新的结构 `rcRegion` 来进行处理，其实现如下：
 </code></pre><p>// Recast/Source/RecastRegion.cpp</p>
-<p>&mldr;
-static bool mergeAndFilterRegions(rcContext* ctx, int minRegionArea, int mergeRegionSize,
+<p>&mldr;</p>
+<p>struct rcRegion
+{
+&mldr;</p>
+<pre><code>int spanCount;					// 当前地区的所有跨度的数量
+unsigned short id;				// 当前地区的 id
+unsigned char areaType;			// 当前地区的区域类型
+bool remap;						// 是否需要重新映射地区 id
+bool visited;					// 是否访问处理过
+bool overlap;					// 是否重叠，即在同一个单元格上存在多个相同地区的跨度
+bool connectsToBorder;			// 是否连接到 borderSize 范围内的边缘
+unsigned short ymin, ymax;
+rcTempVector&lt;int&gt; connections;	// 地区的轮廓的地区 id 连接
+rcTempVector&lt;int&gt; floors;		// 和当前地区存在重叠（即处在同一个单元格）的所有其他地区 id
+</code></pre>
+<p>};</p>
+<p>&mldr;</p>
+<p>static bool mergeAndFilterRegions(rcContext* ctx, int minRegionArea, int mergeRegionSize,
 unsigned short& maxRegionId,
 rcCompactHeightfield& chf,
 unsigned short* srcReg, rcTempVector<int>& overlaps)
@@ -2288,7 +2304,241 @@ return true;
 </code></pre>
 <p>}</p>
 <p>&mldr;</p>
-<pre tabindex=0><code>###### 单调划分
+<pre tabindex=0><code>- `mergeAndFilterRegions` 主要分为几个步骤：
+	- 寻找 `region` 的轮廓及其连接信息。
+		- 为每一个 `regionId` 创建一个 `rcRegion`，遍历所有 `cell` 上的所有 `span` 进行处理，包括：
+			- 将同一 `regionId` 的 `span` 数量统计到 `reg.spanCount` 中。
+			- 检查当前 `cell` 上是否有其他 `span` 的 `regionId` 和当前 `regionId` 相同，如果有则设置 `reg.overlap` 为 `true`，即有重叠。
+			- 将当前 `cell` 上所有 `span` 的 `regionId`，加入到 `reg.floors` 中。
+			- 设置当前 `reg.areaType`。
+			- 通过 `isSolidEdge` 方法，检查四个邻居，如果有一个邻居的 `regionId` 是否为其他 `region` 或者不可行走，则当前 `span` 是当前 `region` 的边界。
+			- 如果当前 `span` 是边界，则通过 `walkContour` 方法找到当前 `region` 的轮廓，并计算轮廓的 `region` 连接信息。 
+	- 移除过小的 `region`。
+		- 遍历所有的 `region`，对每个 `region` 进行检查，主要流程：
+			- 设置 `spanCount` 总数量为 0。
+			- 将当前 `regionId` 加入到 `stack` 中，迭代处理。
+				- 从 `stack` 中取出 `creg`，将当前 `creg.spanCount` 数量加到 `spanCount`。
+				- 遍历 `creg.connections`，对其中每一个 `neireg` 进行检查。
+					- 如果 `neireg` 为 `borderSize` 的范围，则设置 `connectsToBorder` 为 `true`，代表连接到边界。
+					- 如果 `neireg` 已经访问过，则不再处理。
+					- 将 `neireg` 标记为已经访问过，并将 `neireg` 的 `regionId` 加入到 `stack` 中。
+				- 继续进行 `stack` 的迭代处理，直到 `stack` 处理完成。
+		- 如果 `spanCount` 小于  `minRegionArea`，并且 `connectsToBorder` 为 `false`，则代表当前 `regionId` 及其所有 `connections` 的 `regionId` 组成的整体区域太小，并且没有连接到边界，则将其移除，即当前 `regionId` 以及 `connections` 的 `spanCount` 和 `regionId` 都设置为 0。但如果连接到边界，因为无法准确估计其大小，可能导致移除必要的区域，所以会保留。
+		- 如果移除了 `region` ，后续的 `region` 在计算时会直接跳过。计算总数量时，已经移除的 `region` 原本的数量也不会计入。
+	- 合并小的 `region` 到邻居 `region` 中。
+		- 遍历所有的 `region`，对每个 `region` 进行检查，主要流程：
+			- 如果 `region` 被移除（`reg.spanCount` 为 0）或者 `region` 有重叠（`reg.overlap` 为 `true`），则不处理。
+			- 从 `connections` 中，通过依次将两个 `region` 设置为源 `region`，调用两次 `canMergeWithRegion` 方法，找到两者相互都能合并的 `region`。
+			- 从所有能合并的 `region` 中取 `spanCount` 最小的作为目标 `region`，通过 `mergeRegions` 方法进行合并。
+			- 合并成功后，将当前 `region`、`connections`、`floors` 中的 `regionId` 都更换目标的 `regionId`。
+		- 所有 `region` 处理完成后，如果有成功合并过，则再重复执行一次处理，直到不再有可以合并的 `region`。
+	- 重新映射 `regionId`。
+		- 遍历所有的 `region`，从 1 开始设置剩余的 `region`，将 `regionId` 映射为新的区间。
+	- 应用新的 `regionId`。
+		- 遍历 `srcReg`，使用新的 `regionId` 进行替换。
+	- 记录所有重叠的 `regionId`。
+		- 使用新的 `regionId`，记录所有有重叠的 `region`。 
+- `walkContour` 方法的实现如下：
+</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
+<p>&mldr;
+static void walkContour(int x, int y, int i, int dir,
+rcCompactHeightfield& chf,
+const unsigned short* srcReg,
+rcTempVector<int>& cont)
+{
+int startDir = dir;
+int starti = i;</p>
+<pre><code>const rcCompactSpan&amp; ss = chf.spans[i];
+unsigned short curReg = 0;
+if (rcGetCon(ss, dir) != RC_NOT_CONNECTED)
+{
+	const int ax = x + rcGetDirOffsetX(dir);
+	const int ay = y + rcGetDirOffsetY(dir);
+	const int ai = (int)chf.cells[ax+ay*chf.width].index + rcGetCon(ss, dir);
+	curReg = srcReg[ai];
+}
+cont.push_back(curReg);
+		
+int iter = 0;
+while (++iter &lt; 40000)
+{
+	const rcCompactSpan&amp; s = chf.spans[i];
+	
+	if (isSolidEdge(chf, srcReg, x, y, i, dir))
+	{
+		// Choose the edge corner
+		unsigned short r = 0;
+		if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
+		{
+			const int ax = x + rcGetDirOffsetX(dir);
+			const int ay = y + rcGetDirOffsetY(dir);
+			const int ai = (int)chf.cells[ax+ay*chf.width].index + rcGetCon(s, dir);
+			r = srcReg[ai];
+		}
+		if (r != curReg)
+		{
+			curReg = r;
+			cont.push_back(curReg);
+		}
+		
+		dir = (dir+1) &amp; 0x3;  // Rotate CW
+	}
+	else
+	{
+		int ni = -1;
+		const int nx = x + rcGetDirOffsetX(dir);
+		const int ny = y + rcGetDirOffsetY(dir);
+		if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
+		{
+			const rcCompactCell&amp; nc = chf.cells[nx+ny*chf.width];
+			ni = (int)nc.index + rcGetCon(s, dir);
+		}
+		if (ni == -1)
+		{
+			// Should not happen.
+			return;
+		}
+		x = nx;
+		y = ny;
+		i = ni;
+		dir = (dir+3) &amp; 0x3;	// Rotate CCW
+	}
+	
+	if (starti == i &amp;&amp; startDir == dir)
+	{
+		break;
+	}
+}
+
+// Remove adjacent duplicates.
+if (cont.size() &gt; 1)
+{
+	for (int j = 0; j &lt; cont.size(); )
+	{
+		int nj = (j+1) % cont.size();
+		if (cont[j] == cont[nj])
+		{
+			for (int k = j; k &lt; cont.size()-1; ++k)
+				cont[k] = cont[k+1];
+			cont.pop_back();
+		}
+		else
+			++j;
+	}
+}
+</code></pre>
+<p>}</p>
+<p>&mldr;</p>
+<pre tabindex=0><code>- `walkContour` 从边界 `span` 出发寻找轮廓和连接 `region` ，其主要步骤为：
+	- 计算边界 `span` 目标方向邻居的 `regionId`，加入 `cont` 中。
+	- 按照左上右下的方向顺序，从当前 `span` 和方向开始，检查对应的邻居是否为当前 `region` 的边界。
+		- 如果是边界，则方向变更为下一个方向，再进行检查。此时如果邻居的 `regionId` 和上一次记录的不同，则将邻居 `regionId` 加入 `cont` 中。
+		- 如果不是边界，则将当前 `span` 改为邻居 `span`，方向改为上一个方向，再进行检查。
+		- 如果当前 `span` 和方向，和起始的相同，则说明回到了起点，轮廓寻找完成，此时所有经过的 `span` 组成了整个边界。
+	- 遍历 `cont`，移除相邻重复的 `regionId`，包括首尾，最终得到一个 `region` 的连接 `regionId` 列表，即为 `reg.connections`。
+ ![WalkContour.gif](/img/Algorithm/NavmeshNavigation/WalkContour.gif?raw=true)
+- `canMergeWithRegion` 的实现如下：
+</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
+<p>&mldr;
+static bool canMergeWithRegion(const rcRegion& rega, const rcRegion& regb)
+{
+if (rega.areaType != regb.areaType)
+return false;
+int n = 0;
+for (int i = 0; i &lt; rega.connections.size(); ++i)
+{
+if (rega.connections[i] == regb.id)
+n++;
+}
+if (n > 1)
+return false;
+for (int i = 0; i &lt; rega.floors.size(); ++i)
+{
+if (rega.floors[i] == regb.id)
+return false;
+}
+return true;
+}</p>
+<p>&mldr;</p>
+<pre tabindex=0><code>- `canMergeWithRegion` 主要过滤不能合并的情况，包括：
+	- 源 `region` 和目标 `region` 的 `area` 不同。
+	- 源 `region` 的 `connections` 出现超过一次目标 `region` 的 `regionId`，即目标 `region` 和源 `region` 交界处可能还有其他 `region`。
+	- 源 `region` 的 `floors` 中存在目标 `region` 的 `regionId`，即目标 `region` 和源 `region` 具有出现在同一 `cell` 的情况。 
+- `mergeRegions` 的实现如下：
+</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
+<p>&mldr;
+static bool mergeRegions(rcRegion& rega, rcRegion& regb)
+{
+unsigned short aid = rega.id;
+unsigned short bid = regb.id;</p>
+<pre><code>// Duplicate current neighbourhood.
+rcTempVector&lt;int&gt; acon;
+acon.resize(rega.connections.size());
+for (int i = 0; i &lt; rega.connections.size(); ++i)
+	acon[i] = rega.connections[i];
+rcTempVector&lt;int&gt;&amp; bcon = regb.connections;
+
+// Find insertion point on A.
+int insa = -1;
+for (int i = 0; i &lt; acon.size(); ++i)
+{
+	if (acon[i] == bid)
+	{
+		insa = i;
+		break;
+	}
+}
+if (insa == -1)
+	return false;
+
+// Find insertion point on B.
+int insb = -1;
+for (int i = 0; i &lt; bcon.size(); ++i)
+{
+	if (bcon[i] == aid)
+	{
+		insb = i;
+		break;
+	}
+}
+if (insb == -1)
+	return false;
+
+// Merge neighbours.
+rega.connections.clear();
+for (int i = 0, ni = static_cast&lt;int&gt;(acon.size()); i &lt; ni-1; ++i)
+{
+	rega.connections.push_back(acon[(insa+1+i) % ni]);
+}
+	
+for (int i = 0, ni = static_cast&lt;int&gt;(bcon.size()); i &lt; ni-1; ++i)
+{
+	rega.connections.push_back(bcon[(insb+1+i) % ni]);
+}
+
+removeAdjacentNeighbours(rega);
+
+for (int j = 0; j &lt; regb.floors.size(); ++j)
+	addUniqueFloorRegion(rega, regb.floors[j]);
+rega.spanCount += regb.spanCount;
+regb.spanCount = 0;
+regb.connections.resize(0);
+
+return true;
+</code></pre>
+<p>}</p>
+<p>&mldr;</p>
+<pre tabindex=0><code>- `mergeRegions` 合并的主要过程为：
+	- 找出目标 `regionId` 在源 `region` 的 `connections` 中的索引 `insa` 。
+	- 找出源 `regionId` 在目标 `region` 的 `connections` 中的索引 `insb` 。
+	- 清空源 `region` 的 `connections`，从 `insa + 1` 的位置将源 `connections` 重新加入，`insa` 位置不加入，因为和目标 `region` 将要合并，所以原来边界中的目标 `regionId`，需要插入目标 `region` 的边界连接。
+	- 从 `insb + 1` 的位置将目标 `connections` 加入源 `connections`，同理 `insb` 位置不加入。
+	- 调用 `removeAdjacentNeighbours` 方法，移除源 `connections` 中相邻重复的 `regionId` 。
+	- 调用 `addUniqueFloorRegion` 方法，将目标 `floors` 加入到源 `floors` 中。
+	- 将目标 `spanCount` 加到源 `spanCount` 上，并清空目标 `region` 的 `spanCount` 和 `connections`，完成合并过程。
+
+
+###### 单调划分
 ###### 层划分
 ### 参考
 - [Github - Recast Navigation](https://github.com/recastnavigation/recastnavigation) </code></pre>
