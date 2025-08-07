@@ -2536,7 +2536,8 @@ return true;
 	- 调用 `removeAdjacentNeighbours` 方法，移除源 `connections` 中相邻重复的 `regionId` 。
 	- 调用 `addUniqueFloorRegion` 方法，将目标 `floors` 加入到源 `floors` 中。
 	- 将目标 `spanCount` 加到源 `spanCount` 上，并清空目标 `region` 的 `spanCount` 和 `connections`，完成合并过程。
-
+- 分水岭划分的全过程如下图：
+ ![Watershed.gif](/img/Algorithm/NavmeshNavigation/Watershed.gif?raw=true)
 
 ###### 单调划分
 ###### 层划分
