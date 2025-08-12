@@ -1325,9 +1325,9 @@ for (int z = zSize - 1; z &gt;= 0; --z)
 </code></pre>
 <p>}
 &mldr;</p>
-<pre tabindex=0><code>- 计算 `span` 到边缘的最小距离，最简单的做法就是计算其到每个边缘的距离，再从中取出最小值，显然效率非常低。这里使用了 [8SSEDT 光栅扫描算法](https://fallingxun.github.io/post/algorithm/algorithm_edt/) 来优化计算，做了两次扫描，具体流程为：
-	- 从上到下扫描，获取左、左上、上、右上邻居 `span` 的距离，分别加上其到当前 `span` 的距离，取其中最小值作为当前 `span` 的距离。
-	- 从下到上扫描，获取右、右下、下、左下邻居 `span` 的距离，分别加上其到当前 `span` 的距离，取其中最小值作为当前 `span` 的距离。
+<pre tabindex=0><code>- 计算 `span` 到边缘的最小距离，最简单的做法就是计算其到每个边缘的距离，再从中取出最小值，显然效率非常低。这里使用了 [8SSEDT 光栅扫描算法](https://fallingxun.github.io/post/algorithm/algorithm_edt/) 来优化计算，做了两次扫描，这里按坐标原点在左下角计算，具体流程为：
+	- 从下到上扫描，获取左、左下、下、右下邻居 `span` 的距离，分别加上其到当前 `span` 的距离，取其中最小值作为当前 `span` 的距离。
+	- 从上到下扫描，获取右、右上、上、左上邻居 `span` 的距离，分别加上其到当前 `span` 的距离，取其中最小值作为当前 `span` 的距离。
 - 其中，水平竖直方向的邻居和当前 `span` 的距离设置为 2，对角线邻居和当前 `span` 的距离设置为 3，对角线邻居和水平竖直邻居的距离比为 1.5，接近 1.414，通过近似的结果来避免过程计算中出现频繁开根号的情况。扫描完成后，即可得到整个区域的距离场。
 - 确定每个 `span` 的距离后，即可通过比较距离和阈值的大小，来确定是否可通行，实现如下：
 </code></pre><p>// Recast/Source/RecastArea.cpp</p>
@@ -1810,8 +1810,9 @@ return true;
 			- 非首次执行，则通过 `appendStacks` 方法，将上一次 `lvlStacks[sId-1]` 没有分配到 `region` 的，加入到 `lvlStacks[sId]` 中。
 		- 通过 `expandRegions` 方法，沿边界将当前 `region` 进行扩展。
 		- 遍历当前 `lvlStacks[sId]` ，通过 `floodRegion` 方法，填充 `span` 及其扩展的 `span` 的 `region` ，成功填充则 `regionId + 1`。
-	- 再调用 `expandRegions` 方法，扩展所有未分配 `region` 的 `span` 。
-	- 最后，调用 `mergeAndFilterRegions` 方法，合并 `region`，过滤掉 `region` 数量太小的 `span` ，完成划分。
+	- 调用 `expandRegions` 方法，扩展所有未分配 `region` 的 `span` 。
+	- 调用 `mergeAndFilterRegions` 方法，合并 `region`，过滤掉 `region` 数量太小的 `span`。
+	- 最后，将 `srcReg` 记录的最终 `region` 信息，应用到紧密高度场中的每一个 `span`，完成划分。
 - `expandRegions` 的实现如下：
 </code></pre><p>// Recast/Source/RecastRegion.cpp</p>
 <p>&mldr;
@@ -2536,10 +2537,196 @@ return true;
 	- 调用 `removeAdjacentNeighbours` 方法，移除源 `connections` 中相邻重复的 `regionId` 。
 	- 调用 `addUniqueFloorRegion` 方法，将目标 `floors` 加入到源 `floors` 中。
 	- 将目标 `spanCount` 加到源 `spanCount` 上，并清空目标 `region` 的 `spanCount` 和 `connections`，完成合并过程。
-- 分水岭划分的全过程如下图：
+- 以 2D 为例，分水岭划分的全过程如下图：
  ![Watershed.gif](/img/Algorithm/NavmeshNavigation/Watershed.gif?raw=true)
 
 ###### 单调划分
+- 单调划分通过 `rcBuildRegionsMonotone` 方法进行，其实现如下：
+</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
+<p>&mldr;</p>
+<p>static const unsigned short RC_NULL_NEI = 0xffff;</p>
+<p>struct rcSweepSpan
+{
+unsigned short rid; // 行索引 id
+unsigned short id; // 地区 id
+unsigned short ns; // 该地区 id 采样的跨度个数
+unsigned short nei; // 邻居的地区 id，通常指下方的 id
+};</p>
+<p>&mldr;
+bool rcBuildRegionsMonotone(rcContext* ctx, rcCompactHeightfield& chf,
+const int borderSize, const int minRegionArea, const int mergeRegionArea)
+{
+rcAssert(ctx);</p>
+<pre><code>rcScopedTimer timer(ctx, RC_TIMER_BUILD_REGIONS);
+
+const int w = chf.width;
+const int h = chf.height;
+unsigned short id = 1;
+
+rcScopedDelete&lt;unsigned short&gt; srcReg((unsigned short*)rcAlloc(sizeof(unsigned short)*chf.spanCount, RC_ALLOC_TEMP));
+if (!srcReg)
+{
+	ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildRegionsMonotone: Out of memory 'src' (%d).&quot;, chf.spanCount);
+	return false;
+}
+memset(srcReg,0,sizeof(unsigned short)*chf.spanCount);
+
+const int nsweeps = rcMax(chf.width,chf.height);
+rcScopedDelete&lt;rcSweepSpan&gt; sweeps((rcSweepSpan*)rcAlloc(sizeof(rcSweepSpan)*nsweeps, RC_ALLOC_TEMP));
+if (!sweeps)
+{
+	ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildRegionsMonotone: Out of memory 'sweeps' (%d).&quot;, nsweeps);
+	return false;
+}
+
+
+// Mark border regions.
+if (borderSize &gt; 0)
+{
+	// Make sure border will not overflow.
+	const int bw = rcMin(w, borderSize);
+	const int bh = rcMin(h, borderSize);
+	// Paint regions
+	paintRectRegion(0, bw, 0, h, id|RC_BORDER_REG, chf, srcReg); id++;
+	paintRectRegion(w-bw, w, 0, h, id|RC_BORDER_REG, chf, srcReg); id++;
+	paintRectRegion(0, w, 0, bh, id|RC_BORDER_REG, chf, srcReg); id++;
+	paintRectRegion(0, w, h-bh, h, id|RC_BORDER_REG, chf, srcReg); id++;
+}
+
+chf.borderSize = borderSize;
+
+rcTempVector&lt;int&gt; prev(256);
+
+// Sweep one line at a time.
+for (int y = borderSize; y &lt; h-borderSize; ++y)
+{
+	// Collect spans from this row.
+	prev.resize(id+1);
+	memset(&amp;prev[0],0,sizeof(int)*id);
+	unsigned short rid = 1;
+	
+	for (int x = borderSize; x &lt; w-borderSize; ++x)
+	{
+		const rcCompactCell&amp; c = chf.cells[x+y*w];
+		
+		for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
+		{
+			const rcCompactSpan&amp; s = chf.spans[i];
+			if (chf.areas[i] == RC_NULL_AREA) continue;
+			
+			// -x
+			unsigned short previd = 0;
+			if (rcGetCon(s, 0) != RC_NOT_CONNECTED)
+			{
+				const int ax = x + rcGetDirOffsetX(0);
+				const int ay = y + rcGetDirOffsetY(0);
+				const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, 0);
+				if ((srcReg[ai] &amp; RC_BORDER_REG) == 0 &amp;&amp; chf.areas[i] == chf.areas[ai])
+					previd = srcReg[ai];
+			}
+			
+			if (!previd)
+			{
+				previd = rid++;
+				sweeps[previd].rid = previd;
+				sweeps[previd].ns = 0;
+				sweeps[previd].nei = 0;
+			}
+
+			// -y
+			if (rcGetCon(s,3) != RC_NOT_CONNECTED)
+			{
+				const int ax = x + rcGetDirOffsetX(3);
+				const int ay = y + rcGetDirOffsetY(3);
+				const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, 3);
+				if (srcReg[ai] &amp;&amp; (srcReg[ai] &amp; RC_BORDER_REG) == 0 &amp;&amp; chf.areas[i] == chf.areas[ai])
+				{
+					unsigned short nr = srcReg[ai];
+					if (!sweeps[previd].nei || sweeps[previd].nei == nr)
+					{
+						sweeps[previd].nei = nr;
+						sweeps[previd].ns++;
+						prev[nr]++;
+					}
+					else
+					{
+						sweeps[previd].nei = RC_NULL_NEI;
+					}
+				}
+			}
+
+			srcReg[i] = previd;
+		}
+	}
+	
+	// Create unique ID.
+	for (int i = 1; i &lt; rid; ++i)
+	{
+		if (sweeps[i].nei != RC_NULL_NEI &amp;&amp; sweeps[i].nei != 0 &amp;&amp;
+			prev[sweeps[i].nei] == (int)sweeps[i].ns)
+		{
+			sweeps[i].id = sweeps[i].nei;
+		}
+		else
+		{
+			sweeps[i].id = id++;
+		}
+	}
+	
+	// Remap IDs
+	for (int x = borderSize; x &lt; w-borderSize; ++x)
+	{
+		const rcCompactCell&amp; c = chf.cells[x+y*w];
+		
+		for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
+		{
+			if (srcReg[i] &gt; 0 &amp;&amp; srcReg[i] &lt; rid)
+				srcReg[i] = sweeps[srcReg[i]].id;
+		}
+	}
+}
+
+
+{
+	rcScopedTimer timerFilter(ctx, RC_TIMER_BUILD_REGIONS_FILTER);
+
+	// Merge regions and filter out small regions.
+	rcTempVector&lt;int&gt; overlaps;
+	chf.maxRegions = id;
+	if (!mergeAndFilterRegions(ctx, minRegionArea, mergeRegionArea, chf.maxRegions, chf, srcReg, overlaps))
+		return false;
+
+	// Monotone partitioning does not generate overlapping regions.
+}
+
+// Store the result out.
+for (int i = 0; i &lt; chf.spanCount; ++i)
+	chf.spans[i].reg = srcReg[i];
+
+return true;
+</code></pre>
+<p>}</p>
+<p>&mldr;</p>
+<pre tabindex=0><code>- `rcBuildRegionsMonotone` 使用了 `rcSweepSpan` 结构来记录处理过程的关系，主要流程为：
+	- 通过 `paintRectRegion` 方法，将 `borderSize` 范围内的 `span` 的 `region` 进行标识（`id|RC_BORDER_REG`）。
+	- 遍历非 `borderSize` 范围的 `cell`，对其中的每个可行走的 `span` 进行处理。
+		- 遍历每一行时，将记录当前行 `span` 被连接的次数 `prev` 重置为 0，将 `rid` 重置为 1，
+		- 如果当前 `span` 及其左邻居都可行走，且不在 `borderSize` 范围，则设置 `previd` 为左邻居的 `regionId`。
+		- 如果 `previd` 为 0，则将其设置为当前未分配给 `region` 的 `rid`，并将 `rid + 1`，同时把 `previd` 记录到 `sweeps[pervid]` 中。
+		- 如果当前 `span` 及其下邻居都可行走，且不在 `borderSize` 范围，且下邻居已分配 `regionId`，则需要设置 `sweeps[previd].nei`。
+			- 如果 `sweeps[previd].nei` 未设置，或者和下邻居的 `regionId` 相同，则将 `sweeps[previd].nei` 设置为下邻居的 `regionId`。
+				- `sweeps[previd].ns` 自增，即记录 `previd` 连接到 `nr` 的次数。
+				- `prev[nr]` 自增，即记录 `nr` 被连接的次数。
+			- 如果 `sweeps[previd].nei` 已设置，并且和下邻居的 `regionId` 不同，则将 `sweeps[previd].nei` 设置为 `RC_NULL_NEI`，表示有多个邻居。
+		- 将 `previd` 设置为 `srcReg[i]` ，即作为当前 `span` 的 `regionId`。
+		- 设置完每一行 `span` 的 `regionId` 后，遍历所有 `regionId`。
+			- 如果 `sweeps[regionId].nei` 不为 0 且不为 `RC_NULL_NEI`，并且 `nei` 的连接和被连接数量相同，则将 `sweeps[regionId].id` 设置为下一行的 `regionId`，认为是相同的 `region`。
+			- 如果 `sweeps[regionId].nei` 为 0 或 `RC_NULL_NEI`，或 `nei` 的连接和被连接数量不相同，则将 `sweeps[regionId].id` 设置为 `id` ，即当前未使用的 `regionId`，认为是不同的 `region`，并将 `id` 自增。
+		- 将每一行 `sweeps` 记录的 `regionId`，更新到 `srcReg` 中。
+	- 通过 `mergeAndFilterRegions`，进行 `region` 的合并和过滤。
+	- 将 `srcReg` 记录的最终 `region` 信息，应用到紧密高度场中的每一个 `span`，完成划分。
+- 以 2D 为例，单调划分的全过程如下图：
+ ![Monotone.gif](/img/Algorithm/NavmeshNavigation/Monotone.gif?raw=true)
 ###### 层划分
 ### 参考
 - [Github - Recast Navigation](https://github.com/recastnavigation/recastnavigation) </code></pre>
