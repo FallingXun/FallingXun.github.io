@@ -1440,6 +1440,10 @@ for (int z = minz; z &lt;= maxz; ++z)
 <p>&mldr;</p>
 <pre tabindex=0><code>- 根据多边形的顶点，计算出多边形的包围盒信息，找到紧密高度场中对应的 `cell` ，遍历其中的 `span` ，找到可通行且和包围盒相交的 `span`，计算其中心点在 xz 平面上的点。如果该点在多边形的投影面内，则表示该 `span` 属于当前的多边形，将其 `area` 设置为多边形的 `areaId` 。
 ##### 建立地区
+- 建立地区有几种算法：
+	- 分水岭划分（SAMPLE_PARTITION_WATERSHED）
+	- 单调划分（SAMPLE_PARTITION_MONOTONE）
+	- 分层划分（SAMPLE_PARTITION_LAYERS）
 ###### 分水岭划分
 - 分水岭划分算法，需要通过 `rcBuildDistanceField` 先建立紧密高度场对应的高度场，包括两个步骤：
 	- `calculateDistanceField` 计算高度场。
@@ -2539,7 +2543,6 @@ return true;
 	- 将目标 `spanCount` 加到源 `spanCount` 上，并清空目标 `region` 的 `spanCount` 和 `connections`，完成合并过程。
 - 以 2D 为例，分水岭划分的全过程如下图：
  ![Watershed.gif](/img/Algorithm/NavmeshNavigation/Watershed.gif?raw=true)
-
 ###### 单调划分
 - 单调划分通过 `rcBuildRegionsMonotone` 方法进行，其实现如下：
 </code></pre><p>// Recast/Source/RecastRegion.cpp</p>
@@ -2727,7 +2730,259 @@ return true;
 	- 将 `srcReg` 记录的最终 `region` 信息，应用到紧密高度场中的每一个 `span`，完成划分。
 - 以 2D 为例，单调划分的全过程如下图：
  ![Monotone.gif](/img/Algorithm/NavmeshNavigation/Monotone.gif?raw=true)
-###### 层划分
+###### 分层划分
+- 分层划分通过 `rcBuildRegionsLayer` 方法进行，其实现和单调划分基本一致，唯一不同的，就是单调划分使用 `mergeAndFilterRegions` 方法进行合并和过滤，而分层划分使用 `mergeAndFilterLayerRegions` 方法，其实现如下：
+</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
+<p>&mldr;</p>
+<p>static bool mergeAndFilterLayerRegions(rcContext* ctx, int minRegionArea,
+unsigned short& maxRegionId,
+rcCompactHeightfield& chf,
+unsigned short* srcReg)
+{
+const int w = chf.width;
+const int h = chf.height;</p>
+<pre><code>const int nreg = maxRegionId+1;
+rcTempVector&lt;rcRegion&gt; regions;
+
+// Construct regions
+if (!regions.reserve(nreg)) {
+	ctx-&gt;log(RC_LOG_ERROR, &quot;mergeAndFilterLayerRegions: Out of memory 'regions' (%d).&quot;, nreg);
+	return false;
+}
+for (int i = 0; i &lt; nreg; ++i)
+	regions.push_back(rcRegion((unsigned short) i));
+
+// Find region neighbours and overlapping regions.
+rcTempVector&lt;int&gt; lregs(32);
+for (int y = 0; y &lt; h; ++y)
+{
+	for (int x = 0; x &lt; w; ++x)
+	{
+		const rcCompactCell&amp; c = chf.cells[x+y*w];
+
+		lregs.clear();
+		
+		for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
+		{
+			const rcCompactSpan&amp; s = chf.spans[i];
+			const unsigned char area = chf.areas[i];
+			const unsigned short ri = srcReg[i];
+			if (ri == 0 || ri &gt;= nreg) continue;
+			rcRegion&amp; reg = regions[ri];
+			
+			reg.spanCount++;
+			reg.areaType = area;
+
+			reg.ymin = rcMin(reg.ymin, s.y);
+			reg.ymax = rcMax(reg.ymax, s.y);
+			
+			// Collect all region layers.
+			lregs.push_back(ri);
+			
+			// Update neighbours
+			for (int dir = 0; dir &lt; 4; ++dir)
+			{
+				if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
+				{
+					const int ax = x + rcGetDirOffsetX(dir);
+					const int ay = y + rcGetDirOffsetY(dir);
+					const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, dir);
+					const unsigned short rai = srcReg[ai];
+					if (rai &gt; 0 &amp;&amp; rai &lt; nreg &amp;&amp; rai != ri)
+						addUniqueConnection(reg, rai);
+					if (rai &amp; RC_BORDER_REG)
+						reg.connectsToBorder = true;
+				}
+			}
+			
+		}
+		
+		// Update overlapping regions.
+		for (int i = 0; i &lt; lregs.size()-1; ++i)
+		{
+			for (int j = i+1; j &lt; lregs.size(); ++j)
+			{
+				if (lregs[i] != lregs[j])
+				{
+					rcRegion&amp; ri = regions[lregs[i]];
+					rcRegion&amp; rj = regions[lregs[j]];
+					addUniqueFloorRegion(ri, lregs[j]);
+					addUniqueFloorRegion(rj, lregs[i]);
+				}
+			}
+		}
+		
+	}
+}
+
+// Create 2D layers from regions.
+unsigned short layerId = 1;
+
+for (int i = 0; i &lt; nreg; ++i)
+	regions[i].id = 0;
+
+// Merge montone regions to create non-overlapping areas.
+rcTempVector&lt;int&gt; stack(32);
+for (int i = 1; i &lt; nreg; ++i)
+{
+	rcRegion&amp; root = regions[i];
+	// Skip already visited.
+	if (root.id != 0)
+		continue;
+	
+	// Start search.
+	root.id = layerId;
+
+	stack.clear();
+	stack.push_back(i);
+	
+	while (stack.size() &gt; 0)
+	{
+		// Pop front
+		rcRegion&amp; reg = regions[stack[0]];
+		for (int j = 0; j &lt; stack.size()-1; ++j)
+			stack[j] = stack[j+1];
+		stack.resize(stack.size()-1);
+		
+		const int ncons = (int)reg.connections.size();
+		for (int j = 0; j &lt; ncons; ++j)
+		{
+			const int nei = reg.connections[j];
+			rcRegion&amp; regn = regions[nei];
+			// Skip already visited.
+			if (regn.id != 0)
+				continue;
+			// Skip if different area type, do not connect regions with different area type.
+			if (reg.areaType != regn.areaType)
+				continue;
+			// Skip if the neighbour is overlapping root region.
+			bool overlap = false;
+			for (int k = 0; k &lt; root.floors.size(); k++)
+			{
+				if (root.floors[k] == nei)
+				{
+					overlap = true;
+					break;
+				}
+			}
+			if (overlap)
+				continue;
+				
+			// Deepen
+			stack.push_back(nei);
+				
+			// Mark layer id
+			regn.id = layerId;
+			// Merge current layers to root.
+			for (int k = 0; k &lt; regn.floors.size(); ++k)
+				addUniqueFloorRegion(root, regn.floors[k]);
+			root.ymin = rcMin(root.ymin, regn.ymin);
+			root.ymax = rcMax(root.ymax, regn.ymax);
+			root.spanCount += regn.spanCount;
+			regn.spanCount = 0;
+			root.connectsToBorder = root.connectsToBorder || regn.connectsToBorder;
+		}
+	}
+	
+	layerId++;
+}
+
+// Remove small regions
+for (int i = 0; i &lt; nreg; ++i)
+{
+	if (regions[i].spanCount &gt; 0 &amp;&amp; regions[i].spanCount &lt; minRegionArea &amp;&amp; !regions[i].connectsToBorder)
+	{
+		unsigned short reg = regions[i].id;
+		for (int j = 0; j &lt; nreg; ++j)
+			if (regions[j].id == reg)
+				regions[j].id = 0;
+	}
+}
+
+// Compress region Ids.
+for (int i = 0; i &lt; nreg; ++i)
+{
+	regions[i].remap = false;
+	if (regions[i].id == 0) continue;				// Skip nil regions.
+	if (regions[i].id &amp; RC_BORDER_REG) continue;    // Skip external regions.
+	regions[i].remap = true;
+}
+
+unsigned short regIdGen = 0;
+for (int i = 0; i &lt; nreg; ++i)
+{
+	if (!regions[i].remap)
+		continue;
+	unsigned short oldId = regions[i].id;
+	unsigned short newId = ++regIdGen;
+	for (int j = i; j &lt; nreg; ++j)
+	{
+		if (regions[j].id == oldId)
+		{
+			regions[j].id = newId;
+			regions[j].remap = false;
+		}
+	}
+}
+maxRegionId = regIdGen;
+
+// Remap regions.
+for (int i = 0; i &lt; chf.spanCount; ++i)
+{
+	if ((srcReg[i] &amp; RC_BORDER_REG) == 0)
+		srcReg[i] = regions[srcReg[i]].id;
+}
+
+return true;
+</code></pre>
+<p>}</p>
+<p>&mldr;</p>
+<pre tabindex=0><code>- `mergeAndFilterLayerRegions` 的主要流程为：
+	- 设置 `region` 的基本信息。
+		- 为每一个 `regionId` 创建一个 `rcRegion`，遍历所有 `cell` 上的所有 `span` 进行处理，包括：
+			- 将同一 `regionId` 的 `span` 数量统计到 `reg.spanCount` 中。
+			- 设置当前 `reg.areaType`。
+			- 设置当前 `reg.ymin` 和 `reg.ymax` 为 `cell` 上所有 `span` 中的最小最大 `span.y`。
+			- 检查四个方向的邻居，通过 `addUniqueConnection` 方法将邻居的 `regionId` 加入到 `reg.connections` 中。如果邻居为 `borderSize` 范围的边界，则设置 `reg.connectsToBorder` 为 `true`。
+			- 检查当前 `cell` 上所有连续且 `regionId` 不同的 `span`，通过 `addUniqueFloorRegion` 方法，分别将 `regionId` 加入到彼此的 `floors` 列表中。
+	- 合并没有重叠的 `region`。
+		- 初始化 `layerId` 为 1 。
+		- 将所有 `region` 的 `id` 初始化为 0 。
+		- 遍历每一个 `region` 进行处理。
+			- 如果当前 `regionId` 不为 0 ，则表示该 `regionId` 已经处理过，则不再处理。
+			- 设置当前 `region` 的 `regionId` 为 `layerId`。
+			- 清空 `stack`，将当前 `region` 加入到 `stack` 中，进行迭代处理。
+				- 从 `stack` 中取出一个 `reg`，从 `connections` 中找到所有未处理过的可行走的邻居 `regionId`，如果当前 `region` 的 `floors` 中不包含邻居 `regionId`，则代表该 `regionId` 没有和当前 `region` 重叠，则将邻居 `region` 合并到当前 `region`。
+					- 将邻居 `regionId` 加入到 `stack` 中。 
+					- 将邻居 `region` 的 `id` 设置为 `layerId`，即标记为已处理。
+					- 将邻居的 `floors` 添加到当前 `region` 中。
+					- 将邻居和当前 `region` 中最小的 `ymin` 和最大的 `ymax` 设置到当前 `region` 中。
+					- 将邻居的 `spanCount` 加入到当前 `region`，清空邻居的 `spanCount`。
+					- 如果邻居或当前 `region` 连接到 `borderSize` 范围的边界，则设置当前 `region` 的 `connectsToBorder` 为 `true`。
+				-  如果出现重叠，则继续 `stack` 的迭代处理。		
+			- 处理完一个 `regionId` ，则 `layerId` 自增，继续下一个 `regionId` 。
+	- 移除过小的 `region`。
+		- 从 1 开始遍历所有的 `region`，如果 `spanCount` 大于 0 且小于 `minRegionArea`，且没有连接到 `borderSize` 范围的边界，则此 `regionId` 需要被移除。由于上一步中合并后，同一个 `regionId` 会处于多个 `region` 中，但其中只有一个 `spanCount` 大于 0 ，所以需要将所有 `id` 为此 `regionId` 的 `region`，设置其 `id` 为 0。
+	- 重新映射 `regionId`。
+		- 遍历所有的 `region`，从 1 开始设置剩余的 `region`，将 `regionId` 映射为新的区间。
+	- 应用新的 `regionId`。
+		- 遍历 `srcReg`，使用新的 `regionId` 进行替换。
+- 以 2D 为例，分层划分的全过程如下图：
+ ![Layers.gif](/img/Algorithm/NavmeshNavigation/Layers.gif?raw=true)
+###### 算法对比
+| | 分水岭划分 | 单调划分 | 分层划分 |
+| :----: | :----: | :----: | :----: |
+| 主要内容 | 计算距离场，洪水填充，按块合并 | 扫描填充，按块合并 | 扫描填充，分层合并 |
+| 性能开销 | 高&lt;br&gt;（需要计算整个距离场，洪水填充过程也需要多次迭代处理） | 低&lt;br&gt;（扫描填充计算量少，按块合并跳过在同一个 `cell` 上出现多次的 `region` ，即仅处理单层 `region`） | 中&lt;br&gt;（分层合并需要检查每个 `region` 的 `connections` 是否出现在当前 `cell` ，即需要层级关系，合并后还需要递归检查） |
+| 适用场景 | 开放空间和复杂地形 | 简单的平面 | 多层或垂直空间 |
+#### 追踪并简化轮廓
+
+#### 建立多边形网格
+
+#### 创建细节网格
+
+#### 创建导航数据
+
 ### 参考
 - [Github - Recast Navigation](https://github.com/recastnavigation/recastnavigation) </code></pre>
 <hr>

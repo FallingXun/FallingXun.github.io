@@ -20175,12 +20175,6 @@
                 <mxCell id="_GWyNflPLoZzyyJH_3Ul-137" value="&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;r=1&lt;/font&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;strokeColor=default;fontColor=default;fillColor=light-dark(#FFFFFF,#00FF00);" vertex="1" parent="_GWyNflPLoZzyyJH_3Ul-1">
                     <mxGeometry x="360" y="520" width="40" height="40" as="geometry"/>
                 </mxCell>
-                <mxCell id="_GWyNflPLoZzyyJH_3Ul-141" value="" style="shape=flexArrow;endArrow=classic;html=1;" edge="1" parent="_GWyNflPLoZzyyJH_3Ul-1">
-                    <mxGeometry width="50" height="50" relative="1" as="geometry">
-                        <mxPoint x="710" y="19.5" as="sourcePoint"/>
-                        <mxPoint x="650" y="19.5" as="targetPoint"/>
-                    </mxGeometry>
-                </mxCell>
                 <mxCell id="_GWyNflPLoZzyyJH_3Ul-142" value="&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;r=1&lt;/font&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;strokeColor=default;fontColor=default;fillColor=light-dark(#FFFFFF,#00FF00);" vertex="1" parent="_GWyNflPLoZzyyJH_3Ul-1">
                     <mxGeometry x="40" y="480" width="40" height="40" as="geometry"/>
                 </mxCell>
