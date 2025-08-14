@@ -984,854 +984,531 @@ struct rcCompactSpan
 	unsigned int h : 8;			/// 下一跨度的天花板到当前跨度的地面高度差，即 next-&gt;smin - smax
 };
 </code></pre><ul>
-<li></li>
+<li>建立紧密高度场的方法 <code>rcBuildCompactHeightfield</code> 如下：</li>
 </ul>
-<p>&mldr;</p>
-<ul>
-<li>
-<p>建立紧密高度场的方法 <code>rcBuildCompactHeightfield</code> 如下：
+<pre tabindex=0><code>// Recast/Source/Recast.cpp
+
+...
+
 bool rcBuildCompactHeightfield(rcContext* context, const int walkableHeight, const int walkableClimb,
-const rcHeightfield& heightfield, rcCompactHeightfield& compactHeightfield)
+                               const rcHeightfield&amp; heightfield, rcCompactHeightfield&amp; compactHeightfield)
 {
-&mldr;</p>
-<p>const int MAX_HEIGHT = 0xffff;</p>
-<p>// Fill in cells and spans.
-int currentCellIndex = 0;
-const int numColumns = xSize * zSize;
-for (int columnIndex = 0; columnIndex &lt; numColumns; ++columnIndex)
-{
-const rcSpan* span = heightfield.spans[columnIndex];</p>
-<pre><code>  // If there are no spans at this cell, just leave the data to index=0, count=0.
-  if (span == NULL)
-  {
-  	continue;
-  }
+	...
 
-  rcCompactCell&amp; cell = compactHeightfield.cells[columnIndex];
-  cell.index = currentCellIndex;
-  cell.count = 0;
+	const int MAX_HEIGHT = 0xffff;
 
-  for (; span != NULL; span = span-&gt;next)
-  {
-  	if (span-&gt;area != RC_NULL_AREA)
-  	{
-  		const int bot = (int)span-&gt;smax;
-  		const int top = span-&gt;next ? (int)span-&gt;next-&gt;smin : MAX_HEIGHT;
-  		compactHeightfield.spans[currentCellIndex].y = (unsigned short)rcClamp(bot, 0, 0xffff);
-  		compactHeightfield.spans[currentCellIndex].h = (unsigned char)rcClamp(top - bot, 0, 0xff);
-  		compactHeightfield.areas[currentCellIndex] = span-&gt;area;
-  		currentCellIndex++;
-  		cell.count++;
-  	}
-  }
-</code></pre>
-<p>}</p>
-<p>// Find neighbour connections.
-const int MAX_LAYERS = RC_NOT_CONNECTED - 1;
-int maxLayerIndex = 0;
-const int zStride = xSize; // for readability
-for (int z = 0; z &lt; zSize; ++z)
-{
-for (int x = 0; x &lt; xSize; ++x)
-{
-const rcCompactCell& cell = compactHeightfield.cells[x + z * zStride];
-for (int i = (int)cell.index, ni = (int)(cell.index + cell.count); i &lt; ni; ++i)
-{
-rcCompactSpan& span = compactHeightfield.spans[i];</p>
-<pre><code>  		for (int dir = 0; dir &lt; 4; ++dir)
-  		{
-  			rcSetCon(span, dir, RC_NOT_CONNECTED);
-  			const int neighborX = x + rcGetDirOffsetX(dir);
-  			const int neighborZ = z + rcGetDirOffsetY(dir);
-  			// First check that the neighbour cell is in bounds.
-  			if (neighborX &lt; 0 || neighborZ &lt; 0 || neighborX &gt;= xSize || neighborZ &gt;= zSize)
-  			{
-  				continue;
-  			}
+	// Fill in cells and spans.
+	int currentCellIndex = 0;
+	const int numColumns = xSize * zSize;
+	for (int columnIndex = 0; columnIndex &lt; numColumns; ++columnIndex)
+	{
+		const rcSpan* span = heightfield.spans[columnIndex];
+			
+		// If there are no spans at this cell, just leave the data to index=0, count=0.
+		if (span == NULL)
+		{
+			continue;
+		}
+			
+		rcCompactCell&amp; cell = compactHeightfield.cells[columnIndex];
+		cell.index = currentCellIndex;
+		cell.count = 0;
 
-  			// Iterate over all neighbour spans and check if any of the is
-  			// accessible from current cell.
-  			const rcCompactCell&amp; neighborCell = compactHeightfield.cells[neighborX + neighborZ * zStride];
-  			for (int k = (int)neighborCell.index, nk = (int)(neighborCell.index + neighborCell.count); k &lt; nk; ++k)
-  			{
-  				const rcCompactSpan&amp; neighborSpan = compactHeightfield.spans[k];
-  				const int bot = rcMax(span.y, neighborSpan.y);
-  				const int top = rcMin(span.y + span.h, neighborSpan.y + neighborSpan.h);
+		for (; span != NULL; span = span-&gt;next)
+		{
+			if (span-&gt;area != RC_NULL_AREA)
+			{
+				const int bot = (int)span-&gt;smax;
+				const int top = span-&gt;next ? (int)span-&gt;next-&gt;smin : MAX_HEIGHT;
+				compactHeightfield.spans[currentCellIndex].y = (unsigned short)rcClamp(bot, 0, 0xffff);
+				compactHeightfield.spans[currentCellIndex].h = (unsigned char)rcClamp(top - bot, 0, 0xff);
+				compactHeightfield.areas[currentCellIndex] = span-&gt;area;
+				currentCellIndex++;
+				cell.count++;
+			}
+		}
+	}
+	
+	// Find neighbour connections.
+	const int MAX_LAYERS = RC_NOT_CONNECTED - 1;
+	int maxLayerIndex = 0;
+	const int zStride = xSize; // for readability
+	for (int z = 0; z &lt; zSize; ++z)
+	{
+		for (int x = 0; x &lt; xSize; ++x)
+		{
+			const rcCompactCell&amp; cell = compactHeightfield.cells[x + z * zStride];
+			for (int i = (int)cell.index, ni = (int)(cell.index + cell.count); i &lt; ni; ++i)
+			{
+				rcCompactSpan&amp; span = compactHeightfield.spans[i];
 
-  				// Check that the gap between the spans is walkable,
-  				// and that the climb height between the gaps is not too high.
-  				if ((top - bot) &gt;= walkableHeight &amp;&amp; rcAbs((int)neighborSpan.y - (int)span.y) &lt;= walkableClimb)
-  				{
-  					// Mark direction as walkable.
-  					const int layerIndex = k - (int)neighborCell.index;
-  					if (layerIndex &lt; 0 || layerIndex &gt; MAX_LAYERS)
-  					{
-  						maxLayerIndex = rcMax(maxLayerIndex, layerIndex);
-  						continue;
-  					}
-  					rcSetCon(span, dir, layerIndex);
-  					break;
-  				}
-  			}
-  		}
-  	}
-  }
-</code></pre>
-<p>}</p>
-<p>if (maxLayerIndex > MAX_LAYERS)
+				for (int dir = 0; dir &lt; 4; ++dir)
+				{
+					rcSetCon(span, dir, RC_NOT_CONNECTED);
+					const int neighborX = x + rcGetDirOffsetX(dir);
+					const int neighborZ = z + rcGetDirOffsetY(dir);
+					// First check that the neighbour cell is in bounds.
+					if (neighborX &lt; 0 || neighborZ &lt; 0 || neighborX &gt;= xSize || neighborZ &gt;= zSize)
+					{
+						continue;
+					}
+
+					// Iterate over all neighbour spans and check if any of the is
+					// accessible from current cell.
+					const rcCompactCell&amp; neighborCell = compactHeightfield.cells[neighborX + neighborZ * zStride];
+					for (int k = (int)neighborCell.index, nk = (int)(neighborCell.index + neighborCell.count); k &lt; nk; ++k)
+					{
+						const rcCompactSpan&amp; neighborSpan = compactHeightfield.spans[k];
+						const int bot = rcMax(span.y, neighborSpan.y);
+						const int top = rcMin(span.y + span.h, neighborSpan.y + neighborSpan.h);
+
+						// Check that the gap between the spans is walkable,
+						// and that the climb height between the gaps is not too high.
+						if ((top - bot) &gt;= walkableHeight &amp;&amp; rcAbs((int)neighborSpan.y - (int)span.y) &lt;= walkableClimb)
+						{
+							// Mark direction as walkable.
+							const int layerIndex = k - (int)neighborCell.index;
+							if (layerIndex &lt; 0 || layerIndex &gt; MAX_LAYERS)
+							{
+								maxLayerIndex = rcMax(maxLayerIndex, layerIndex);
+								continue;
+							}
+							rcSetCon(span, dir, layerIndex);
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if (maxLayerIndex &gt; MAX_LAYERS)
+	{
+		context-&gt;log(RC_LOG_ERROR, &quot;rcBuildCompactHeightfield: Heightfield has too many layers %d (max: %d)&quot;,
+		         maxLayerIndex, MAX_LAYERS);
+	}
+
+	return true;
+}
+
+...
+</code></pre><ul>
+<li>建立过程，每个 <code>cell</code> 记录了其中首个 <code>span</code> 的索引及 <code>span</code> 的数量。所有 <code>cell</code> 的 <code>span</code> 都存入到 <code>compactHeightfield.spans</code> 中，其中 <code>y</code> 为当前 <code>span</code> 的地面高度 <code>span->smax</code>，<code>h</code> 为下一 <code>span</code> 的天花板到当前 <code>span</code> 地面的高度差 <code>span->next->smin - span->smax</code>。</li>
+<li>除了设置基础信息外，还需要计算每个 <code>span</code> 的连通信息。每个 <code>span</code> 会和邻居 <code>cell</code> 的 <code>spans</code> 列表进行计算，当前 <code>span</code> 和邻居连通，需要满足以下条件：
+<ul>
+<li>当前 <code>span</code> 和邻居中的任意 <code>spans[index]</code> ，两者的天花板高度 <code>y + h</code> 最小值和地面高度 <code>y</code> 最大值之差，不小于 <code>walkableHeight</code>，即存在一个邻居 <code>span</code> 可以从当前 <code>span</code> 通行。</li>
+<li>当前 <code>span</code> 和邻居中的任意 <code>spans[index]</code> ，两者的地面高度 <code>y</code> 之差，不大于 <code>walkableClimb</code>，即存在一个邻居 <code>span</code> 可以从当前 <code>span</code> 跨过。</li>
+</ul>
+</li>
+<li>设置连通的方法 <code>rcSetCon</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Include/Recast.h
+
+...
+
+inline void rcSetCon(rcCompactSpan&amp; span, int direction, int neighborIndex)
 {
-context->log(RC_LOG_ERROR, &ldquo;rcBuildCompactHeightfield: Heightfield has too many layers %d (max: %d)&rdquo;,
-maxLayerIndex, MAX_LAYERS);
-}</p>
-<p>return true;
-}</p>
+	const unsigned int shift = (unsigned int)direction * 6;
+	const unsigned int con = span.con;
+	span.con = (con &amp; ~(0x3f &lt;&lt; shift)) | (((unsigned int)neighborIndex &amp; 0x3f) &lt;&lt; shift);
+}
+
+...
+</code></pre><ul>
+<li>方向为左上右下，分别对应 0 ~ 3 ，每个方向使用一个 6 位的值，代表在邻居 <code>cell</code> 中的第几个 <code>span</code> ，每个 <code>cell</code> 最多能有 62 个 <code>span</code> 。某个方向设置了连通后，则不再检查该方向后续的 <code>span</code>，即取首个可连通的 <code>span</code>。</li>
+</ul>
+<h5 id=收缩可行走区域>收缩可行走区域</h5>
+<ul>
+<li>为了防止移动过程由于太靠近障碍边缘而出现问题，需要将可行走区域沿着障碍边缘进行收缩。收缩过程由 <code>rcErodeWalkableArea</code> 方法实现，主要分为三个步骤：
+<ul>
+<li>计算整个区域的边缘 <code>span</code> ，其和边缘的距离 <code>distanceToBoundary[spanIndex]</code> 设置为 0。</li>
+<li>计算每个非边缘 <code>span</code> 和边缘的距离。</li>
+<li>将距离小于阈值（<code>walkableRadius * 2</code>）的 <code>compactHeightfield.areas[spanIndex]</code> 设置为不可通行。</li>
+</ul>
+</li>
+<li>计算区域边缘的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastArea.cpp
+
+...
+bool rcErodeWalkableArea(rcContext* context, const int erosionRadius, rcCompactHeightfield&amp; compactHeightfield)
+{
+	rcAssert(context != NULL);
+
+	const int xSize = compactHeightfield.width;
+	const int zSize = compactHeightfield.height;
+	const int&amp; zStride = xSize; // For readability
+
+	rcScopedTimer timer(context, RC_TIMER_ERODE_AREA);
+
+	unsigned char* distanceToBoundary = (unsigned char*)rcAlloc(sizeof(unsigned char) * compactHeightfield.spanCount,
+	                                                            RC_ALLOC_TEMP);
+	if (!distanceToBoundary)
+	{
+		context-&gt;log(RC_LOG_ERROR, &quot;erodeWalkableArea: Out of memory 'dist' (%d).&quot;, compactHeightfield.spanCount);
+		return false;
+	}
+	memset(distanceToBoundary, 0xff, sizeof(unsigned char) * compactHeightfield.spanCount);
+	
+	// Mark boundary cells.
+	for (int z = 0; z &lt; zSize; ++z)
+	{
+		for (int x = 0; x &lt; xSize; ++x)
+		{
+			const rcCompactCell&amp; cell = compactHeightfield.cells[x + z * zStride];
+			for (int spanIndex = (int)cell.index, maxSpanIndex = (int)(cell.index + cell.count); spanIndex &lt; maxSpanIndex; ++spanIndex)
+			{
+				if (compactHeightfield.areas[spanIndex] == RC_NULL_AREA)
+				{
+					distanceToBoundary[spanIndex] = 0;
+					continue;
+				}
+				const rcCompactSpan&amp; span = compactHeightfield.spans[spanIndex];
+
+				// Check that there is a non-null adjacent span in each of the 4 cardinal directions.
+				int neighborCount = 0;
+				for (int direction = 0; direction &lt; 4; ++direction)
+				{
+					const int neighborConnection = rcGetCon(span, direction);
+					if (neighborConnection == RC_NOT_CONNECTED)
+					{
+						break;
+					}
+					
+					const int neighborX = x + rcGetDirOffsetX(direction);
+					const int neighborZ = z + rcGetDirOffsetY(direction);
+					const int neighborSpanIndex = (int)compactHeightfield.cells[neighborX + neighborZ * zStride].index + neighborConnection;
+					
+					if (compactHeightfield.areas[neighborSpanIndex] == RC_NULL_AREA)
+					{
+						break;
+					}
+					neighborCount++;
+				}
+				
+				// At least one missing neighbour, so this is a boundary cell.
+				if (neighborCount != 4)
+				{
+					distanceToBoundary[spanIndex] = 0;
+				}
+			}
+		}
+	}
+	
+	...
+}
+...
+</code></pre><ul>
+<li>首先建立了 <code>distanceToBoundary</code> 用于记录每个 <code>span</code> 和边缘的距离。其中不可行走的 <code>span</code>（<code>area</code> 为 <code>RC_NULL_AREA</code>）即为边缘，将其 <code>distanceToBoundary[spanIndex]</code> 设为 0。检查四个邻居方向，如果有一个方向不可行走，则将该 <code>span</code> 也视为边缘，设置其距离为 0。</li>
+<li>得到所有边缘数据后，就需要计算每个 <code>span</code> 和边缘的距离，计算过程如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastArea.cpp
+
+...
+bool rcErodeWalkableArea(rcContext* context, const int erosionRadius, rcCompactHeightfield&amp; compactHeightfield)
+{
+	...
+	
+	unsigned char newDistance;
+	
+	// Pass 1
+	for (int z = 0; z &lt; zSize; ++z)
+	{
+		for (int x = 0; x &lt; xSize; ++x)
+		{
+			const rcCompactCell&amp; cell = compactHeightfield.cells[x + z * zStride];
+			const int maxSpanIndex = (int)(cell.index + cell.count);
+			for (int spanIndex = (int)cell.index; spanIndex &lt; maxSpanIndex; ++spanIndex)
+			{
+				const rcCompactSpan&amp; span = compactHeightfield.spans[spanIndex];
+
+				if (rcGetCon(span, 0) != RC_NOT_CONNECTED)
+				{
+					// (-1,0)
+					const int aX = x + rcGetDirOffsetX(0);
+					const int aY = z + rcGetDirOffsetY(0);
+					const int aIndex = (int)compactHeightfield.cells[aX + aY * xSize].index + rcGetCon(span, 0);
+					const rcCompactSpan&amp; aSpan = compactHeightfield.spans[aIndex];
+					newDistance = (unsigned char)rcMin((int)distanceToBoundary[aIndex] + 2, 255);
+					if (newDistance &lt; distanceToBoundary[spanIndex])
+					{
+						distanceToBoundary[spanIndex] = newDistance;
+					}
+
+					// (-1,-1)
+					if (rcGetCon(aSpan, 3) != RC_NOT_CONNECTED)
+					{
+						const int bX = aX + rcGetDirOffsetX(3);
+						const int bY = aY + rcGetDirOffsetY(3);
+						const int bIndex = (int)compactHeightfield.cells[bX + bY * xSize].index + rcGetCon(aSpan, 3);
+						newDistance = (unsigned char)rcMin((int)distanceToBoundary[bIndex] + 3, 255);
+						if (newDistance &lt; distanceToBoundary[spanIndex])
+						{
+							distanceToBoundary[spanIndex] = newDistance;
+						}
+					}
+				}
+				if (rcGetCon(span, 3) != RC_NOT_CONNECTED)
+				{
+					// (0,-1)
+					const int aX = x + rcGetDirOffsetX(3);
+					const int aY = z + rcGetDirOffsetY(3);
+					const int aIndex = (int)compactHeightfield.cells[aX + aY * xSize].index + rcGetCon(span, 3);
+					const rcCompactSpan&amp; aSpan = compactHeightfield.spans[aIndex];
+					newDistance = (unsigned char)rcMin((int)distanceToBoundary[aIndex] + 2, 255);
+					if (newDistance &lt; distanceToBoundary[spanIndex])
+					{
+						distanceToBoundary[spanIndex] = newDistance;
+					}
+
+					// (1,-1)
+					if (rcGetCon(aSpan, 2) != RC_NOT_CONNECTED)
+					{
+						const int bX = aX + rcGetDirOffsetX(2);
+						const int bY = aY + rcGetDirOffsetY(2);
+						const int bIndex = (int)compactHeightfield.cells[bX + bY * xSize].index + rcGetCon(aSpan, 2);
+						newDistance = (unsigned char)rcMin((int)distanceToBoundary[bIndex] + 3, 255);
+						if (newDistance &lt; distanceToBoundary[spanIndex])
+						{
+							distanceToBoundary[spanIndex] = newDistance;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Pass 2
+	for (int z = zSize - 1; z &gt;= 0; --z)
+	{
+		for (int x = xSize - 1; x &gt;= 0; --x)
+		{
+			const rcCompactCell&amp; cell = compactHeightfield.cells[x + z * zStride];
+			const int maxSpanIndex = (int)(cell.index + cell.count);
+			for (int spanIndex = (int)cell.index; spanIndex &lt; maxSpanIndex; ++spanIndex)
+			{
+				const rcCompactSpan&amp; span = compactHeightfield.spans[spanIndex];
+
+				if (rcGetCon(span, 2) != RC_NOT_CONNECTED)
+				{
+					// (1,0)
+					const int aX = x + rcGetDirOffsetX(2);
+					const int aY = z + rcGetDirOffsetY(2);
+					const int aIndex = (int)compactHeightfield.cells[aX + aY * xSize].index + rcGetCon(span, 2);
+					const rcCompactSpan&amp; aSpan = compactHeightfield.spans[aIndex];
+					newDistance = (unsigned char)rcMin((int)distanceToBoundary[aIndex] + 2, 255);
+					if (newDistance &lt; distanceToBoundary[spanIndex])
+					{
+						distanceToBoundary[spanIndex] = newDistance;
+					}
+
+					// (1,1)
+					if (rcGetCon(aSpan, 1) != RC_NOT_CONNECTED)
+					{
+						const int bX = aX + rcGetDirOffsetX(1);
+						const int bY = aY + rcGetDirOffsetY(1);
+						const int bIndex = (int)compactHeightfield.cells[bX + bY * xSize].index + rcGetCon(aSpan, 1);
+						newDistance = (unsigned char)rcMin((int)distanceToBoundary[bIndex] + 3, 255);
+						if (newDistance &lt; distanceToBoundary[spanIndex])
+						{
+							distanceToBoundary[spanIndex] = newDistance;
+						}
+					}
+				}
+				if (rcGetCon(span, 1) != RC_NOT_CONNECTED)
+				{
+					// (0,1)
+					const int aX = x + rcGetDirOffsetX(1);
+					const int aY = z + rcGetDirOffsetY(1);
+					const int aIndex = (int)compactHeightfield.cells[aX + aY * xSize].index + rcGetCon(span, 1);
+					const rcCompactSpan&amp; aSpan = compactHeightfield.spans[aIndex];
+					newDistance = (unsigned char)rcMin((int)distanceToBoundary[aIndex] + 2, 255);
+					if (newDistance &lt; distanceToBoundary[spanIndex])
+					{
+						distanceToBoundary[spanIndex] = newDistance;
+					}
+
+					// (-1,1)
+					if (rcGetCon(aSpan, 0) != RC_NOT_CONNECTED)
+					{
+						const int bX = aX + rcGetDirOffsetX(0);
+						const int bY = aY + rcGetDirOffsetY(0);
+						const int bIndex = (int)compactHeightfield.cells[bX + bY * xSize].index + rcGetCon(aSpan, 0);
+						newDistance = (unsigned char)rcMin((int)distanceToBoundary[bIndex] + 3, 255);
+						if (newDistance &lt; distanceToBoundary[spanIndex])
+						{
+							distanceToBoundary[spanIndex] = newDistance;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	...
+}
+...
+</code></pre><ul>
+<li>计算 <code>span</code> 到边缘的最小距离，最简单的做法就是计算其到每个边缘的距离，再从中取出最小值，显然效率非常低。这里使用了 <a href=https://fallingxun.github.io/post/algorithm/algorithm_edt/>8SSEDT 光栅扫描算法</a> 来优化计算，做了两次扫描，这里按坐标原点在左下角计算，具体流程为：
+<ul>
+<li>从下到上扫描，获取左、左下、下、右下邻居 <code>span</code> 的距离，分别加上其到当前 <code>span</code> 的距离，取其中最小值作为当前 <code>span</code> 的距离。</li>
+<li>从上到下扫描，获取右、右上、上、左上邻居 <code>span</code> 的距离，分别加上其到当前 <code>span</code> 的距离，取其中最小值作为当前 <code>span</code> 的距离。</li>
+</ul>
+</li>
+<li>其中，水平竖直方向的邻居和当前 <code>span</code> 的距离设置为 2，对角线邻居和当前 <code>span</code> 的距离设置为 3，对角线邻居和水平竖直邻居的距离比为 1.5，接近 1.414，通过近似的结果来避免过程计算中出现频繁开根号的情况。扫描完成后，即可得到整个区域的距离场。</li>
+<li>确定每个 <code>span</code> 的距离后，即可通过比较距离和阈值的大小，来确定是否可通行，实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastArea.cpp
+
+...
+bool rcErodeWalkableArea(rcContext* context, const int erosionRadius, rcCompactHeightfield&amp; compactHeightfield)
+{
+	...
+
+	const unsigned char minBoundaryDistance = (unsigned char)(erosionRadius * 2);
+	for (int spanIndex = 0; spanIndex &lt; compactHeightfield.spanCount; ++spanIndex)
+	{
+		if (distanceToBoundary[spanIndex] &lt; minBoundaryDistance)
+		{
+			compactHeightfield.areas[spanIndex] = RC_NULL_AREA;
+		}
+	}
+
+	rcFree(distanceToBoundary);
+	
+	return true;
+}
+...
+</code></pre><ul>
+<li>为了尽可能远离边缘，使用两倍的 <code>walkableRadius</code> 作为阈值划分，小于这个值的，该 <code>span</code> 的 <code>area</code> 都要标记为不可通行。</li>
+</ul>
+<h5 id=标记凸多边形区域>标记凸多边形区域</h5>
+<ul>
+<li>地图编辑过程，可能会预先对一些区域进行标记，如：不可通行、特殊区域（水池、草地等），此时则需要通过 <code>rcMarkConvexPolyArea</code> 方法将这些区域更新到 <code>area</code> 中，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastArea.cpp
+
+...
+void rcMarkConvexPolyArea(rcContext* context, const float* verts, const int numVerts,
+						  const float minY, const float maxY, unsigned char areaId,
+						  rcCompactHeightfield&amp; compactHeightfield)
+{
+	rcAssert(context);
+
+	rcScopedTimer timer(context, RC_TIMER_MARK_CONVEXPOLY_AREA);
+
+	const int xSize = compactHeightfield.width;
+	const int zSize = compactHeightfield.height;
+	const int zStride = xSize; // For readability
+
+	// Compute the bounding box of the polygon
+	float bmin[3];
+	float bmax[3];
+	rcVcopy(bmin, verts);
+	rcVcopy(bmax, verts);
+	for (int i = 1; i &lt; numVerts; ++i)
+	{
+		rcVmin(bmin, &amp;verts[i * 3]);
+		rcVmax(bmax, &amp;verts[i * 3]);
+	}
+	bmin[1] = minY;
+	bmax[1] = maxY;
+
+	// Compute the grid footprint of the polygon 
+	int minx = (int)((bmin[0] - compactHeightfield.bmin[0]) / compactHeightfield.cs);
+	int miny = (int)((bmin[1] - compactHeightfield.bmin[1]) / compactHeightfield.ch);
+	int minz = (int)((bmin[2] - compactHeightfield.bmin[2]) / compactHeightfield.cs);
+	int maxx = (int)((bmax[0] - compactHeightfield.bmin[0]) / compactHeightfield.cs);
+	int maxy = (int)((bmax[1] - compactHeightfield.bmin[1]) / compactHeightfield.ch);
+	int maxz = (int)((bmax[2] - compactHeightfield.bmin[2]) / compactHeightfield.cs);
+
+	// Early-out if the polygon lies entirely outside the grid.
+	if (maxx &lt; 0) { return; }
+    if (minx &gt;= xSize) { return; }
+    if (maxz &lt; 0) { return; }
+    if (minz &gt;= zSize) { return; }
+
+	// Clamp the polygon footprint to the grid
+    if (minx &lt; 0) { minx = 0; }
+    if (maxx &gt;= xSize) { maxx = xSize - 1; }
+    if (minz &lt; 0) { minz = 0; }
+    if (maxz &gt;= zSize) { maxz = zSize - 1; }
+
+	// TODO: Optimize.
+	for (int z = minz; z &lt;= maxz; ++z)
+	{
+		for (int x = minx; x &lt;= maxx; ++x)
+		{
+			const rcCompactCell&amp; cell = compactHeightfield.cells[x + z * zStride];
+			const int maxSpanIndex = (int)(cell.index + cell.count);
+			for (int spanIndex = (int)cell.index; spanIndex &lt; maxSpanIndex; ++spanIndex)
+			{
+				rcCompactSpan&amp; span = compactHeightfield.spans[spanIndex];
+
+				// Skip if span is removed.
+				if (compactHeightfield.areas[spanIndex] == RC_NULL_AREA)
+				{
+					continue;
+				}
+
+				// Skip if y extents don't overlap.
+				if ((int)span.y &lt; miny || (int)span.y &gt; maxy)
+				{
+					continue;
+				}
+
+				const float point[] = {
+					compactHeightfield.bmin[0] + ((float)x + 0.5f) * compactHeightfield.cs,
+					0,
+					compactHeightfield.bmin[2] + ((float)z + 0.5f) * compactHeightfield.cs
+				};
+				
+				if (pointInPoly(numVerts, verts, point))
+				{
+					compactHeightfield.areas[spanIndex] = areaId;
+				}
+			}
+		}
+	}
+}
+
+...
+</code></pre><ul>
+<li>根据多边形的顶点，计算出多边形的包围盒信息，找到紧密高度场中对应的 <code>cell</code> ，遍历其中的 <code>span</code> ，找到可通行且和包围盒相交的 <code>span</code>，计算其中心点在 xz 平面上的点。如果该点在多边形的投影面内，则表示该 <code>span</code> 属于当前的多边形，将其 <code>area</code> 设置为多边形的 <code>areaId</code> 。</li>
+</ul>
+<h5 id=建立地区>建立地区</h5>
+<ul>
+<li>建立地区有几种算法：
+<ul>
+<li>分水岭划分（SAMPLE_PARTITION_WATERSHED）</li>
+<li>单调划分（SAMPLE_PARTITION_MONOTONE）</li>
+<li>分层划分（SAMPLE_PARTITION_LAYERS）</li>
+</ul>
 </li>
 </ul>
-<p>&mldr;</p>
-<pre tabindex=0><code>- 建立过程，每个 `cell` 记录了其中首个 `span` 的索引及 `span` 的数量。所有 `cell` 的 `span` 都存入到 `compactHeightfield.spans` 中，其中 `y` 为当前 `span` 的地面高度 `span-&gt;smax`，`h` 为下一 `span` 的天花板到当前 `span` 地面的高度差 `span-&gt;next-&gt;smin - span-&gt;smax`。
-- 除了设置基础信息外，还需要计算每个 `span` 的连通信息。每个 `span` 会和邻居 `cell` 的 `spans` 列表进行计算，当前 `span` 和邻居连通，需要满足以下条件：
-	- 当前 `span` 和邻居中的任意 `spans[index]` ，两者的天花板高度 `y + h` 最小值和地面高度 `y` 最大值之差，不小于 `walkableHeight`，即存在一个邻居 `span` 可以从当前 `span` 通行。
-	- 当前 `span` 和邻居中的任意 `spans[index]` ，两者的地面高度 `y` 之差，不大于 `walkableClimb`，即存在一个邻居 `span` 可以从当前 `span` 跨过。
-- 设置连通的方法 `rcSetCon` 的实现如下：
-</code></pre><p>// Recast/Include/Recast.h</p>
-<p>&mldr;</p>
-<p>inline void rcSetCon(rcCompactSpan& span, int direction, int neighborIndex)
-{
-const unsigned int shift = (unsigned int)direction * 6;
-const unsigned int con = span.con;
-span.con = (con & ~(0x3f &#171; shift)) | (((unsigned int)neighborIndex & 0x3f) &#171; shift);
-}</p>
-<p>&mldr;</p>
-<pre tabindex=0><code>- 方向为左上右下，分别对应 0 ~ 3 ，每个方向使用一个 6 位的值，代表在邻居 `cell` 中的第几个 `span` ，每个 `cell` 最多能有 62 个 `span` 。某个方向设置了连通后，则不再检查该方向后续的 `span`，即取首个可连通的 `span`。
-##### 收缩可行走区域
-- 为了防止移动过程由于太靠近障碍边缘而出现问题，需要将可行走区域沿着障碍边缘进行收缩。收缩过程由 `rcErodeWalkableArea` 方法实现，主要分为三个步骤：
-	- 计算整个区域的边缘 `span` ，其和边缘的距离 `distanceToBoundary[spanIndex]` 设置为 0。
-	- 计算每个非边缘 `span` 和边缘的距离。
-	- 将距离小于阈值（`walkableRadius * 2`）的 `compactHeightfield.areas[spanIndex]` 设置为不可通行。
-- 计算区域边缘的实现如下：
-</code></pre><p>// Recast/Source/RecastArea.cpp</p>
-<p>&mldr;
-bool rcErodeWalkableArea(rcContext* context, const int erosionRadius, rcCompactHeightfield& compactHeightfield)
-{
-rcAssert(context != NULL);</p>
-<pre><code>const int xSize = compactHeightfield.width;
-const int zSize = compactHeightfield.height;
-const int&amp; zStride = xSize; // For readability
-
-rcScopedTimer timer(context, RC_TIMER_ERODE_AREA);
-
-unsigned char* distanceToBoundary = (unsigned char*)rcAlloc(sizeof(unsigned char) * compactHeightfield.spanCount,
-                                                            RC_ALLOC_TEMP);
-if (!distanceToBoundary)
-{
-	context-&gt;log(RC_LOG_ERROR, &quot;erodeWalkableArea: Out of memory 'dist' (%d).&quot;, compactHeightfield.spanCount);
-	return false;
-}
-memset(distanceToBoundary, 0xff, sizeof(unsigned char) * compactHeightfield.spanCount);
-
-// Mark boundary cells.
-for (int z = 0; z &lt; zSize; ++z)
-{
-	for (int x = 0; x &lt; xSize; ++x)
-	{
-		const rcCompactCell&amp; cell = compactHeightfield.cells[x + z * zStride];
-		for (int spanIndex = (int)cell.index, maxSpanIndex = (int)(cell.index + cell.count); spanIndex &lt; maxSpanIndex; ++spanIndex)
-		{
-			if (compactHeightfield.areas[spanIndex] == RC_NULL_AREA)
-			{
-				distanceToBoundary[spanIndex] = 0;
-				continue;
-			}
-			const rcCompactSpan&amp; span = compactHeightfield.spans[spanIndex];
-
-			// Check that there is a non-null adjacent span in each of the 4 cardinal directions.
-			int neighborCount = 0;
-			for (int direction = 0; direction &lt; 4; ++direction)
-			{
-				const int neighborConnection = rcGetCon(span, direction);
-				if (neighborConnection == RC_NOT_CONNECTED)
-				{
-					break;
-				}
-				
-				const int neighborX = x + rcGetDirOffsetX(direction);
-				const int neighborZ = z + rcGetDirOffsetY(direction);
-				const int neighborSpanIndex = (int)compactHeightfield.cells[neighborX + neighborZ * zStride].index + neighborConnection;
-				
-				if (compactHeightfield.areas[neighborSpanIndex] == RC_NULL_AREA)
-				{
-					break;
-				}
-				neighborCount++;
-			}
-			
-			// At least one missing neighbour, so this is a boundary cell.
-			if (neighborCount != 4)
-			{
-				distanceToBoundary[spanIndex] = 0;
-			}
-		}
-	}
-}
+<h6 id=分水岭划分>分水岭划分</h6>
+<ul>
+<li>分水岭划分算法，需要通过 <code>rcBuildDistanceField</code> 先建立紧密高度场对应的高度场，包括两个步骤：
+<ul>
+<li><code>calculateDistanceField</code> 计算高度场。</li>
+<li><code>boxBlur</code> 进行模糊处理。</li>
+</ul>
+</li>
+<li><code>calculateDistanceField</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastRegion.cpp
 
 ...
-</code></pre>
-<p>}
-&mldr;</p>
-<pre tabindex=0><code>- 首先建立了 `distanceToBoundary` 用于记录每个 `span` 和边缘的距离。其中不可行走的 `span`（`area` 为 `RC_NULL_AREA`）即为边缘，将其 `distanceToBoundary[spanIndex]` 设为 0。检查四个邻居方向，如果有一个方向不可行走，则将该 `span` 也视为边缘，设置其距离为 0。
-- 得到所有边缘数据后，就需要计算每个 `span` 和边缘的距离，计算过程如下：
-</code></pre><p>// Recast/Source/RecastArea.cpp</p>
-<p>&mldr;
-bool rcErodeWalkableArea(rcContext* context, const int erosionRadius, rcCompactHeightfield& compactHeightfield)
+static void calculateDistanceField(rcCompactHeightfield&amp; chf, unsigned short* src, unsigned short&amp; maxDist)
 {
-&mldr;</p>
-<pre><code>unsigned char newDistance;
-
-// Pass 1
-for (int z = 0; z &lt; zSize; ++z)
-{
-	for (int x = 0; x &lt; xSize; ++x)
-	{
-		const rcCompactCell&amp; cell = compactHeightfield.cells[x + z * zStride];
-		const int maxSpanIndex = (int)(cell.index + cell.count);
-		for (int spanIndex = (int)cell.index; spanIndex &lt; maxSpanIndex; ++spanIndex)
-		{
-			const rcCompactSpan&amp; span = compactHeightfield.spans[spanIndex];
-
-			if (rcGetCon(span, 0) != RC_NOT_CONNECTED)
-			{
-				// (-1,0)
-				const int aX = x + rcGetDirOffsetX(0);
-				const int aY = z + rcGetDirOffsetY(0);
-				const int aIndex = (int)compactHeightfield.cells[aX + aY * xSize].index + rcGetCon(span, 0);
-				const rcCompactSpan&amp; aSpan = compactHeightfield.spans[aIndex];
-				newDistance = (unsigned char)rcMin((int)distanceToBoundary[aIndex] + 2, 255);
-				if (newDistance &lt; distanceToBoundary[spanIndex])
-				{
-					distanceToBoundary[spanIndex] = newDistance;
-				}
-
-				// (-1,-1)
-				if (rcGetCon(aSpan, 3) != RC_NOT_CONNECTED)
-				{
-					const int bX = aX + rcGetDirOffsetX(3);
-					const int bY = aY + rcGetDirOffsetY(3);
-					const int bIndex = (int)compactHeightfield.cells[bX + bY * xSize].index + rcGetCon(aSpan, 3);
-					newDistance = (unsigned char)rcMin((int)distanceToBoundary[bIndex] + 3, 255);
-					if (newDistance &lt; distanceToBoundary[spanIndex])
-					{
-						distanceToBoundary[spanIndex] = newDistance;
-					}
-				}
-			}
-			if (rcGetCon(span, 3) != RC_NOT_CONNECTED)
-			{
-				// (0,-1)
-				const int aX = x + rcGetDirOffsetX(3);
-				const int aY = z + rcGetDirOffsetY(3);
-				const int aIndex = (int)compactHeightfield.cells[aX + aY * xSize].index + rcGetCon(span, 3);
-				const rcCompactSpan&amp; aSpan = compactHeightfield.spans[aIndex];
-				newDistance = (unsigned char)rcMin((int)distanceToBoundary[aIndex] + 2, 255);
-				if (newDistance &lt; distanceToBoundary[spanIndex])
-				{
-					distanceToBoundary[spanIndex] = newDistance;
-				}
-
-				// (1,-1)
-				if (rcGetCon(aSpan, 2) != RC_NOT_CONNECTED)
-				{
-					const int bX = aX + rcGetDirOffsetX(2);
-					const int bY = aY + rcGetDirOffsetY(2);
-					const int bIndex = (int)compactHeightfield.cells[bX + bY * xSize].index + rcGetCon(aSpan, 2);
-					newDistance = (unsigned char)rcMin((int)distanceToBoundary[bIndex] + 3, 255);
-					if (newDistance &lt; distanceToBoundary[spanIndex])
-					{
-						distanceToBoundary[spanIndex] = newDistance;
-					}
-				}
-			}
-		}
-	}
-}
-
-// Pass 2
-for (int z = zSize - 1; z &gt;= 0; --z)
-{
-	for (int x = xSize - 1; x &gt;= 0; --x)
-	{
-		const rcCompactCell&amp; cell = compactHeightfield.cells[x + z * zStride];
-		const int maxSpanIndex = (int)(cell.index + cell.count);
-		for (int spanIndex = (int)cell.index; spanIndex &lt; maxSpanIndex; ++spanIndex)
-		{
-			const rcCompactSpan&amp; span = compactHeightfield.spans[spanIndex];
-
-			if (rcGetCon(span, 2) != RC_NOT_CONNECTED)
-			{
-				// (1,0)
-				const int aX = x + rcGetDirOffsetX(2);
-				const int aY = z + rcGetDirOffsetY(2);
-				const int aIndex = (int)compactHeightfield.cells[aX + aY * xSize].index + rcGetCon(span, 2);
-				const rcCompactSpan&amp; aSpan = compactHeightfield.spans[aIndex];
-				newDistance = (unsigned char)rcMin((int)distanceToBoundary[aIndex] + 2, 255);
-				if (newDistance &lt; distanceToBoundary[spanIndex])
-				{
-					distanceToBoundary[spanIndex] = newDistance;
-				}
-
-				// (1,1)
-				if (rcGetCon(aSpan, 1) != RC_NOT_CONNECTED)
-				{
-					const int bX = aX + rcGetDirOffsetX(1);
-					const int bY = aY + rcGetDirOffsetY(1);
-					const int bIndex = (int)compactHeightfield.cells[bX + bY * xSize].index + rcGetCon(aSpan, 1);
-					newDistance = (unsigned char)rcMin((int)distanceToBoundary[bIndex] + 3, 255);
-					if (newDistance &lt; distanceToBoundary[spanIndex])
-					{
-						distanceToBoundary[spanIndex] = newDistance;
-					}
-				}
-			}
-			if (rcGetCon(span, 1) != RC_NOT_CONNECTED)
-			{
-				// (0,1)
-				const int aX = x + rcGetDirOffsetX(1);
-				const int aY = z + rcGetDirOffsetY(1);
-				const int aIndex = (int)compactHeightfield.cells[aX + aY * xSize].index + rcGetCon(span, 1);
-				const rcCompactSpan&amp; aSpan = compactHeightfield.spans[aIndex];
-				newDistance = (unsigned char)rcMin((int)distanceToBoundary[aIndex] + 2, 255);
-				if (newDistance &lt; distanceToBoundary[spanIndex])
-				{
-					distanceToBoundary[spanIndex] = newDistance;
-				}
-
-				// (-1,1)
-				if (rcGetCon(aSpan, 0) != RC_NOT_CONNECTED)
-				{
-					const int bX = aX + rcGetDirOffsetX(0);
-					const int bY = aY + rcGetDirOffsetY(0);
-					const int bIndex = (int)compactHeightfield.cells[bX + bY * xSize].index + rcGetCon(aSpan, 0);
-					newDistance = (unsigned char)rcMin((int)distanceToBoundary[bIndex] + 3, 255);
-					if (newDistance &lt; distanceToBoundary[spanIndex])
-					{
-						distanceToBoundary[spanIndex] = newDistance;
-					}
-				}
-			}
-		}
-	}
-}
-
-...
-</code></pre>
-<p>}
-&mldr;</p>
-<pre tabindex=0><code>- 计算 `span` 到边缘的最小距离，最简单的做法就是计算其到每个边缘的距离，再从中取出最小值，显然效率非常低。这里使用了 [8SSEDT 光栅扫描算法](https://fallingxun.github.io/post/algorithm/algorithm_edt/) 来优化计算，做了两次扫描，这里按坐标原点在左下角计算，具体流程为：
-	- 从下到上扫描，获取左、左下、下、右下邻居 `span` 的距离，分别加上其到当前 `span` 的距离，取其中最小值作为当前 `span` 的距离。
-	- 从上到下扫描，获取右、右上、上、左上邻居 `span` 的距离，分别加上其到当前 `span` 的距离，取其中最小值作为当前 `span` 的距离。
-- 其中，水平竖直方向的邻居和当前 `span` 的距离设置为 2，对角线邻居和当前 `span` 的距离设置为 3，对角线邻居和水平竖直邻居的距离比为 1.5，接近 1.414，通过近似的结果来避免过程计算中出现频繁开根号的情况。扫描完成后，即可得到整个区域的距离场。
-- 确定每个 `span` 的距离后，即可通过比较距离和阈值的大小，来确定是否可通行，实现如下：
-</code></pre><p>// Recast/Source/RecastArea.cpp</p>
-<p>&mldr;
-bool rcErodeWalkableArea(rcContext* context, const int erosionRadius, rcCompactHeightfield& compactHeightfield)
-{
-&mldr;</p>
-<pre><code>const unsigned char minBoundaryDistance = (unsigned char)(erosionRadius * 2);
-for (int spanIndex = 0; spanIndex &lt; compactHeightfield.spanCount; ++spanIndex)
-{
-	if (distanceToBoundary[spanIndex] &lt; minBoundaryDistance)
-	{
-		compactHeightfield.areas[spanIndex] = RC_NULL_AREA;
-	}
-}
-
-rcFree(distanceToBoundary);
-
-return true;
-</code></pre>
-<p>}
-&mldr;</p>
-<pre tabindex=0><code>- 为了尽可能远离边缘，使用两倍的 `walkableRadius` 作为阈值划分，小于这个值的，该 `span` 的 `area` 都要标记为不可通行。
-##### 标记凸多边形区域
-- 地图编辑过程，可能会预先对一些区域进行标记，如：不可通行、特殊区域（水池、草地等），此时则需要通过 `rcMarkConvexPolyArea` 方法将这些区域更新到 `area` 中，其实现如下：
-</code></pre><p>// Recast/Source/RecastArea.cpp</p>
-<p>&mldr;
-void rcMarkConvexPolyArea(rcContext* context, const float* verts, const int numVerts,
-const float minY, const float maxY, unsigned char areaId,
-rcCompactHeightfield& compactHeightfield)
-{
-rcAssert(context);</p>
-<pre><code>rcScopedTimer timer(context, RC_TIMER_MARK_CONVEXPOLY_AREA);
-
-const int xSize = compactHeightfield.width;
-const int zSize = compactHeightfield.height;
-const int zStride = xSize; // For readability
-
-// Compute the bounding box of the polygon
-float bmin[3];
-float bmax[3];
-rcVcopy(bmin, verts);
-rcVcopy(bmax, verts);
-for (int i = 1; i &lt; numVerts; ++i)
-{
-	rcVmin(bmin, &amp;verts[i * 3]);
-	rcVmax(bmax, &amp;verts[i * 3]);
-}
-bmin[1] = minY;
-bmax[1] = maxY;
-
-// Compute the grid footprint of the polygon 
-int minx = (int)((bmin[0] - compactHeightfield.bmin[0]) / compactHeightfield.cs);
-int miny = (int)((bmin[1] - compactHeightfield.bmin[1]) / compactHeightfield.ch);
-int minz = (int)((bmin[2] - compactHeightfield.bmin[2]) / compactHeightfield.cs);
-int maxx = (int)((bmax[0] - compactHeightfield.bmin[0]) / compactHeightfield.cs);
-int maxy = (int)((bmax[1] - compactHeightfield.bmin[1]) / compactHeightfield.ch);
-int maxz = (int)((bmax[2] - compactHeightfield.bmin[2]) / compactHeightfield.cs);
-
-// Early-out if the polygon lies entirely outside the grid.
-if (maxx &lt; 0) { return; }
-if (minx &gt;= xSize) { return; }
-if (maxz &lt; 0) { return; }
-if (minz &gt;= zSize) { return; }
-
-// Clamp the polygon footprint to the grid
-if (minx &lt; 0) { minx = 0; }
-if (maxx &gt;= xSize) { maxx = xSize - 1; }
-if (minz &lt; 0) { minz = 0; }
-if (maxz &gt;= zSize) { maxz = zSize - 1; }
-
-// TODO: Optimize.
-for (int z = minz; z &lt;= maxz; ++z)
-{
-	for (int x = minx; x &lt;= maxx; ++x)
-	{
-		const rcCompactCell&amp; cell = compactHeightfield.cells[x + z * zStride];
-		const int maxSpanIndex = (int)(cell.index + cell.count);
-		for (int spanIndex = (int)cell.index; spanIndex &lt; maxSpanIndex; ++spanIndex)
-		{
-			rcCompactSpan&amp; span = compactHeightfield.spans[spanIndex];
-
-			// Skip if span is removed.
-			if (compactHeightfield.areas[spanIndex] == RC_NULL_AREA)
-			{
-				continue;
-			}
-
-			// Skip if y extents don't overlap.
-			if ((int)span.y &lt; miny || (int)span.y &gt; maxy)
-			{
-				continue;
-			}
-
-			const float point[] = {
-				compactHeightfield.bmin[0] + ((float)x + 0.5f) * compactHeightfield.cs,
-				0,
-				compactHeightfield.bmin[2] + ((float)z + 0.5f) * compactHeightfield.cs
-			};
-			
-			if (pointInPoly(numVerts, verts, point))
-			{
-				compactHeightfield.areas[spanIndex] = areaId;
-			}
-		}
-	}
-}
-</code></pre>
-<p>}</p>
-<p>&mldr;</p>
-<pre tabindex=0><code>- 根据多边形的顶点，计算出多边形的包围盒信息，找到紧密高度场中对应的 `cell` ，遍历其中的 `span` ，找到可通行且和包围盒相交的 `span`，计算其中心点在 xz 平面上的点。如果该点在多边形的投影面内，则表示该 `span` 属于当前的多边形，将其 `area` 设置为多边形的 `areaId` 。
-##### 建立地区
-- 建立地区有几种算法：
-	- 分水岭划分（SAMPLE_PARTITION_WATERSHED）
-	- 单调划分（SAMPLE_PARTITION_MONOTONE）
-	- 分层划分（SAMPLE_PARTITION_LAYERS）
-###### 分水岭划分
-- 分水岭划分算法，需要通过 `rcBuildDistanceField` 先建立紧密高度场对应的高度场，包括两个步骤：
-	- `calculateDistanceField` 计算高度场。
-	- `boxBlur` 进行模糊处理。
-- `calculateDistanceField` 的实现如下：
-</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
-<p>&mldr;
-static void calculateDistanceField(rcCompactHeightfield& chf, unsigned short* src, unsigned short& maxDist)
-{
-const int w = chf.width;
-const int h = chf.height;</p>
-<pre><code>// Init distance and points.
-for (int i = 0; i &lt; chf.spanCount; ++i)
-	src[i] = 0xffff;
-
-// Mark boundary cells.
-for (int y = 0; y &lt; h; ++y)
-{
-	for (int x = 0; x &lt; w; ++x)
-	{
-		const rcCompactCell&amp; c = chf.cells[x+y*w];
-		for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
-		{
-			const rcCompactSpan&amp; s = chf.spans[i];
-			const unsigned char area = chf.areas[i];
-			
-			int nc = 0;
-			for (int dir = 0; dir &lt; 4; ++dir)
-			{
-				if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
-				{
-					const int ax = x + rcGetDirOffsetX(dir);
-					const int ay = y + rcGetDirOffsetY(dir);
-					const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, dir);
-					if (area == chf.areas[ai])
-						nc++;
-				}
-			}
-			if (nc != 4)
-				src[i] = 0;
-		}
-	}
-}
-
-		
-// Pass 1
-for (int y = 0; y &lt; h; ++y)
-{
-	for (int x = 0; x &lt; w; ++x)
-	{
-		const rcCompactCell&amp; c = chf.cells[x+y*w];
-		for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
-		{
-			const rcCompactSpan&amp; s = chf.spans[i];
-			
-			if (rcGetCon(s, 0) != RC_NOT_CONNECTED)
-			{
-				// (-1,0)
-				const int ax = x + rcGetDirOffsetX(0);
-				const int ay = y + rcGetDirOffsetY(0);
-				const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, 0);
-				const rcCompactSpan&amp; as = chf.spans[ai];
-				if (src[ai]+2 &lt; src[i])
-					src[i] = src[ai]+2;
-				
-				// (-1,-1)
-				if (rcGetCon(as, 3) != RC_NOT_CONNECTED)
-				{
-					const int aax = ax + rcGetDirOffsetX(3);
-					const int aay = ay + rcGetDirOffsetY(3);
-					const int aai = (int)chf.cells[aax+aay*w].index + rcGetCon(as, 3);
-					if (src[aai]+3 &lt; src[i])
-						src[i] = src[aai]+3;
-				}
-			}
-			if (rcGetCon(s, 3) != RC_NOT_CONNECTED)
-			{
-				// (0,-1)
-				const int ax = x + rcGetDirOffsetX(3);
-				const int ay = y + rcGetDirOffsetY(3);
-				const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, 3);
-				const rcCompactSpan&amp; as = chf.spans[ai];
-				if (src[ai]+2 &lt; src[i])
-					src[i] = src[ai]+2;
-				
-				// (1,-1)
-				if (rcGetCon(as, 2) != RC_NOT_CONNECTED)
-				{
-					const int aax = ax + rcGetDirOffsetX(2);
-					const int aay = ay + rcGetDirOffsetY(2);
-					const int aai = (int)chf.cells[aax+aay*w].index + rcGetCon(as, 2);
-					if (src[aai]+3 &lt; src[i])
-						src[i] = src[aai]+3;
-				}
-			}
-		}
-	}
-}
-
-// Pass 2
-for (int y = h-1; y &gt;= 0; --y)
-{
-	for (int x = w-1; x &gt;= 0; --x)
-	{
-		const rcCompactCell&amp; c = chf.cells[x+y*w];
-		for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
-		{
-			const rcCompactSpan&amp; s = chf.spans[i];
-			
-			if (rcGetCon(s, 2) != RC_NOT_CONNECTED)
-			{
-				// (1,0)
-				const int ax = x + rcGetDirOffsetX(2);
-				const int ay = y + rcGetDirOffsetY(2);
-				const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, 2);
-				const rcCompactSpan&amp; as = chf.spans[ai];
-				if (src[ai]+2 &lt; src[i])
-					src[i] = src[ai]+2;
-				
-				// (1,1)
-				if (rcGetCon(as, 1) != RC_NOT_CONNECTED)
-				{
-					const int aax = ax + rcGetDirOffsetX(1);
-					const int aay = ay + rcGetDirOffsetY(1);
-					const int aai = (int)chf.cells[aax+aay*w].index + rcGetCon(as, 1);
-					if (src[aai]+3 &lt; src[i])
-						src[i] = src[aai]+3;
-				}
-			}
-			if (rcGetCon(s, 1) != RC_NOT_CONNECTED)
-			{
-				// (0,1)
-				const int ax = x + rcGetDirOffsetX(1);
-				const int ay = y + rcGetDirOffsetY(1);
-				const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, 1);
-				const rcCompactSpan&amp; as = chf.spans[ai];
-				if (src[ai]+2 &lt; src[i])
-					src[i] = src[ai]+2;
-				
-				// (-1,1)
-				if (rcGetCon(as, 0) != RC_NOT_CONNECTED)
-				{
-					const int aax = ax + rcGetDirOffsetX(0);
-					const int aay = ay + rcGetDirOffsetY(0);
-					const int aai = (int)chf.cells[aax+aay*w].index + rcGetCon(as, 0);
-					if (src[aai]+3 &lt; src[i])
-						src[i] = src[aai]+3;
-				}
-			}
-		}
-	}
-}	
-
-maxDist = 0;
-for (int i = 0; i &lt; chf.spanCount; ++i)
-	maxDist = rcMax(src[i], maxDist);
-</code></pre>
-<p>}</p>
-<p>&mldr;</p>
-<pre tabindex=0><code>- 建立高度场的过程和 `rcErodeWalkableArea` 的计算过程基本一致，`rcErodeWalkableArea` 是将四个邻居中存在不可行走的 `span` 作为边缘，而 `calculateDistanceField` 则是再加上条件，如果四个邻居中存在和当前 `span` 的 `area` 不相同的，则认为是区域的边缘。得到边缘信息后，同样通过光栅扫描方式来计算距离，最终得到一个距离场。
-- `boxBlur` 的实现如下：
-</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
-<p>&mldr;
-static unsigned short* boxBlur(rcCompactHeightfield& chf, int thr,
-unsigned short* src, unsigned short* dst)
-{
-const int w = chf.width;
-const int h = chf.height;</p>
-<pre><code>thr *= 2;
-
-for (int y = 0; y &lt; h; ++y)
-{
-	for (int x = 0; x &lt; w; ++x)
-	{
-		const rcCompactCell&amp; c = chf.cells[x+y*w];
-		for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
-		{
-			const rcCompactSpan&amp; s = chf.spans[i];
-			const unsigned short cd = src[i];
-			if (cd &lt;= thr)
-			{
-				dst[i] = cd;
-				continue;
-			}
-
-			int d = (int)cd;
-			for (int dir = 0; dir &lt; 4; ++dir)
-			{
-				if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
-				{
-					const int ax = x + rcGetDirOffsetX(dir);
-					const int ay = y + rcGetDirOffsetY(dir);
-					const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, dir);
-					d += (int)src[ai];
-					
-					const rcCompactSpan&amp; as = chf.spans[ai];
-					const int dir2 = (dir+1) &amp; 0x3;
-					if (rcGetCon(as, dir2) != RC_NOT_CONNECTED)
-					{
-						const int ax2 = ax + rcGetDirOffsetX(dir2);
-						const int ay2 = ay + rcGetDirOffsetY(dir2);
-						const int ai2 = (int)chf.cells[ax2+ay2*w].index + rcGetCon(as, dir2);
-						d += (int)src[ai2];
-					}
-					else
-					{
-						d += cd;
-					}
-				}
-				else
-				{
-					d += cd*2;
-				}
-			}
-			dst[i] = (unsigned short)((d+5)/9);
-		}
-	}
-}
-return dst;
-</code></pre>
-<p>}</p>
-<p>&mldr;</p>
-<pre tabindex=0><code>- 如果 `span` 的距离不超过阈值 `thr`（这里设置为 2），则不进行模糊计算，保持距离不变。如果超过，则需要以自身为中心，和周围八个邻居的距离进行平均，得到新的距离。其中，对于每个不可行走的邻居，使用中心的距离代替。
-- 建立距离场后，就需要通过 `rcBuildRegions` 划分地区，其实现如下：
-</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
-<p>&mldr;
-bool rcBuildRegions(rcContext* ctx, rcCompactHeightfield& chf,
-const int borderSize, const int minRegionArea, const int mergeRegionArea)
-{
-rcAssert(ctx);</p>
-<pre><code>rcScopedTimer timer(ctx, RC_TIMER_BUILD_REGIONS);
-
-const int w = chf.width;
-const int h = chf.height;
-
-rcScopedDelete&lt;unsigned short&gt; buf((unsigned short*)rcAlloc(sizeof(unsigned short)*chf.spanCount*2, RC_ALLOC_TEMP));
-if (!buf)
-{
-	ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildRegions: Out of memory 'tmp' (%d).&quot;, chf.spanCount*4);
-	return false;
-}
-
-ctx-&gt;startTimer(RC_TIMER_BUILD_REGIONS_WATERSHED);
-
-const int LOG_NB_STACKS = 3;
-const int NB_STACKS = 1 &lt;&lt; LOG_NB_STACKS;
-rcTempVector&lt;LevelStackEntry&gt; lvlStacks[NB_STACKS];
-for (int i=0; i&lt;NB_STACKS; ++i)
-	lvlStacks[i].reserve(256);
-
-rcTempVector&lt;LevelStackEntry&gt; stack;
-stack.reserve(256);
-
-unsigned short* srcReg = buf;
-unsigned short* srcDist = buf+chf.spanCount;
-
-memset(srcReg, 0, sizeof(unsigned short)*chf.spanCount);
-memset(srcDist, 0, sizeof(unsigned short)*chf.spanCount);
-
-unsigned short regionId = 1;
-unsigned short level = (chf.maxDistance+1) &amp; ~1;
-
-// TODO: Figure better formula, expandIters defines how much the 
-// watershed &quot;overflows&quot; and simplifies the regions. Tying it to
-// agent radius was usually good indication how greedy it could be.
-</code></pre>
-<p>// const int expandIters = 4 + walkableRadius * 2;
-const int expandIters = 8;</p>
-<pre><code>if (borderSize &gt; 0)
-{
-	// Make sure border will not overflow.
-	const int bw = rcMin(w, borderSize);
-	const int bh = rcMin(h, borderSize);
+	const int w = chf.width;
+	const int h = chf.height;
 	
-	// Paint regions
-	paintRectRegion(0, bw, 0, h, regionId|RC_BORDER_REG, chf, srcReg); regionId++;
-	paintRectRegion(w-bw, w, 0, h, regionId|RC_BORDER_REG, chf, srcReg); regionId++;
-	paintRectRegion(0, w, 0, bh, regionId|RC_BORDER_REG, chf, srcReg); regionId++;
-	paintRectRegion(0, w, h-bh, h, regionId|RC_BORDER_REG, chf, srcReg); regionId++;
-}
-
-chf.borderSize = borderSize;
-
-int sId = -1;
-while (level &gt; 0)
-{
-	level = level &gt;= 2 ? level-2 : 0;
-	sId = (sId+1) &amp; (NB_STACKS-1);
-</code></pre>
-<p>// ctx->startTimer(RC_TIMER_DIVIDE_TO_LEVELS);</p>
-<pre><code>	if (sId == 0)
-		sortCellsByLevel(level, chf, srcReg, NB_STACKS, lvlStacks, 1);
-	else 
-		appendStacks(lvlStacks[sId-1], lvlStacks[sId], srcReg); // copy left overs from last level
-</code></pre>
-<p>// ctx->stopTimer(RC_TIMER_DIVIDE_TO_LEVELS);</p>
-<pre><code>	{
-		rcScopedTimer timerExpand(ctx, RC_TIMER_BUILD_REGIONS_EXPAND);
-
-		// Expand current regions until no empty connected cells found.
-		expandRegions(expandIters, level, chf, srcReg, srcDist, lvlStacks[sId], false);
-	}
+	// Init distance and points.
+	for (int i = 0; i &lt; chf.spanCount; ++i)
+		src[i] = 0xffff;
 	
-	{
-		rcScopedTimer timerFloor(ctx, RC_TIMER_BUILD_REGIONS_FLOOD);
-
-		// Mark new regions with IDs.
-		for (int j = 0; j&lt;lvlStacks[sId].size(); j++)
-		{
-			LevelStackEntry current = lvlStacks[sId][j];
-			int x = current.x;
-			int y = current.y;
-			int i = current.index;
-			if (i &gt;= 0 &amp;&amp; srcReg[i] == 0)
-			{
-				if (floodRegion(x, y, i, level, regionId, chf, srcReg, srcDist, stack))
-				{
-					if (regionId == 0xFFFF)
-					{
-						ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildRegions: Region ID overflow&quot;);
-						return false;
-					}
-					
-					regionId++;
-				}
-			}
-		}
-	}
-}
-
-// Expand current regions until no empty connected cells found.
-expandRegions(expandIters*8, 0, chf, srcReg, srcDist, stack, true);
-
-ctx-&gt;stopTimer(RC_TIMER_BUILD_REGIONS_WATERSHED);
-
-{
-	rcScopedTimer timerFilter(ctx, RC_TIMER_BUILD_REGIONS_FILTER);
-
-	// Merge regions and filter out small regions.
-	rcTempVector&lt;int&gt; overlaps;
-	chf.maxRegions = regionId;
-	if (!mergeAndFilterRegions(ctx, minRegionArea, mergeRegionArea, chf.maxRegions, chf, srcReg, overlaps))
-		return false;
-
-	// If overlapping regions were found during merging, split those regions.
-	if (overlaps.size() &gt; 0)
-	{
-		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildRegions: %d overlapping regions.&quot;, overlaps.size());
-	}
-}
-	
-// Write the result out.
-for (int i = 0; i &lt; chf.spanCount; ++i)
-	chf.spans[i].reg = srcReg[i];
-
-return true;
-</code></pre>
-<p>}</p>
-<p>&mldr;</p>
-<pre tabindex=0><code>- `rcBuildRegions` 的步骤如下：
-	- 首先，根据边界尺寸 `borderSize`，通过 `paintRectRegion` 方法，将边界范围的 `region` 进行设置。
-	- 接着，设置 `level` 为距离最大值向上取偶数，根据 `level` 的大小，从大到小，每次处理两级，处理流程如下：
-		- 收集本次处理的所有 `span` 到 `lvlStacks` 数组中。
-			- 首次执行时，通过 `sortCellsByLevel` 方法，检查所有 `span` ，将可行走且未设置 `region` 的，根据距离进行分段，放入 `lvlStacks[sId]`，`sId` 越小，距离越远。第 0 段距离最小为 `level - 2` 向下取偶数，第 1 段为第 0 段的一半，以此类推，如：`level` 为 7 ，则
-				- `sId` 为 0，`span` 距离不小于 `(7 - 2) / 2 * 2 / 2 ^ 0 = 4`。
-				- `sId` 为 1，`span` 距离不小于 `(7 - 2) / 2 * 2 / 2 ^ 1 = 2`。
-				- `sId` 为 2，`span` 距离不小于 `(7 - 2) / 2 * 2 / 2 ^ 2 = 1`。
-			- 非首次执行，则通过 `appendStacks` 方法，将上一次 `lvlStacks[sId-1]` 没有分配到 `region` 的，加入到 `lvlStacks[sId]` 中。
-		- 通过 `expandRegions` 方法，沿边界将当前 `region` 进行扩展。
-		- 遍历当前 `lvlStacks[sId]` ，通过 `floodRegion` 方法，填充 `span` 及其扩展的 `span` 的 `region` ，成功填充则 `regionId + 1`。
-	- 调用 `expandRegions` 方法，扩展所有未分配 `region` 的 `span` 。
-	- 调用 `mergeAndFilterRegions` 方法，合并 `region`，过滤掉 `region` 数量太小的 `span`。
-	- 最后，将 `srcReg` 记录的最终 `region` 信息，应用到紧密高度场中的每一个 `span`，完成划分。
-- `expandRegions` 的实现如下：
-</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
-<p>&mldr;
-static void expandRegions(int maxIter, unsigned short level,
-rcCompactHeightfield& chf,
-unsigned short* srcReg, unsigned short* srcDist,
-rcTempVector<levelstackentry>& stack,
-bool fillStack)
-{
-const int w = chf.width;
-const int h = chf.height;</p>
-<pre><code>if (fillStack)
-{
-	// Find cells revealed by the raised level.
-	stack.clear();
+	// Mark boundary cells.
 	for (int y = 0; y &lt; h; ++y)
 	{
 		for (int x = 0; x &lt; w; ++x)
@@ -1839,1152 +1516,1724 @@ const int h = chf.height;</p>
 			const rcCompactCell&amp; c = chf.cells[x+y*w];
 			for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
 			{
-				if (chf.dist[i] &gt;= level &amp;&amp; srcReg[i] == 0 &amp;&amp; chf.areas[i] != RC_NULL_AREA)
+				const rcCompactSpan&amp; s = chf.spans[i];
+				const unsigned char area = chf.areas[i];
+				
+				int nc = 0;
+				for (int dir = 0; dir &lt; 4; ++dir)
 				{
-					stack.push_back(LevelStackEntry(x, y, i));
+					if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
+					{
+						const int ax = x + rcGetDirOffsetX(dir);
+						const int ay = y + rcGetDirOffsetY(dir);
+						const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, dir);
+						if (area == chf.areas[ai])
+							nc++;
+					}
+				}
+				if (nc != 4)
+					src[i] = 0;
+			}
+		}
+	}
+	
+			
+	// Pass 1
+	for (int y = 0; y &lt; h; ++y)
+	{
+		for (int x = 0; x &lt; w; ++x)
+		{
+			const rcCompactCell&amp; c = chf.cells[x+y*w];
+			for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
+			{
+				const rcCompactSpan&amp; s = chf.spans[i];
+				
+				if (rcGetCon(s, 0) != RC_NOT_CONNECTED)
+				{
+					// (-1,0)
+					const int ax = x + rcGetDirOffsetX(0);
+					const int ay = y + rcGetDirOffsetY(0);
+					const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, 0);
+					const rcCompactSpan&amp; as = chf.spans[ai];
+					if (src[ai]+2 &lt; src[i])
+						src[i] = src[ai]+2;
+					
+					// (-1,-1)
+					if (rcGetCon(as, 3) != RC_NOT_CONNECTED)
+					{
+						const int aax = ax + rcGetDirOffsetX(3);
+						const int aay = ay + rcGetDirOffsetY(3);
+						const int aai = (int)chf.cells[aax+aay*w].index + rcGetCon(as, 3);
+						if (src[aai]+3 &lt; src[i])
+							src[i] = src[aai]+3;
+					}
+				}
+				if (rcGetCon(s, 3) != RC_NOT_CONNECTED)
+				{
+					// (0,-1)
+					const int ax = x + rcGetDirOffsetX(3);
+					const int ay = y + rcGetDirOffsetY(3);
+					const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, 3);
+					const rcCompactSpan&amp; as = chf.spans[ai];
+					if (src[ai]+2 &lt; src[i])
+						src[i] = src[ai]+2;
+					
+					// (1,-1)
+					if (rcGetCon(as, 2) != RC_NOT_CONNECTED)
+					{
+						const int aax = ax + rcGetDirOffsetX(2);
+						const int aay = ay + rcGetDirOffsetY(2);
+						const int aai = (int)chf.cells[aax+aay*w].index + rcGetCon(as, 2);
+						if (src[aai]+3 &lt; src[i])
+							src[i] = src[aai]+3;
+					}
 				}
 			}
 		}
 	}
-}
-else // use cells in the input stack
-{
-	// mark all cells which already have a region
-	for (int j=0; j&lt;stack.size(); j++)
+	
+	// Pass 2
+	for (int y = h-1; y &gt;= 0; --y)
 	{
-		int i = stack[j].index;
-		if (srcReg[i] != 0)
-			stack[j].index = -1;
+		for (int x = w-1; x &gt;= 0; --x)
+		{
+			const rcCompactCell&amp; c = chf.cells[x+y*w];
+			for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
+			{
+				const rcCompactSpan&amp; s = chf.spans[i];
+				
+				if (rcGetCon(s, 2) != RC_NOT_CONNECTED)
+				{
+					// (1,0)
+					const int ax = x + rcGetDirOffsetX(2);
+					const int ay = y + rcGetDirOffsetY(2);
+					const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, 2);
+					const rcCompactSpan&amp; as = chf.spans[ai];
+					if (src[ai]+2 &lt; src[i])
+						src[i] = src[ai]+2;
+					
+					// (1,1)
+					if (rcGetCon(as, 1) != RC_NOT_CONNECTED)
+					{
+						const int aax = ax + rcGetDirOffsetX(1);
+						const int aay = ay + rcGetDirOffsetY(1);
+						const int aai = (int)chf.cells[aax+aay*w].index + rcGetCon(as, 1);
+						if (src[aai]+3 &lt; src[i])
+							src[i] = src[aai]+3;
+					}
+				}
+				if (rcGetCon(s, 1) != RC_NOT_CONNECTED)
+				{
+					// (0,1)
+					const int ax = x + rcGetDirOffsetX(1);
+					const int ay = y + rcGetDirOffsetY(1);
+					const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, 1);
+					const rcCompactSpan&amp; as = chf.spans[ai];
+					if (src[ai]+2 &lt; src[i])
+						src[i] = src[ai]+2;
+					
+					// (-1,1)
+					if (rcGetCon(as, 0) != RC_NOT_CONNECTED)
+					{
+						const int aax = ax + rcGetDirOffsetX(0);
+						const int aay = ay + rcGetDirOffsetY(0);
+						const int aai = (int)chf.cells[aax+aay*w].index + rcGetCon(as, 0);
+						if (src[aai]+3 &lt; src[i])
+							src[i] = src[aai]+3;
+					}
+				}
+			}
+		}
+	}	
+	
+	maxDist = 0;
+	for (int i = 0; i &lt; chf.spanCount; ++i)
+		maxDist = rcMax(src[i], maxDist);
+	
+}
+
+...
+</code></pre><ul>
+<li>建立高度场的过程和 <code>rcErodeWalkableArea</code> 的计算过程基本一致，<code>rcErodeWalkableArea</code> 是将四个邻居中存在不可行走的 <code>span</code> 作为边缘，而 <code>calculateDistanceField</code> 则是再加上条件，如果四个邻居中存在和当前 <code>span</code> 的 <code>area</code> 不相同的，则认为是区域的边缘。得到边缘信息后，同样通过光栅扫描方式来计算距离，最终得到一个距离场。</li>
+<li><code>boxBlur</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastRegion.cpp
+
+...
+static unsigned short* boxBlur(rcCompactHeightfield&amp; chf, int thr,
+							   unsigned short* src, unsigned short* dst)
+{
+	const int w = chf.width;
+	const int h = chf.height;
+	
+	thr *= 2;
+	
+	for (int y = 0; y &lt; h; ++y)
+	{
+		for (int x = 0; x &lt; w; ++x)
+		{
+			const rcCompactCell&amp; c = chf.cells[x+y*w];
+			for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
+			{
+				const rcCompactSpan&amp; s = chf.spans[i];
+				const unsigned short cd = src[i];
+				if (cd &lt;= thr)
+				{
+					dst[i] = cd;
+					continue;
+				}
+
+				int d = (int)cd;
+				for (int dir = 0; dir &lt; 4; ++dir)
+				{
+					if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
+					{
+						const int ax = x + rcGetDirOffsetX(dir);
+						const int ay = y + rcGetDirOffsetY(dir);
+						const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, dir);
+						d += (int)src[ai];
+						
+						const rcCompactSpan&amp; as = chf.spans[ai];
+						const int dir2 = (dir+1) &amp; 0x3;
+						if (rcGetCon(as, dir2) != RC_NOT_CONNECTED)
+						{
+							const int ax2 = ax + rcGetDirOffsetX(dir2);
+							const int ay2 = ay + rcGetDirOffsetY(dir2);
+							const int ai2 = (int)chf.cells[ax2+ay2*w].index + rcGetCon(as, dir2);
+							d += (int)src[ai2];
+						}
+						else
+						{
+							d += cd;
+						}
+					}
+					else
+					{
+						d += cd*2;
+					}
+				}
+				dst[i] = (unsigned short)((d+5)/9);
+			}
+		}
+	}
+	return dst;
+}
+
+...
+</code></pre><ul>
+<li>如果 <code>span</code> 的距离不超过阈值 <code>thr</code>（这里设置为 2），则不进行模糊计算，保持距离不变。如果超过，则需要以自身为中心，和周围八个邻居的距离进行平均，得到新的距离。其中，对于每个不可行走的邻居，使用中心的距离代替。</li>
+<li>建立距离场后，就需要通过 <code>rcBuildRegions</code> 划分地区，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastRegion.cpp
+
+...
+bool rcBuildRegions(rcContext* ctx, rcCompactHeightfield&amp; chf,
+					const int borderSize, const int minRegionArea, const int mergeRegionArea)
+{
+	rcAssert(ctx);
+	
+	rcScopedTimer timer(ctx, RC_TIMER_BUILD_REGIONS);
+	
+	const int w = chf.width;
+	const int h = chf.height;
+	
+	rcScopedDelete&lt;unsigned short&gt; buf((unsigned short*)rcAlloc(sizeof(unsigned short)*chf.spanCount*2, RC_ALLOC_TEMP));
+	if (!buf)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildRegions: Out of memory 'tmp' (%d).&quot;, chf.spanCount*4);
+		return false;
+	}
+	
+	ctx-&gt;startTimer(RC_TIMER_BUILD_REGIONS_WATERSHED);
+
+	const int LOG_NB_STACKS = 3;
+	const int NB_STACKS = 1 &lt;&lt; LOG_NB_STACKS;
+	rcTempVector&lt;LevelStackEntry&gt; lvlStacks[NB_STACKS];
+	for (int i=0; i&lt;NB_STACKS; ++i)
+		lvlStacks[i].reserve(256);
+
+	rcTempVector&lt;LevelStackEntry&gt; stack;
+	stack.reserve(256);
+	
+	unsigned short* srcReg = buf;
+	unsigned short* srcDist = buf+chf.spanCount;
+	
+	memset(srcReg, 0, sizeof(unsigned short)*chf.spanCount);
+	memset(srcDist, 0, sizeof(unsigned short)*chf.spanCount);
+	
+	unsigned short regionId = 1;
+	unsigned short level = (chf.maxDistance+1) &amp; ~1;
+
+	// TODO: Figure better formula, expandIters defines how much the 
+	// watershed &quot;overflows&quot; and simplifies the regions. Tying it to
+	// agent radius was usually good indication how greedy it could be.
+//	const int expandIters = 4 + walkableRadius * 2;
+	const int expandIters = 8;
+
+	if (borderSize &gt; 0)
+	{
+		// Make sure border will not overflow.
+		const int bw = rcMin(w, borderSize);
+		const int bh = rcMin(h, borderSize);
+		
+		// Paint regions
+		paintRectRegion(0, bw, 0, h, regionId|RC_BORDER_REG, chf, srcReg); regionId++;
+		paintRectRegion(w-bw, w, 0, h, regionId|RC_BORDER_REG, chf, srcReg); regionId++;
+		paintRectRegion(0, w, 0, bh, regionId|RC_BORDER_REG, chf, srcReg); regionId++;
+		paintRectRegion(0, w, h-bh, h, regionId|RC_BORDER_REG, chf, srcReg); regionId++;
+	}
+
+	chf.borderSize = borderSize;
+	
+	int sId = -1;
+	while (level &gt; 0)
+	{
+		level = level &gt;= 2 ? level-2 : 0;
+		sId = (sId+1) &amp; (NB_STACKS-1);
+
+//		ctx-&gt;startTimer(RC_TIMER_DIVIDE_TO_LEVELS);
+
+		if (sId == 0)
+			sortCellsByLevel(level, chf, srcReg, NB_STACKS, lvlStacks, 1);
+		else 
+			appendStacks(lvlStacks[sId-1], lvlStacks[sId], srcReg); // copy left overs from last level
+
+//		ctx-&gt;stopTimer(RC_TIMER_DIVIDE_TO_LEVELS);
+
+		{
+			rcScopedTimer timerExpand(ctx, RC_TIMER_BUILD_REGIONS_EXPAND);
+
+			// Expand current regions until no empty connected cells found.
+			expandRegions(expandIters, level, chf, srcReg, srcDist, lvlStacks[sId], false);
+		}
+		
+		{
+			rcScopedTimer timerFloor(ctx, RC_TIMER_BUILD_REGIONS_FLOOD);
+
+			// Mark new regions with IDs.
+			for (int j = 0; j&lt;lvlStacks[sId].size(); j++)
+			{
+				LevelStackEntry current = lvlStacks[sId][j];
+				int x = current.x;
+				int y = current.y;
+				int i = current.index;
+				if (i &gt;= 0 &amp;&amp; srcReg[i] == 0)
+				{
+					if (floodRegion(x, y, i, level, regionId, chf, srcReg, srcDist, stack))
+					{
+						if (regionId == 0xFFFF)
+						{
+							ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildRegions: Region ID overflow&quot;);
+							return false;
+						}
+						
+						regionId++;
+					}
+				}
+			}
+		}
+	}
+	
+	// Expand current regions until no empty connected cells found.
+	expandRegions(expandIters*8, 0, chf, srcReg, srcDist, stack, true);
+	
+	ctx-&gt;stopTimer(RC_TIMER_BUILD_REGIONS_WATERSHED);
+	
+	{
+		rcScopedTimer timerFilter(ctx, RC_TIMER_BUILD_REGIONS_FILTER);
+
+		// Merge regions and filter out small regions.
+		rcTempVector&lt;int&gt; overlaps;
+		chf.maxRegions = regionId;
+		if (!mergeAndFilterRegions(ctx, minRegionArea, mergeRegionArea, chf.maxRegions, chf, srcReg, overlaps))
+			return false;
+
+		// If overlapping regions were found during merging, split those regions.
+		if (overlaps.size() &gt; 0)
+		{
+			ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildRegions: %d overlapping regions.&quot;, overlaps.size());
+		}
+	}
+		
+	// Write the result out.
+	for (int i = 0; i &lt; chf.spanCount; ++i)
+		chf.spans[i].reg = srcReg[i];
+	
+	return true;
+}
+
+...
+</code></pre><ul>
+<li><code>rcBuildRegions</code> 的步骤如下：
+<ul>
+<li>首先，根据边界尺寸 <code>borderSize</code>，通过 <code>paintRectRegion</code> 方法，将边界范围的 <code>region</code> 进行设置。</li>
+<li>接着，设置 <code>level</code> 为距离最大值向上取偶数，根据 <code>level</code> 的大小，从大到小，每次处理两级，处理流程如下：
+<ul>
+<li>收集本次处理的所有 <code>span</code> 到 <code>lvlStacks</code> 数组中。
+<ul>
+<li>首次执行时，通过 <code>sortCellsByLevel</code> 方法，检查所有 <code>span</code> ，将可行走且未设置 <code>region</code> 的，根据距离进行分段，放入 <code>lvlStacks[sId]</code>，<code>sId</code> 越小，距离越远。第 0 段距离最小为 <code>level - 2</code> 向下取偶数，第 1 段为第 0 段的一半，以此类推，如：<code>level</code> 为 7 ，则
+<ul>
+<li><code>sId</code> 为 0，<code>span</code> 距离不小于 <code>(7 - 2) / 2 * 2 / 2 ^ 0 = 4</code>。</li>
+<li><code>sId</code> 为 1，<code>span</code> 距离不小于 <code>(7 - 2) / 2 * 2 / 2 ^ 1 = 2</code>。</li>
+<li><code>sId</code> 为 2，<code>span</code> 距离不小于 <code>(7 - 2) / 2 * 2 / 2 ^ 2 = 1</code>。</li>
+</ul>
+</li>
+<li>非首次执行，则通过 <code>appendStacks</code> 方法，将上一次 <code>lvlStacks[sId-1]</code> 没有分配到 <code>region</code> 的，加入到 <code>lvlStacks[sId]</code> 中。</li>
+</ul>
+</li>
+<li>通过 <code>expandRegions</code> 方法，沿边界将当前 <code>region</code> 进行扩展。</li>
+<li>遍历当前 <code>lvlStacks[sId]</code> ，通过 <code>floodRegion</code> 方法，填充 <code>span</code> 及其扩展的 <code>span</code> 的 <code>region</code> ，成功填充则 <code>regionId + 1</code>。</li>
+</ul>
+</li>
+<li>调用 <code>expandRegions</code> 方法，扩展所有未分配 <code>region</code> 的 <code>span</code> 。</li>
+<li>调用 <code>mergeAndFilterRegions</code> 方法，合并 <code>region</code>，过滤掉 <code>region</code> 数量太小的 <code>span</code>。</li>
+<li>最后，将 <code>srcReg</code> 记录的最终 <code>region</code> 信息，应用到紧密高度场中的每一个 <code>span</code>，完成划分。</li>
+</ul>
+</li>
+<li><code>expandRegions</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastRegion.cpp
+
+...
+static void expandRegions(int maxIter, unsigned short level,
+					      rcCompactHeightfield&amp; chf,
+					      unsigned short* srcReg, unsigned short* srcDist,
+					      rcTempVector&lt;LevelStackEntry&gt;&amp; stack,
+					      bool fillStack)
+{
+	const int w = chf.width;
+	const int h = chf.height;
+
+	if (fillStack)
+	{
+		// Find cells revealed by the raised level.
+		stack.clear();
+		for (int y = 0; y &lt; h; ++y)
+		{
+			for (int x = 0; x &lt; w; ++x)
+			{
+				const rcCompactCell&amp; c = chf.cells[x+y*w];
+				for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
+				{
+					if (chf.dist[i] &gt;= level &amp;&amp; srcReg[i] == 0 &amp;&amp; chf.areas[i] != RC_NULL_AREA)
+					{
+						stack.push_back(LevelStackEntry(x, y, i));
+					}
+				}
+			}
+		}
+	}
+	else // use cells in the input stack
+	{
+		// mark all cells which already have a region
+		for (int j=0; j&lt;stack.size(); j++)
+		{
+			int i = stack[j].index;
+			if (srcReg[i] != 0)
+				stack[j].index = -1;
+		}
+	}
+
+	rcTempVector&lt;DirtyEntry&gt; dirtyEntries;
+	int iter = 0;
+	while (stack.size() &gt; 0)
+	{
+		int failed = 0;
+		dirtyEntries.clear();
+		
+		for (int j = 0; j &lt; stack.size(); j++)
+		{
+			int x = stack[j].x;
+			int y = stack[j].y;
+			int i = stack[j].index;
+			if (i &lt; 0)
+			{
+				failed++;
+				continue;
+			}
+			
+			unsigned short r = srcReg[i];
+			unsigned short d2 = 0xffff;
+			const unsigned char area = chf.areas[i];
+			const rcCompactSpan&amp; s = chf.spans[i];
+			for (int dir = 0; dir &lt; 4; ++dir)
+			{
+				if (rcGetCon(s, dir) == RC_NOT_CONNECTED) continue;
+				const int ax = x + rcGetDirOffsetX(dir);
+				const int ay = y + rcGetDirOffsetY(dir);
+				const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, dir);
+				if (chf.areas[ai] != area) continue;
+				if (srcReg[ai] &gt; 0 &amp;&amp; (srcReg[ai] &amp; RC_BORDER_REG) == 0)
+				{
+					if ((int)srcDist[ai]+2 &lt; (int)d2)
+					{
+						r = srcReg[ai];
+						d2 = srcDist[ai]+2;
+					}
+				}
+			}
+			if (r)
+			{
+				stack[j].index = -1; // mark as used
+				dirtyEntries.push_back(DirtyEntry(i, r, d2));
+			}
+			else
+			{
+				failed++;
+			}
+		}
+		
+		// Copy entries that differ between src and dst to keep them in sync.
+		for (int i = 0; i &lt; dirtyEntries.size(); i++) {
+			int idx = dirtyEntries[i].index;
+			srcReg[idx] = dirtyEntries[i].region;
+			srcDist[idx] = dirtyEntries[i].distance2;
+		}
+		
+		if (failed == stack.size())
+			break;
+		
+		if (level &gt; 0)
+		{
+			++iter;
+			if (iter &gt;= maxIter)
+				break;
+		}
 	}
 }
 
-rcTempVector&lt;DirtyEntry&gt; dirtyEntries;
-int iter = 0;
-while (stack.size() &gt; 0)
+...
+</code></pre><ul>
+<li><code>expandRegions</code> 有两种处理模式：
+<ul>
+<li>当 <code>fillStack</code> 为 <code>true</code> 时，会清空 <code>stack</code>，将所有不小于 <code>level</code> 、未分配 <code>region</code> 且可行走的 <code>span</code> 加入到 <code>stack</code> 中。</li>
+<li>当 <code>fillStack</code> 为 <code>false</code> 时，则使用已经收集好的 <code>stack</code>，将其中已分配 <code>region</code> 的 <code>index</code> 设置为 <code>-1</code> 作为标记。</li>
+</ul>
+</li>
+<li>根据传入的 <code>maxIter</code>，决定进行循环迭代的次数，每次循环的处理流程为：
+<ul>
+<li>遍历 <code>stack</code> 中的 <code>span</code>。
+<ul>
+<li>如果 <code>index</code> 为 <code>-1</code> ，则不再处理。</li>
+<li>检查四个邻居中，可行走，已分配 <code>region</code> 且不为边界（即不在 <code>borderSize</code> 范围）的 <code>span</code> ，找到其中距离最小的，将 <code>index</code> 、<code>region</code> 、距离加入到 <code>dirtyEntries</code> 中，设置为 <code>stack[j].index = -1</code> ，即标记已处理。</li>
+</ul>
+</li>
+<li>遍历 <code>dirtyEntries</code> ，将其中的 <code>index</code> 对应的 <code>region</code> 和距离设置到 <code>srcReg</code> 和 <code>srcDist</code> 中。</li>
+<li>进入下一次循环，直到 <code>stack</code> 中没有未处理的 <code>span</code> 或者迭代次数达到上限。</li>
+</ul>
+</li>
+<li><code>floodRegion</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastRegion.cpp
+
+...
+static bool floodRegion(int x, int y, int i,
+						unsigned short level, unsigned short r,
+						rcCompactHeightfield&amp; chf,
+						unsigned short* srcReg, unsigned short* srcDist,
+						rcTempVector&lt;LevelStackEntry&gt;&amp; stack)
 {
-	int failed = 0;
-	dirtyEntries.clear();
+	const int w = chf.width;
 	
-	for (int j = 0; j &lt; stack.size(); j++)
+	const unsigned char area = chf.areas[i];
+	
+	// Flood fill mark region.
+	stack.clear();
+	stack.push_back(LevelStackEntry(x, y, i));
+	srcReg[i] = r;
+	srcDist[i] = 0;
+	
+	unsigned short lev = level &gt;= 2 ? level-2 : 0;
+	int count = 0;
+	
+	while (stack.size() &gt; 0)
 	{
-		int x = stack[j].x;
-		int y = stack[j].y;
-		int i = stack[j].index;
-		if (i &lt; 0)
+		LevelStackEntry&amp; back = stack.back();
+		int cx = back.x;
+		int cy = back.y;
+		int ci = back.index;
+		stack.pop_back();
+		
+		const rcCompactSpan&amp; cs = chf.spans[ci];
+		
+		// Check if any of the neighbours already have a valid region set.
+		unsigned short ar = 0;
+		for (int dir = 0; dir &lt; 4; ++dir)
 		{
-			failed++;
+			// 8 connected
+			if (rcGetCon(cs, dir) != RC_NOT_CONNECTED)
+			{
+				const int ax = cx + rcGetDirOffsetX(dir);
+				const int ay = cy + rcGetDirOffsetY(dir);
+				const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(cs, dir);
+				if (chf.areas[ai] != area)
+					continue;
+				unsigned short nr = srcReg[ai];
+				if (nr &amp; RC_BORDER_REG) // Do not take borders into account.
+					continue;
+				if (nr != 0 &amp;&amp; nr != r)
+				{
+					ar = nr;
+					break;
+				}
+				
+				const rcCompactSpan&amp; as = chf.spans[ai];
+				
+				const int dir2 = (dir+1) &amp; 0x3;
+				if (rcGetCon(as, dir2) != RC_NOT_CONNECTED)
+				{
+					const int ax2 = ax + rcGetDirOffsetX(dir2);
+					const int ay2 = ay + rcGetDirOffsetY(dir2);
+					const int ai2 = (int)chf.cells[ax2+ay2*w].index + rcGetCon(as, dir2);
+					if (chf.areas[ai2] != area)
+						continue;
+					unsigned short nr2 = srcReg[ai2];
+					if (nr2 != 0 &amp;&amp; nr2 != r)
+					{
+						ar = nr2;
+						break;
+					}
+				}				
+			}
+		}
+		if (ar != 0)
+		{
+			srcReg[ci] = 0;
 			continue;
 		}
 		
-		unsigned short r = srcReg[i];
-		unsigned short d2 = 0xffff;
-		const unsigned char area = chf.areas[i];
-		const rcCompactSpan&amp; s = chf.spans[i];
+		count++;
+		
+		// Expand neighbours.
 		for (int dir = 0; dir &lt; 4; ++dir)
 		{
-			if (rcGetCon(s, dir) == RC_NOT_CONNECTED) continue;
-			const int ax = x + rcGetDirOffsetX(dir);
-			const int ay = y + rcGetDirOffsetY(dir);
-			const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, dir);
-			if (chf.areas[ai] != area) continue;
-			if (srcReg[ai] &gt; 0 &amp;&amp; (srcReg[ai] &amp; RC_BORDER_REG) == 0)
+			if (rcGetCon(cs, dir) != RC_NOT_CONNECTED)
 			{
-				if ((int)srcDist[ai]+2 &lt; (int)d2)
-				{
-					r = srcReg[ai];
-					d2 = srcDist[ai]+2;
-				}
-			}
-		}
-		if (r)
-		{
-			stack[j].index = -1; // mark as used
-			dirtyEntries.push_back(DirtyEntry(i, r, d2));
-		}
-		else
-		{
-			failed++;
-		}
-	}
-	
-	// Copy entries that differ between src and dst to keep them in sync.
-	for (int i = 0; i &lt; dirtyEntries.size(); i++) {
-		int idx = dirtyEntries[i].index;
-		srcReg[idx] = dirtyEntries[i].region;
-		srcDist[idx] = dirtyEntries[i].distance2;
-	}
-	
-	if (failed == stack.size())
-		break;
-	
-	if (level &gt; 0)
-	{
-		++iter;
-		if (iter &gt;= maxIter)
-			break;
-	}
-}
-</code></pre>
-<p>}</p>
-<p>&mldr;</p>
-<pre tabindex=0><code>- `expandRegions` 有两种处理模式：
-	- 当 `fillStack` 为 `true` 时，会清空 `stack`，将所有不小于 `level` 、未分配 `region` 且可行走的 `span` 加入到 `stack` 中。
-	- 当 `fillStack` 为 `false` 时，则使用已经收集好的 `stack`，将其中已分配 `region` 的 `index` 设置为 `-1` 作为标记。
-- 根据传入的 `maxIter`，决定进行循环迭代的次数，每次循环的处理流程为：
-	- 遍历 `stack` 中的 `span`。
-		- 如果 `index` 为 `-1` ，则不再处理。
-		- 检查四个邻居中，可行走，已分配 `region` 且不为边界（即不在 `borderSize` 范围）的 `span` ，找到其中距离最小的，将 `index` 、`region` 、距离加入到 `dirtyEntries` 中，设置为 `stack[j].index = -1` ，即标记已处理。
-	- 遍历 `dirtyEntries` ，将其中的 `index` 对应的 `region` 和距离设置到 `srcReg` 和 `srcDist` 中。
-	- 进入下一次循环，直到 `stack` 中没有未处理的 `span` 或者迭代次数达到上限。
-- `floodRegion` 的实现如下：
-</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
-<p>&mldr;
-static bool floodRegion(int x, int y, int i,
-unsigned short level, unsigned short r,
-rcCompactHeightfield& chf,
-unsigned short* srcReg, unsigned short* srcDist,
-rcTempVector<levelstackentry>& stack)
-{
-const int w = chf.width;</p>
-<pre><code>const unsigned char area = chf.areas[i];
-
-// Flood fill mark region.
-stack.clear();
-stack.push_back(LevelStackEntry(x, y, i));
-srcReg[i] = r;
-srcDist[i] = 0;
-
-unsigned short lev = level &gt;= 2 ? level-2 : 0;
-int count = 0;
-
-while (stack.size() &gt; 0)
-{
-	LevelStackEntry&amp; back = stack.back();
-	int cx = back.x;
-	int cy = back.y;
-	int ci = back.index;
-	stack.pop_back();
-	
-	const rcCompactSpan&amp; cs = chf.spans[ci];
-	
-	// Check if any of the neighbours already have a valid region set.
-	unsigned short ar = 0;
-	for (int dir = 0; dir &lt; 4; ++dir)
-	{
-		// 8 connected
-		if (rcGetCon(cs, dir) != RC_NOT_CONNECTED)
-		{
-			const int ax = cx + rcGetDirOffsetX(dir);
-			const int ay = cy + rcGetDirOffsetY(dir);
-			const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(cs, dir);
-			if (chf.areas[ai] != area)
-				continue;
-			unsigned short nr = srcReg[ai];
-			if (nr &amp; RC_BORDER_REG) // Do not take borders into account.
-				continue;
-			if (nr != 0 &amp;&amp; nr != r)
-			{
-				ar = nr;
-				break;
-			}
-			
-			const rcCompactSpan&amp; as = chf.spans[ai];
-			
-			const int dir2 = (dir+1) &amp; 0x3;
-			if (rcGetCon(as, dir2) != RC_NOT_CONNECTED)
-			{
-				const int ax2 = ax + rcGetDirOffsetX(dir2);
-				const int ay2 = ay + rcGetDirOffsetY(dir2);
-				const int ai2 = (int)chf.cells[ax2+ay2*w].index + rcGetCon(as, dir2);
-				if (chf.areas[ai2] != area)
+				const int ax = cx + rcGetDirOffsetX(dir);
+				const int ay = cy + rcGetDirOffsetY(dir);
+				const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(cs, dir);
+				if (chf.areas[ai] != area)
 					continue;
-				unsigned short nr2 = srcReg[ai2];
-				if (nr2 != 0 &amp;&amp; nr2 != r)
+				if (chf.dist[ai] &gt;= lev &amp;&amp; srcReg[ai] == 0)
 				{
-					ar = nr2;
-					break;
+					srcReg[ai] = r;
+					srcDist[ai] = 0;
+					stack.push_back(LevelStackEntry(ax, ay, ai));
 				}
-			}				
-		}
-	}
-	if (ar != 0)
-	{
-		srcReg[ci] = 0;
-		continue;
-	}
-	
-	count++;
-	
-	// Expand neighbours.
-	for (int dir = 0; dir &lt; 4; ++dir)
-	{
-		if (rcGetCon(cs, dir) != RC_NOT_CONNECTED)
-		{
-			const int ax = cx + rcGetDirOffsetX(dir);
-			const int ay = cy + rcGetDirOffsetY(dir);
-			const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(cs, dir);
-			if (chf.areas[ai] != area)
-				continue;
-			if (chf.dist[ai] &gt;= lev &amp;&amp; srcReg[ai] == 0)
-			{
-				srcReg[ai] = r;
-				srcDist[ai] = 0;
-				stack.push_back(LevelStackEntry(ax, ay, ai));
 			}
 		}
 	}
+	
+	return count &gt; 0;
 }
 
-return count &gt; 0;
-</code></pre>
-<p>}</p>
-<p>&mldr;</p>
-<pre tabindex=0><code>- `floodRegion` 每次从 `lvlStacks[sId]` 取一个 `index`，处理其对应的 `span`，放入 `stack` 中进行循环处理，流程如下：
-	- 从 `stack` 中取出一个 `span` 。
-	- 检查 `span` 的八个邻居，如果没有分配过 `region` 或者 `region` 和传入的 `regionId` 相同，则将当前 `span` 的 `region` 设置为传入的 `regionId`，距离设置为 0 。
-	- 如果当前 `span` 设置了 `region`，则将四个邻居中，可行走且大于 `level - 2`，同时还未分配 `region` 的 `span`，设置其 `region` 为 `regionId`，距离设置为 0。
-	- 将处理的邻居 `span` 放入 `stack` 中，循环处理 `stack`，实现传播，直到 `stack` 处理完毕。
-- `mergeAndFilterRegions` 使用了新的结构 `rcRegion` 来进行处理，其实现如下：
-</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
-<p>&mldr;</p>
-<p>struct rcRegion
-{
-&mldr;</p>
-<pre><code>int spanCount;					// 当前地区的所有跨度的数量
-unsigned short id;				// 当前地区的 id
-unsigned char areaType;			// 当前地区的区域类型
-bool remap;						// 是否需要重新映射地区 id
-bool visited;					// 是否访问处理过
-bool overlap;					// 是否重叠，即在同一个单元格上存在多个相同地区的跨度
-bool connectsToBorder;			// 是否连接到 borderSize 范围内的边缘
-unsigned short ymin, ymax;
-rcTempVector&lt;int&gt; connections;	// 地区的轮廓的地区 id 连接
-rcTempVector&lt;int&gt; floors;		// 和当前地区存在重叠（即处在同一个单元格）的所有其他地区 id
-</code></pre>
-<p>};</p>
-<p>&mldr;</p>
-<p>static bool mergeAndFilterRegions(rcContext* ctx, int minRegionArea, int mergeRegionSize,
-unsigned short& maxRegionId,
-rcCompactHeightfield& chf,
-unsigned short* srcReg, rcTempVector<int>& overlaps)
-{
-const int w = chf.width;
-const int h = chf.height;</p>
-<pre><code>const int nreg = maxRegionId+1;
-rcTempVector&lt;rcRegion&gt; regions;
-if (!regions.reserve(nreg)) {
-	ctx-&gt;log(RC_LOG_ERROR, &quot;mergeAndFilterRegions: Out of memory 'regions' (%d).&quot;, nreg);
-	return false;
-}
+...
+</code></pre><ul>
+<li><code>floodRegion</code> 每次从 <code>lvlStacks[sId]</code> 取一个 <code>index</code>，处理其对应的 <code>span</code>，放入 <code>stack</code> 中进行循环处理，流程如下：
+<ul>
+<li>从 <code>stack</code> 中取出一个 <code>span</code> 。</li>
+<li>检查 <code>span</code> 的八个邻居，如果没有分配过 <code>region</code> 或者 <code>region</code> 和传入的 <code>regionId</code> 相同，则将当前 <code>span</code> 的 <code>region</code> 设置为传入的 <code>regionId</code>，距离设置为 0 。</li>
+<li>如果当前 <code>span</code> 设置了 <code>region</code>，则将四个邻居中，可行走且大于 <code>level - 2</code>，同时还未分配 <code>region</code> 的 <code>span</code>，设置其 <code>region</code> 为 <code>regionId</code>，距离设置为 0。</li>
+<li>将处理的邻居 <code>span</code> 放入 <code>stack</code> 中，循环处理 <code>stack</code>，实现传播，直到 <code>stack</code> 处理完毕。</li>
+</ul>
+</li>
+<li><code>mergeAndFilterRegions</code> 使用了新的结构 <code>rcRegion</code> 来进行处理，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastRegion.cpp
 
-// Construct regions
-for (int i = 0; i &lt; nreg; ++i)
-	regions.push_back(rcRegion((unsigned short) i));
+...
 
-// Find edge of a region and find connections around the contour.
-for (int y = 0; y &lt; h; ++y)
+struct rcRegion
 {
-	for (int x = 0; x &lt; w; ++x)
+	...
+	
+	int spanCount;					// 当前地区的所有跨度的数量
+	unsigned short id;				// 当前地区的 id
+	unsigned char areaType;			// 当前地区的区域类型
+	bool remap;						// 是否需要重新映射地区 id
+	bool visited;					// 是否访问处理过
+	bool overlap;					// 是否重叠，即在同一个单元格上存在多个相同地区的跨度
+	bool connectsToBorder;			// 是否连接到 borderSize 范围内的边缘
+	unsigned short ymin, ymax;
+	rcTempVector&lt;int&gt; connections;	// 地区的轮廓的地区 id 连接
+	rcTempVector&lt;int&gt; floors;		// 和当前地区存在重叠（即处在同一个单元格）的所有其他地区 id
+};
+
+...
+
+static bool mergeAndFilterRegions(rcContext* ctx, int minRegionArea, int mergeRegionSize,
+								  unsigned short&amp; maxRegionId,
+								  rcCompactHeightfield&amp; chf,
+								  unsigned short* srcReg, rcTempVector&lt;int&gt;&amp; overlaps)
+{
+	const int w = chf.width;
+	const int h = chf.height;
+	
+	const int nreg = maxRegionId+1;
+	rcTempVector&lt;rcRegion&gt; regions;
+	if (!regions.reserve(nreg)) {
+		ctx-&gt;log(RC_LOG_ERROR, &quot;mergeAndFilterRegions: Out of memory 'regions' (%d).&quot;, nreg);
+		return false;
+	}
+
+	// Construct regions
+	for (int i = 0; i &lt; nreg; ++i)
+		regions.push_back(rcRegion((unsigned short) i));
+	
+	// Find edge of a region and find connections around the contour.
+	for (int y = 0; y &lt; h; ++y)
 	{
-		const rcCompactCell&amp; c = chf.cells[x+y*w];
-		for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
+		for (int x = 0; x &lt; w; ++x)
 		{
-			unsigned short r = srcReg[i];
-			if (r == 0 || r &gt;= nreg)
-				continue;
-			
-			rcRegion&amp; reg = regions[r];
-			reg.spanCount++;
-			
-			// Update floors.
-			for (int j = (int)c.index; j &lt; ni; ++j)
+			const rcCompactCell&amp; c = chf.cells[x+y*w];
+			for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
 			{
-				if (i == j) continue;
-				unsigned short floorId = srcReg[j];
-				if (floorId == 0 || floorId &gt;= nreg)
+				unsigned short r = srcReg[i];
+				if (r == 0 || r &gt;= nreg)
 					continue;
-				if (floorId == r)
-					reg.overlap = true;
-				addUniqueFloorRegion(reg, floorId);
-			}
-			
-			// Have found contour
-			if (reg.connections.size() &gt; 0)
-				continue;
-			
-			reg.areaType = chf.areas[i];
-			
-			// Check if this cell is next to a border.
-			int ndir = -1;
-			for (int dir = 0; dir &lt; 4; ++dir)
-			{
-				if (isSolidEdge(chf, srcReg, x, y, i, dir))
+				
+				rcRegion&amp; reg = regions[r];
+				reg.spanCount++;
+				
+				// Update floors.
+				for (int j = (int)c.index; j &lt; ni; ++j)
 				{
-					ndir = dir;
-					break;
+					if (i == j) continue;
+					unsigned short floorId = srcReg[j];
+					if (floorId == 0 || floorId &gt;= nreg)
+						continue;
+					if (floorId == r)
+						reg.overlap = true;
+					addUniqueFloorRegion(reg, floorId);
+				}
+				
+				// Have found contour
+				if (reg.connections.size() &gt; 0)
+					continue;
+				
+				reg.areaType = chf.areas[i];
+				
+				// Check if this cell is next to a border.
+				int ndir = -1;
+				for (int dir = 0; dir &lt; 4; ++dir)
+				{
+					if (isSolidEdge(chf, srcReg, x, y, i, dir))
+					{
+						ndir = dir;
+						break;
+					}
+				}
+				
+				if (ndir != -1)
+				{
+					// The cell is at border.
+					// Walk around the contour to find all the neighbours.
+					walkContour(x, y, i, ndir, chf, srcReg, reg.connections);
 				}
 			}
-			
-			if (ndir != -1)
-			{
-				// The cell is at border.
-				// Walk around the contour to find all the neighbours.
-				walkContour(x, y, i, ndir, chf, srcReg, reg.connections);
-			}
 		}
 	}
-}
 
-// Remove too small regions.
-rcTempVector&lt;int&gt; stack(32);
-rcTempVector&lt;int&gt; trace(32);
-for (int i = 0; i &lt; nreg; ++i)
-{
-	rcRegion&amp; reg = regions[i];
-	if (reg.id == 0 || (reg.id &amp; RC_BORDER_REG))
-		continue;                       
-	if (reg.spanCount == 0)
-		continue;
-	if (reg.visited)
-		continue;
-	
-	// Count the total size of all the connected regions.
-	// Also keep track of the regions connects to a tile border.
-	bool connectsToBorder = false;
-	int spanCount = 0;
-	stack.clear();
-	trace.clear();
-
-	reg.visited = true;
-	stack.push_back(i);
-	
-	while (stack.size())
-	{
-		// Pop
-		int ri = stack.back(); stack.pop_back();
-		
-		rcRegion&amp; creg = regions[ri];
-
-		spanCount += creg.spanCount;
-		trace.push_back(ri);
-
-		for (int j = 0; j &lt; creg.connections.size(); ++j)
-		{
-			if (creg.connections[j] &amp; RC_BORDER_REG)
-			{
-				connectsToBorder = true;
-				continue;
-			}
-			rcRegion&amp; neireg = regions[creg.connections[j]];
-			if (neireg.visited)
-				continue;
-			if (neireg.id == 0 || (neireg.id &amp; RC_BORDER_REG))
-				continue;
-			// Visit
-			stack.push_back(neireg.id);
-			neireg.visited = true;
-		}
-	}
-	
-	// If the accumulated regions size is too small, remove it.
-	// Do not remove areas which connect to tile borders
-	// as their size cannot be estimated correctly and removing them
-	// can potentially remove necessary areas.
-	if (spanCount &lt; minRegionArea &amp;&amp; !connectsToBorder)
-	{
-		// Kill all visited regions.
-		for (int j = 0; j &lt; trace.size(); ++j)
-		{
-			regions[trace[j]].spanCount = 0;
-			regions[trace[j]].id = 0;
-		}
-	}
-}
-
-// Merge too small regions to neighbour regions.
-int mergeCount = 0 ;
-do
-{
-	mergeCount = 0;
+	// Remove too small regions.
+	rcTempVector&lt;int&gt; stack(32);
+	rcTempVector&lt;int&gt; trace(32);
 	for (int i = 0; i &lt; nreg; ++i)
 	{
 		rcRegion&amp; reg = regions[i];
 		if (reg.id == 0 || (reg.id &amp; RC_BORDER_REG))
-			continue;
-		if (reg.overlap)
-			continue;
+			continue;                       
 		if (reg.spanCount == 0)
 			continue;
-		
-		// Check to see if the region should be merged.
-		if (reg.spanCount &gt; mergeRegionSize &amp;&amp; isRegionConnectedToBorder(reg))
+		if (reg.visited)
 			continue;
 		
-		// Small region with more than 1 connection.
-		// Or region which is not connected to a border at all.
-		// Find smallest neighbour region that connects to this one.
-		int smallest = 0xfffffff;
-		unsigned short mergeId = reg.id;
-		for (int j = 0; j &lt; reg.connections.size(); ++j)
+		// Count the total size of all the connected regions.
+		// Also keep track of the regions connects to a tile border.
+		bool connectsToBorder = false;
+		int spanCount = 0;
+		stack.clear();
+		trace.clear();
+
+		reg.visited = true;
+		stack.push_back(i);
+		
+		while (stack.size())
 		{
-			if (reg.connections[j] &amp; RC_BORDER_REG) continue;
-			rcRegion&amp; mreg = regions[reg.connections[j]];
-			if (mreg.id == 0 || (mreg.id &amp; RC_BORDER_REG) || mreg.overlap) continue;
-			if (mreg.spanCount &lt; smallest &amp;&amp;
-				canMergeWithRegion(reg, mreg) &amp;&amp;
-				canMergeWithRegion(mreg, reg))
-			{
-				smallest = mreg.spanCount;
-				mergeId = mreg.id;
-			}
-		}
-		// Found new id.
-		if (mergeId != reg.id)
-		{
-			unsigned short oldId = reg.id;
-			rcRegion&amp; target = regions[mergeId];
+			// Pop
+			int ri = stack.back(); stack.pop_back();
 			
-			// Merge neighbours.
-			if (mergeRegions(target, reg))
+			rcRegion&amp; creg = regions[ri];
+
+			spanCount += creg.spanCount;
+			trace.push_back(ri);
+
+			for (int j = 0; j &lt; creg.connections.size(); ++j)
 			{
-				// Fixup regions pointing to current region.
-				for (int j = 0; j &lt; nreg; ++j)
+				if (creg.connections[j] &amp; RC_BORDER_REG)
 				{
-					if (regions[j].id == 0 || (regions[j].id &amp; RC_BORDER_REG)) continue;
-					// If another region was already merged into current region
-					// change the nid of the previous region too.
-					if (regions[j].id == oldId)
-						regions[j].id = mergeId;
-					// Replace the current region with the new one if the
-					// current regions is neighbour.
-					replaceNeighbour(regions[j], oldId, mergeId);
+					connectsToBorder = true;
+					continue;
 				}
-				mergeCount++;
+				rcRegion&amp; neireg = regions[creg.connections[j]];
+				if (neireg.visited)
+					continue;
+				if (neireg.id == 0 || (neireg.id &amp; RC_BORDER_REG))
+					continue;
+				// Visit
+				stack.push_back(neireg.id);
+				neireg.visited = true;
+			}
+		}
+		
+		// If the accumulated regions size is too small, remove it.
+		// Do not remove areas which connect to tile borders
+		// as their size cannot be estimated correctly and removing them
+		// can potentially remove necessary areas.
+		if (spanCount &lt; minRegionArea &amp;&amp; !connectsToBorder)
+		{
+			// Kill all visited regions.
+			for (int j = 0; j &lt; trace.size(); ++j)
+			{
+				regions[trace[j]].spanCount = 0;
+				regions[trace[j]].id = 0;
 			}
 		}
 	}
-}
-while (mergeCount &gt; 0);
-
-// Compress region Ids.
-for (int i = 0; i &lt; nreg; ++i)
-{
-	regions[i].remap = false;
-	if (regions[i].id == 0) continue;       // Skip nil regions.
-	if (regions[i].id &amp; RC_BORDER_REG) continue;    // Skip external regions.
-	regions[i].remap = true;
-}
-
-unsigned short regIdGen = 0;
-for (int i = 0; i &lt; nreg; ++i)
-{
-	if (!regions[i].remap)
-		continue;
-	unsigned short oldId = regions[i].id;
-	unsigned short newId = ++regIdGen;
-	for (int j = i; j &lt; nreg; ++j)
+	
+	// Merge too small regions to neighbour regions.
+	int mergeCount = 0 ;
+	do
 	{
-		if (regions[j].id == oldId)
+		mergeCount = 0;
+		for (int i = 0; i &lt; nreg; ++i)
 		{
-			regions[j].id = newId;
-			regions[j].remap = false;
+			rcRegion&amp; reg = regions[i];
+			if (reg.id == 0 || (reg.id &amp; RC_BORDER_REG))
+				continue;
+			if (reg.overlap)
+				continue;
+			if (reg.spanCount == 0)
+				continue;
+			
+			// Check to see if the region should be merged.
+			if (reg.spanCount &gt; mergeRegionSize &amp;&amp; isRegionConnectedToBorder(reg))
+				continue;
+			
+			// Small region with more than 1 connection.
+			// Or region which is not connected to a border at all.
+			// Find smallest neighbour region that connects to this one.
+			int smallest = 0xfffffff;
+			unsigned short mergeId = reg.id;
+			for (int j = 0; j &lt; reg.connections.size(); ++j)
+			{
+				if (reg.connections[j] &amp; RC_BORDER_REG) continue;
+				rcRegion&amp; mreg = regions[reg.connections[j]];
+				if (mreg.id == 0 || (mreg.id &amp; RC_BORDER_REG) || mreg.overlap) continue;
+				if (mreg.spanCount &lt; smallest &amp;&amp;
+					canMergeWithRegion(reg, mreg) &amp;&amp;
+					canMergeWithRegion(mreg, reg))
+				{
+					smallest = mreg.spanCount;
+					mergeId = mreg.id;
+				}
+			}
+			// Found new id.
+			if (mergeId != reg.id)
+			{
+				unsigned short oldId = reg.id;
+				rcRegion&amp; target = regions[mergeId];
+				
+				// Merge neighbours.
+				if (mergeRegions(target, reg))
+				{
+					// Fixup regions pointing to current region.
+					for (int j = 0; j &lt; nreg; ++j)
+					{
+						if (regions[j].id == 0 || (regions[j].id &amp; RC_BORDER_REG)) continue;
+						// If another region was already merged into current region
+						// change the nid of the previous region too.
+						if (regions[j].id == oldId)
+							regions[j].id = mergeId;
+						// Replace the current region with the new one if the
+						// current regions is neighbour.
+						replaceNeighbour(regions[j], oldId, mergeId);
+					}
+					mergeCount++;
+				}
+			}
 		}
 	}
+	while (mergeCount &gt; 0);
+	
+	// Compress region Ids.
+	for (int i = 0; i &lt; nreg; ++i)
+	{
+		regions[i].remap = false;
+		if (regions[i].id == 0) continue;       // Skip nil regions.
+		if (regions[i].id &amp; RC_BORDER_REG) continue;    // Skip external regions.
+		regions[i].remap = true;
+	}
+	
+	unsigned short regIdGen = 0;
+	for (int i = 0; i &lt; nreg; ++i)
+	{
+		if (!regions[i].remap)
+			continue;
+		unsigned short oldId = regions[i].id;
+		unsigned short newId = ++regIdGen;
+		for (int j = i; j &lt; nreg; ++j)
+		{
+			if (regions[j].id == oldId)
+			{
+				regions[j].id = newId;
+				regions[j].remap = false;
+			}
+		}
+	}
+	maxRegionId = regIdGen;
+	
+	// Remap regions.
+	for (int i = 0; i &lt; chf.spanCount; ++i)
+	{
+		if ((srcReg[i] &amp; RC_BORDER_REG) == 0)
+			srcReg[i] = regions[srcReg[i]].id;
+	}
+
+	// Return regions that we found to be overlapping.
+	for (int i = 0; i &lt; nreg; ++i)
+		if (regions[i].overlap)
+			overlaps.push_back(regions[i].id);
+
+	return true;
 }
-maxRegionId = regIdGen;
 
-// Remap regions.
-for (int i = 0; i &lt; chf.spanCount; ++i)
-{
-	if ((srcReg[i] &amp; RC_BORDER_REG) == 0)
-		srcReg[i] = regions[srcReg[i]].id;
-}
+...
+</code></pre><ul>
+<li><code>mergeAndFilterRegions</code> 主要分为几个步骤：
+<ul>
+<li>寻找 <code>region</code> 的轮廓及其连接信息。
+<ul>
+<li>为每一个 <code>regionId</code> 创建一个 <code>rcRegion</code>，遍历所有 <code>cell</code> 上的所有 <code>span</code> 进行处理，包括：
+<ul>
+<li>将同一 <code>regionId</code> 的 <code>span</code> 数量统计到 <code>reg.spanCount</code> 中。</li>
+<li>检查当前 <code>cell</code> 上是否有其他 <code>span</code> 的 <code>regionId</code> 和当前 <code>regionId</code> 相同，如果有则设置 <code>reg.overlap</code> 为 <code>true</code>，即有重叠。</li>
+<li>将当前 <code>cell</code> 上所有 <code>span</code> 的 <code>regionId</code>，加入到 <code>reg.floors</code> 中。</li>
+<li>设置当前 <code>reg.areaType</code>。</li>
+<li>通过 <code>isSolidEdge</code> 方法，检查四个邻居，如果有一个邻居的 <code>regionId</code> 是否为其他 <code>region</code> 或者不可行走，则当前 <code>span</code> 是当前 <code>region</code> 的边界。</li>
+<li>如果当前 <code>span</code> 是边界，则通过 <code>walkContour</code> 方法找到当前 <code>region</code> 的轮廓，并计算轮廓的 <code>region</code> 连接信息。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>移除过小的 <code>region</code>。
+<ul>
+<li>遍历所有的 <code>region</code>，对每个 <code>region</code> 进行检查，主要流程：
+<ul>
+<li>设置 <code>spanCount</code> 总数量为 0。</li>
+<li>将当前 <code>regionId</code> 加入到 <code>stack</code> 中，迭代处理。
+<ul>
+<li>从 <code>stack</code> 中取出 <code>creg</code>，将当前 <code>creg.spanCount</code> 数量加到 <code>spanCount</code>。</li>
+<li>遍历 <code>creg.connections</code>，对其中每一个 <code>neireg</code> 进行检查。
+<ul>
+<li>如果 <code>neireg</code> 为 <code>borderSize</code> 的范围，则设置 <code>connectsToBorder</code> 为 <code>true</code>，代表连接到边界。</li>
+<li>如果 <code>neireg</code> 已经访问过，则不再处理。</li>
+<li>将 <code>neireg</code> 标记为已经访问过，并将 <code>neireg</code> 的 <code>regionId</code> 加入到 <code>stack</code> 中。</li>
+</ul>
+</li>
+<li>继续进行 <code>stack</code> 的迭代处理，直到 <code>stack</code> 处理完成。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>如果 <code>spanCount</code> 小于 <code>minRegionArea</code>，并且 <code>connectsToBorder</code> 为 <code>false</code>，则代表当前 <code>regionId</code> 及其所有 <code>connections</code> 的 <code>regionId</code> 组成的整体区域太小，并且没有连接到边界，则将其移除，即当前 <code>regionId</code> 以及 <code>connections</code> 的 <code>spanCount</code> 和 <code>regionId</code> 都设置为 0。但如果连接到边界，因为无法准确估计其大小，可能导致移除必要的区域，所以会保留。</li>
+<li>如果移除了 <code>region</code> ，后续的 <code>region</code> 在计算时会直接跳过。计算总数量时，已经移除的 <code>region</code> 原本的数量也不会计入。</li>
+</ul>
+</li>
+<li>合并小的 <code>region</code> 到邻居 <code>region</code> 中。
+<ul>
+<li>遍历所有的 <code>region</code>，对每个 <code>region</code> 进行检查，主要流程：
+<ul>
+<li>如果 <code>region</code> 被移除（<code>reg.spanCount</code> 为 0）或者 <code>region</code> 有重叠（<code>reg.overlap</code> 为 <code>true</code>），则不处理。</li>
+<li>从 <code>connections</code> 中，通过依次将两个 <code>region</code> 设置为源 <code>region</code>，调用两次 <code>canMergeWithRegion</code> 方法，找到两者相互都能合并的 <code>region</code>。</li>
+<li>从所有能合并的 <code>region</code> 中取 <code>spanCount</code> 最小的作为目标 <code>region</code>，通过 <code>mergeRegions</code> 方法进行合并。</li>
+<li>合并成功后，将当前 <code>region</code>、<code>connections</code>、<code>floors</code> 中的 <code>regionId</code> 都更换目标的 <code>regionId</code>。</li>
+</ul>
+</li>
+<li>所有 <code>region</code> 处理完成后，如果有成功合并过，则再重复执行一次处理，直到不再有可以合并的 <code>region</code>。</li>
+</ul>
+</li>
+<li>重新映射 <code>regionId</code>。
+<ul>
+<li>遍历所有的 <code>region</code>，从 1 开始设置剩余的 <code>region</code>，将 <code>regionId</code> 映射为新的区间。</li>
+</ul>
+</li>
+<li>应用新的 <code>regionId</code>。
+<ul>
+<li>遍历 <code>srcReg</code>，使用新的 <code>regionId</code> 进行替换。</li>
+</ul>
+</li>
+<li>记录所有重叠的 <code>regionId</code>。
+<ul>
+<li>使用新的 <code>regionId</code>，记录所有有重叠的 <code>region</code>。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><code>walkContour</code> 方法的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastRegion.cpp
 
-// Return regions that we found to be overlapping.
-for (int i = 0; i &lt; nreg; ++i)
-	if (regions[i].overlap)
-		overlaps.push_back(regions[i].id);
-
-return true;
-</code></pre>
-<p>}</p>
-<p>&mldr;</p>
-<pre tabindex=0><code>- `mergeAndFilterRegions` 主要分为几个步骤：
-	- 寻找 `region` 的轮廓及其连接信息。
-		- 为每一个 `regionId` 创建一个 `rcRegion`，遍历所有 `cell` 上的所有 `span` 进行处理，包括：
-			- 将同一 `regionId` 的 `span` 数量统计到 `reg.spanCount` 中。
-			- 检查当前 `cell` 上是否有其他 `span` 的 `regionId` 和当前 `regionId` 相同，如果有则设置 `reg.overlap` 为 `true`，即有重叠。
-			- 将当前 `cell` 上所有 `span` 的 `regionId`，加入到 `reg.floors` 中。
-			- 设置当前 `reg.areaType`。
-			- 通过 `isSolidEdge` 方法，检查四个邻居，如果有一个邻居的 `regionId` 是否为其他 `region` 或者不可行走，则当前 `span` 是当前 `region` 的边界。
-			- 如果当前 `span` 是边界，则通过 `walkContour` 方法找到当前 `region` 的轮廓，并计算轮廓的 `region` 连接信息。 
-	- 移除过小的 `region`。
-		- 遍历所有的 `region`，对每个 `region` 进行检查，主要流程：
-			- 设置 `spanCount` 总数量为 0。
-			- 将当前 `regionId` 加入到 `stack` 中，迭代处理。
-				- 从 `stack` 中取出 `creg`，将当前 `creg.spanCount` 数量加到 `spanCount`。
-				- 遍历 `creg.connections`，对其中每一个 `neireg` 进行检查。
-					- 如果 `neireg` 为 `borderSize` 的范围，则设置 `connectsToBorder` 为 `true`，代表连接到边界。
-					- 如果 `neireg` 已经访问过，则不再处理。
-					- 将 `neireg` 标记为已经访问过，并将 `neireg` 的 `regionId` 加入到 `stack` 中。
-				- 继续进行 `stack` 的迭代处理，直到 `stack` 处理完成。
-		- 如果 `spanCount` 小于  `minRegionArea`，并且 `connectsToBorder` 为 `false`，则代表当前 `regionId` 及其所有 `connections` 的 `regionId` 组成的整体区域太小，并且没有连接到边界，则将其移除，即当前 `regionId` 以及 `connections` 的 `spanCount` 和 `regionId` 都设置为 0。但如果连接到边界，因为无法准确估计其大小，可能导致移除必要的区域，所以会保留。
-		- 如果移除了 `region` ，后续的 `region` 在计算时会直接跳过。计算总数量时，已经移除的 `region` 原本的数量也不会计入。
-	- 合并小的 `region` 到邻居 `region` 中。
-		- 遍历所有的 `region`，对每个 `region` 进行检查，主要流程：
-			- 如果 `region` 被移除（`reg.spanCount` 为 0）或者 `region` 有重叠（`reg.overlap` 为 `true`），则不处理。
-			- 从 `connections` 中，通过依次将两个 `region` 设置为源 `region`，调用两次 `canMergeWithRegion` 方法，找到两者相互都能合并的 `region`。
-			- 从所有能合并的 `region` 中取 `spanCount` 最小的作为目标 `region`，通过 `mergeRegions` 方法进行合并。
-			- 合并成功后，将当前 `region`、`connections`、`floors` 中的 `regionId` 都更换目标的 `regionId`。
-		- 所有 `region` 处理完成后，如果有成功合并过，则再重复执行一次处理，直到不再有可以合并的 `region`。
-	- 重新映射 `regionId`。
-		- 遍历所有的 `region`，从 1 开始设置剩余的 `region`，将 `regionId` 映射为新的区间。
-	- 应用新的 `regionId`。
-		- 遍历 `srcReg`，使用新的 `regionId` 进行替换。
-	- 记录所有重叠的 `regionId`。
-		- 使用新的 `regionId`，记录所有有重叠的 `region`。 
-- `walkContour` 方法的实现如下：
-</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
-<p>&mldr;
+...
 static void walkContour(int x, int y, int i, int dir,
-rcCompactHeightfield& chf,
-const unsigned short* srcReg,
-rcTempVector<int>& cont)
+						rcCompactHeightfield&amp; chf,
+						const unsigned short* srcReg,
+						rcTempVector&lt;int&gt;&amp; cont)
 {
-int startDir = dir;
-int starti = i;</p>
-<pre><code>const rcCompactSpan&amp; ss = chf.spans[i];
-unsigned short curReg = 0;
-if (rcGetCon(ss, dir) != RC_NOT_CONNECTED)
-{
-	const int ax = x + rcGetDirOffsetX(dir);
-	const int ay = y + rcGetDirOffsetY(dir);
-	const int ai = (int)chf.cells[ax+ay*chf.width].index + rcGetCon(ss, dir);
-	curReg = srcReg[ai];
-}
-cont.push_back(curReg);
-		
-int iter = 0;
-while (++iter &lt; 40000)
-{
-	const rcCompactSpan&amp; s = chf.spans[i];
-	
-	if (isSolidEdge(chf, srcReg, x, y, i, dir))
+	int startDir = dir;
+	int starti = i;
+
+	const rcCompactSpan&amp; ss = chf.spans[i];
+	unsigned short curReg = 0;
+	if (rcGetCon(ss, dir) != RC_NOT_CONNECTED)
 	{
-		// Choose the edge corner
-		unsigned short r = 0;
-		if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
-		{
-			const int ax = x + rcGetDirOffsetX(dir);
-			const int ay = y + rcGetDirOffsetY(dir);
-			const int ai = (int)chf.cells[ax+ay*chf.width].index + rcGetCon(s, dir);
-			r = srcReg[ai];
-		}
-		if (r != curReg)
-		{
-			curReg = r;
-			cont.push_back(curReg);
-		}
-		
-		dir = (dir+1) &amp; 0x3;  // Rotate CW
+		const int ax = x + rcGetDirOffsetX(dir);
+		const int ay = y + rcGetDirOffsetY(dir);
+		const int ai = (int)chf.cells[ax+ay*chf.width].index + rcGetCon(ss, dir);
+		curReg = srcReg[ai];
 	}
-	else
-	{
-		int ni = -1;
-		const int nx = x + rcGetDirOffsetX(dir);
-		const int ny = y + rcGetDirOffsetY(dir);
-		if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
-		{
-			const rcCompactCell&amp; nc = chf.cells[nx+ny*chf.width];
-			ni = (int)nc.index + rcGetCon(s, dir);
-		}
-		if (ni == -1)
-		{
-			// Should not happen.
-			return;
-		}
-		x = nx;
-		y = ny;
-		i = ni;
-		dir = (dir+3) &amp; 0x3;	// Rotate CCW
-	}
-	
-	if (starti == i &amp;&amp; startDir == dir)
-	{
-		break;
-	}
-}
-
-// Remove adjacent duplicates.
-if (cont.size() &gt; 1)
-{
-	for (int j = 0; j &lt; cont.size(); )
-	{
-		int nj = (j+1) % cont.size();
-		if (cont[j] == cont[nj])
-		{
-			for (int k = j; k &lt; cont.size()-1; ++k)
-				cont[k] = cont[k+1];
-			cont.pop_back();
-		}
-		else
-			++j;
-	}
-}
-</code></pre>
-<p>}</p>
-<p>&mldr;</p>
-<pre tabindex=0><code>- `walkContour` 从边界 `span` 出发寻找轮廓和连接 `region` ，其主要步骤为：
-	- 计算边界 `span` 目标方向邻居的 `regionId`，加入 `cont` 中。
-	- 按照左上右下的方向顺序，从当前 `span` 和方向开始，检查对应的邻居是否为当前 `region` 的边界。
-		- 如果是边界，则方向变更为下一个方向，再进行检查。此时如果邻居的 `regionId` 和上一次记录的不同，则将邻居 `regionId` 加入 `cont` 中。
-		- 如果不是边界，则将当前 `span` 改为邻居 `span`，方向改为上一个方向，再进行检查。
-		- 如果当前 `span` 和方向，和起始的相同，则说明回到了起点，轮廓寻找完成，此时所有经过的 `span` 组成了整个边界。
-	- 遍历 `cont`，移除相邻重复的 `regionId`，包括首尾，最终得到一个 `region` 的连接 `regionId` 列表，即为 `reg.connections`。
- ![WalkContour.gif](/img/Algorithm/NavmeshNavigation/WalkContour.gif?raw=true)
-- `canMergeWithRegion` 的实现如下：
-</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
-<p>&mldr;
-static bool canMergeWithRegion(const rcRegion& rega, const rcRegion& regb)
-{
-if (rega.areaType != regb.areaType)
-return false;
-int n = 0;
-for (int i = 0; i &lt; rega.connections.size(); ++i)
-{
-if (rega.connections[i] == regb.id)
-n++;
-}
-if (n > 1)
-return false;
-for (int i = 0; i &lt; rega.floors.size(); ++i)
-{
-if (rega.floors[i] == regb.id)
-return false;
-}
-return true;
-}</p>
-<p>&mldr;</p>
-<pre tabindex=0><code>- `canMergeWithRegion` 主要过滤不能合并的情况，包括：
-	- 源 `region` 和目标 `region` 的 `area` 不同。
-	- 源 `region` 的 `connections` 出现超过一次目标 `region` 的 `regionId`，即目标 `region` 和源 `region` 交界处可能还有其他 `region`。
-	- 源 `region` 的 `floors` 中存在目标 `region` 的 `regionId`，即目标 `region` 和源 `region` 具有出现在同一 `cell` 的情况。 
-- `mergeRegions` 的实现如下：
-</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
-<p>&mldr;
-static bool mergeRegions(rcRegion& rega, rcRegion& regb)
-{
-unsigned short aid = rega.id;
-unsigned short bid = regb.id;</p>
-<pre><code>// Duplicate current neighbourhood.
-rcTempVector&lt;int&gt; acon;
-acon.resize(rega.connections.size());
-for (int i = 0; i &lt; rega.connections.size(); ++i)
-	acon[i] = rega.connections[i];
-rcTempVector&lt;int&gt;&amp; bcon = regb.connections;
-
-// Find insertion point on A.
-int insa = -1;
-for (int i = 0; i &lt; acon.size(); ++i)
-{
-	if (acon[i] == bid)
-	{
-		insa = i;
-		break;
-	}
-}
-if (insa == -1)
-	return false;
-
-// Find insertion point on B.
-int insb = -1;
-for (int i = 0; i &lt; bcon.size(); ++i)
-{
-	if (bcon[i] == aid)
-	{
-		insb = i;
-		break;
-	}
-}
-if (insb == -1)
-	return false;
-
-// Merge neighbours.
-rega.connections.clear();
-for (int i = 0, ni = static_cast&lt;int&gt;(acon.size()); i &lt; ni-1; ++i)
-{
-	rega.connections.push_back(acon[(insa+1+i) % ni]);
-}
-	
-for (int i = 0, ni = static_cast&lt;int&gt;(bcon.size()); i &lt; ni-1; ++i)
-{
-	rega.connections.push_back(bcon[(insb+1+i) % ni]);
-}
-
-removeAdjacentNeighbours(rega);
-
-for (int j = 0; j &lt; regb.floors.size(); ++j)
-	addUniqueFloorRegion(rega, regb.floors[j]);
-rega.spanCount += regb.spanCount;
-regb.spanCount = 0;
-regb.connections.resize(0);
-
-return true;
-</code></pre>
-<p>}</p>
-<p>&mldr;</p>
-<pre tabindex=0><code>- `mergeRegions` 合并的主要过程为：
-	- 找出目标 `regionId` 在源 `region` 的 `connections` 中的索引 `insa` 。
-	- 找出源 `regionId` 在目标 `region` 的 `connections` 中的索引 `insb` 。
-	- 清空源 `region` 的 `connections`，从 `insa + 1` 的位置将源 `connections` 重新加入，`insa` 位置不加入，因为和目标 `region` 将要合并，所以原来边界中的目标 `regionId`，需要插入目标 `region` 的边界连接。
-	- 从 `insb + 1` 的位置将目标 `connections` 加入源 `connections`，同理 `insb` 位置不加入。
-	- 调用 `removeAdjacentNeighbours` 方法，移除源 `connections` 中相邻重复的 `regionId` 。
-	- 调用 `addUniqueFloorRegion` 方法，将目标 `floors` 加入到源 `floors` 中。
-	- 将目标 `spanCount` 加到源 `spanCount` 上，并清空目标 `region` 的 `spanCount` 和 `connections`，完成合并过程。
-- 以 2D 为例，分水岭划分的全过程如下图：
- ![Watershed.gif](/img/Algorithm/NavmeshNavigation/Watershed.gif?raw=true)
-###### 单调划分
-- 单调划分通过 `rcBuildRegionsMonotone` 方法进行，其实现如下：
-</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
-<p>&mldr;</p>
-<p>static const unsigned short RC_NULL_NEI = 0xffff;</p>
-<p>struct rcSweepSpan
-{
-unsigned short rid; // 行索引 id
-unsigned short id; // 地区 id
-unsigned short ns; // 该地区 id 采样的跨度个数
-unsigned short nei; // 邻居的地区 id，通常指下方的 id
-};</p>
-<p>&mldr;
-bool rcBuildRegionsMonotone(rcContext* ctx, rcCompactHeightfield& chf,
-const int borderSize, const int minRegionArea, const int mergeRegionArea)
-{
-rcAssert(ctx);</p>
-<pre><code>rcScopedTimer timer(ctx, RC_TIMER_BUILD_REGIONS);
-
-const int w = chf.width;
-const int h = chf.height;
-unsigned short id = 1;
-
-rcScopedDelete&lt;unsigned short&gt; srcReg((unsigned short*)rcAlloc(sizeof(unsigned short)*chf.spanCount, RC_ALLOC_TEMP));
-if (!srcReg)
-{
-	ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildRegionsMonotone: Out of memory 'src' (%d).&quot;, chf.spanCount);
-	return false;
-}
-memset(srcReg,0,sizeof(unsigned short)*chf.spanCount);
-
-const int nsweeps = rcMax(chf.width,chf.height);
-rcScopedDelete&lt;rcSweepSpan&gt; sweeps((rcSweepSpan*)rcAlloc(sizeof(rcSweepSpan)*nsweeps, RC_ALLOC_TEMP));
-if (!sweeps)
-{
-	ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildRegionsMonotone: Out of memory 'sweeps' (%d).&quot;, nsweeps);
-	return false;
-}
-
-
-// Mark border regions.
-if (borderSize &gt; 0)
-{
-	// Make sure border will not overflow.
-	const int bw = rcMin(w, borderSize);
-	const int bh = rcMin(h, borderSize);
-	// Paint regions
-	paintRectRegion(0, bw, 0, h, id|RC_BORDER_REG, chf, srcReg); id++;
-	paintRectRegion(w-bw, w, 0, h, id|RC_BORDER_REG, chf, srcReg); id++;
-	paintRectRegion(0, w, 0, bh, id|RC_BORDER_REG, chf, srcReg); id++;
-	paintRectRegion(0, w, h-bh, h, id|RC_BORDER_REG, chf, srcReg); id++;
-}
-
-chf.borderSize = borderSize;
-
-rcTempVector&lt;int&gt; prev(256);
-
-// Sweep one line at a time.
-for (int y = borderSize; y &lt; h-borderSize; ++y)
-{
-	// Collect spans from this row.
-	prev.resize(id+1);
-	memset(&amp;prev[0],0,sizeof(int)*id);
-	unsigned short rid = 1;
-	
-	for (int x = borderSize; x &lt; w-borderSize; ++x)
-	{
-		const rcCompactCell&amp; c = chf.cells[x+y*w];
-		
-		for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
-		{
-			const rcCompactSpan&amp; s = chf.spans[i];
-			if (chf.areas[i] == RC_NULL_AREA) continue;
+	cont.push_back(curReg);
 			
-			// -x
-			unsigned short previd = 0;
-			if (rcGetCon(s, 0) != RC_NOT_CONNECTED)
+	int iter = 0;
+	while (++iter &lt; 40000)
+	{
+		const rcCompactSpan&amp; s = chf.spans[i];
+		
+		if (isSolidEdge(chf, srcReg, x, y, i, dir))
+		{
+			// Choose the edge corner
+			unsigned short r = 0;
+			if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
 			{
-				const int ax = x + rcGetDirOffsetX(0);
-				const int ay = y + rcGetDirOffsetY(0);
-				const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, 0);
-				if ((srcReg[ai] &amp; RC_BORDER_REG) == 0 &amp;&amp; chf.areas[i] == chf.areas[ai])
-					previd = srcReg[ai];
+				const int ax = x + rcGetDirOffsetX(dir);
+				const int ay = y + rcGetDirOffsetY(dir);
+				const int ai = (int)chf.cells[ax+ay*chf.width].index + rcGetCon(s, dir);
+				r = srcReg[ai];
+			}
+			if (r != curReg)
+			{
+				curReg = r;
+				cont.push_back(curReg);
 			}
 			
-			if (!previd)
-			{
-				previd = rid++;
-				sweeps[previd].rid = previd;
-				sweeps[previd].ns = 0;
-				sweeps[previd].nei = 0;
-			}
-
-			// -y
-			if (rcGetCon(s,3) != RC_NOT_CONNECTED)
-			{
-				const int ax = x + rcGetDirOffsetX(3);
-				const int ay = y + rcGetDirOffsetY(3);
-				const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, 3);
-				if (srcReg[ai] &amp;&amp; (srcReg[ai] &amp; RC_BORDER_REG) == 0 &amp;&amp; chf.areas[i] == chf.areas[ai])
-				{
-					unsigned short nr = srcReg[ai];
-					if (!sweeps[previd].nei || sweeps[previd].nei == nr)
-					{
-						sweeps[previd].nei = nr;
-						sweeps[previd].ns++;
-						prev[nr]++;
-					}
-					else
-					{
-						sweeps[previd].nei = RC_NULL_NEI;
-					}
-				}
-			}
-
-			srcReg[i] = previd;
-		}
-	}
-	
-	// Create unique ID.
-	for (int i = 1; i &lt; rid; ++i)
-	{
-		if (sweeps[i].nei != RC_NULL_NEI &amp;&amp; sweeps[i].nei != 0 &amp;&amp;
-			prev[sweeps[i].nei] == (int)sweeps[i].ns)
-		{
-			sweeps[i].id = sweeps[i].nei;
+			dir = (dir+1) &amp; 0x3;  // Rotate CW
 		}
 		else
 		{
-			sweeps[i].id = id++;
+			int ni = -1;
+			const int nx = x + rcGetDirOffsetX(dir);
+			const int ny = y + rcGetDirOffsetY(dir);
+			if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
+			{
+				const rcCompactCell&amp; nc = chf.cells[nx+ny*chf.width];
+				ni = (int)nc.index + rcGetCon(s, dir);
+			}
+			if (ni == -1)
+			{
+				// Should not happen.
+				return;
+			}
+			x = nx;
+			y = ny;
+			i = ni;
+			dir = (dir+3) &amp; 0x3;	// Rotate CCW
+		}
+		
+		if (starti == i &amp;&amp; startDir == dir)
+		{
+			break;
 		}
 	}
-	
-	// Remap IDs
-	for (int x = borderSize; x &lt; w-borderSize; ++x)
+
+	// Remove adjacent duplicates.
+	if (cont.size() &gt; 1)
 	{
-		const rcCompactCell&amp; c = chf.cells[x+y*w];
-		
-		for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
+		for (int j = 0; j &lt; cont.size(); )
 		{
-			if (srcReg[i] &gt; 0 &amp;&amp; srcReg[i] &lt; rid)
-				srcReg[i] = sweeps[srcReg[i]].id;
+			int nj = (j+1) % cont.size();
+			if (cont[j] == cont[nj])
+			{
+				for (int k = j; k &lt; cont.size()-1; ++k)
+					cont[k] = cont[k+1];
+				cont.pop_back();
+			}
+			else
+				++j;
 		}
 	}
 }
 
+...
+</code></pre><ul>
+<li><code>walkContour</code> 从边界 <code>span</code> 出发寻找轮廓和连接 <code>region</code> ，其主要步骤为：
+<ul>
+<li>计算边界 <code>span</code> 目标方向邻居的 <code>regionId</code>，加入 <code>cont</code> 中。</li>
+<li>按照左上右下的方向顺序，从当前 <code>span</code> 和方向开始，检查对应的邻居是否为当前 <code>region</code> 的边界。
+<ul>
+<li>如果是边界，则方向变更为下一个方向，再进行检查。此时如果邻居的 <code>regionId</code> 和上一次记录的不同，则将邻居 <code>regionId</code> 加入 <code>cont</code> 中。</li>
+<li>如果不是边界，则将当前 <code>span</code> 改为邻居 <code>span</code>，方向改为上一个方向，再进行检查。</li>
+<li>如果当前 <code>span</code> 和方向，和起始的相同，则说明回到了起点，轮廓寻找完成，此时所有经过的 <code>span</code> 组成了整个边界。</li>
+</ul>
+</li>
+<li>遍历 <code>cont</code>，移除相邻重复的 <code>regionId</code>，包括首尾，最终得到一个 <code>region</code> 的连接 <code>regionId</code> 列表，即为 <code>reg.connections</code>。
+<img src="/img/Algorithm/NavmeshNavigation/WalkContour.gif?raw=true" alt=WalkContour.gif>
+</li>
+</ul>
+</li>
+<li><code>canMergeWithRegion</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastRegion.cpp
 
+...
+static bool canMergeWithRegion(const rcRegion&amp; rega, const rcRegion&amp; regb)
 {
-	rcScopedTimer timerFilter(ctx, RC_TIMER_BUILD_REGIONS_FILTER);
-
-	// Merge regions and filter out small regions.
-	rcTempVector&lt;int&gt; overlaps;
-	chf.maxRegions = id;
-	if (!mergeAndFilterRegions(ctx, minRegionArea, mergeRegionArea, chf.maxRegions, chf, srcReg, overlaps))
+	if (rega.areaType != regb.areaType)
 		return false;
-
-	// Monotone partitioning does not generate overlapping regions.
-}
-
-// Store the result out.
-for (int i = 0; i &lt; chf.spanCount; ++i)
-	chf.spans[i].reg = srcReg[i];
-
-return true;
-</code></pre>
-<p>}</p>
-<p>&mldr;</p>
-<pre tabindex=0><code>- `rcBuildRegionsMonotone` 使用了 `rcSweepSpan` 结构来记录处理过程的关系，主要流程为：
-	- 通过 `paintRectRegion` 方法，将 `borderSize` 范围内的 `span` 的 `region` 进行标识（`id|RC_BORDER_REG`）。
-	- 遍历非 `borderSize` 范围的 `cell`，对其中的每个可行走的 `span` 进行处理。
-		- 遍历每一行时，将记录当前行 `span` 被连接的次数 `prev` 重置为 0，将 `rid` 重置为 1，
-		- 如果当前 `span` 及其左邻居都可行走，且不在 `borderSize` 范围，则设置 `previd` 为左邻居的 `regionId`。
-		- 如果 `previd` 为 0，则将其设置为当前未分配给 `region` 的 `rid`，并将 `rid + 1`，同时把 `previd` 记录到 `sweeps[pervid]` 中。
-		- 如果当前 `span` 及其下邻居都可行走，且不在 `borderSize` 范围，且下邻居已分配 `regionId`，则需要设置 `sweeps[previd].nei`。
-			- 如果 `sweeps[previd].nei` 未设置，或者和下邻居的 `regionId` 相同，则将 `sweeps[previd].nei` 设置为下邻居的 `regionId`。
-				- `sweeps[previd].ns` 自增，即记录 `previd` 连接到 `nr` 的次数。
-				- `prev[nr]` 自增，即记录 `nr` 被连接的次数。
-			- 如果 `sweeps[previd].nei` 已设置，并且和下邻居的 `regionId` 不同，则将 `sweeps[previd].nei` 设置为 `RC_NULL_NEI`，表示有多个邻居。
-		- 将 `previd` 设置为 `srcReg[i]` ，即作为当前 `span` 的 `regionId`。
-		- 设置完每一行 `span` 的 `regionId` 后，遍历所有 `regionId`。
-			- 如果 `sweeps[regionId].nei` 不为 0 且不为 `RC_NULL_NEI`，并且 `nei` 的连接和被连接数量相同，则将 `sweeps[regionId].id` 设置为下一行的 `regionId`，认为是相同的 `region`。
-			- 如果 `sweeps[regionId].nei` 为 0 或 `RC_NULL_NEI`，或 `nei` 的连接和被连接数量不相同，则将 `sweeps[regionId].id` 设置为 `id` ，即当前未使用的 `regionId`，认为是不同的 `region`，并将 `id` 自增。
-		- 将每一行 `sweeps` 记录的 `regionId`，更新到 `srcReg` 中。
-	- 通过 `mergeAndFilterRegions`，进行 `region` 的合并和过滤。
-	- 将 `srcReg` 记录的最终 `region` 信息，应用到紧密高度场中的每一个 `span`，完成划分。
-- 以 2D 为例，单调划分的全过程如下图：
- ![Monotone.gif](/img/Algorithm/NavmeshNavigation/Monotone.gif?raw=true)
-###### 分层划分
-- 分层划分通过 `rcBuildRegionsLayer` 方法进行，其实现和单调划分基本一致，唯一不同的，就是单调划分使用 `mergeAndFilterRegions` 方法进行合并和过滤，而分层划分使用 `mergeAndFilterLayerRegions` 方法，其实现如下：
-</code></pre><p>// Recast/Source/RecastRegion.cpp</p>
-<p>&mldr;</p>
-<p>static bool mergeAndFilterLayerRegions(rcContext* ctx, int minRegionArea,
-unsigned short& maxRegionId,
-rcCompactHeightfield& chf,
-unsigned short* srcReg)
-{
-const int w = chf.width;
-const int h = chf.height;</p>
-<pre><code>const int nreg = maxRegionId+1;
-rcTempVector&lt;rcRegion&gt; regions;
-
-// Construct regions
-if (!regions.reserve(nreg)) {
-	ctx-&gt;log(RC_LOG_ERROR, &quot;mergeAndFilterLayerRegions: Out of memory 'regions' (%d).&quot;, nreg);
-	return false;
-}
-for (int i = 0; i &lt; nreg; ++i)
-	regions.push_back(rcRegion((unsigned short) i));
-
-// Find region neighbours and overlapping regions.
-rcTempVector&lt;int&gt; lregs(32);
-for (int y = 0; y &lt; h; ++y)
-{
-	for (int x = 0; x &lt; w; ++x)
+	int n = 0;
+	for (int i = 0; i &lt; rega.connections.size(); ++i)
 	{
-		const rcCompactCell&amp; c = chf.cells[x+y*w];
-
-		lregs.clear();
-		
-		for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
-		{
-			const rcCompactSpan&amp; s = chf.spans[i];
-			const unsigned char area = chf.areas[i];
-			const unsigned short ri = srcReg[i];
-			if (ri == 0 || ri &gt;= nreg) continue;
-			rcRegion&amp; reg = regions[ri];
-			
-			reg.spanCount++;
-			reg.areaType = area;
-
-			reg.ymin = rcMin(reg.ymin, s.y);
-			reg.ymax = rcMax(reg.ymax, s.y);
-			
-			// Collect all region layers.
-			lregs.push_back(ri);
-			
-			// Update neighbours
-			for (int dir = 0; dir &lt; 4; ++dir)
-			{
-				if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
-				{
-					const int ax = x + rcGetDirOffsetX(dir);
-					const int ay = y + rcGetDirOffsetY(dir);
-					const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, dir);
-					const unsigned short rai = srcReg[ai];
-					if (rai &gt; 0 &amp;&amp; rai &lt; nreg &amp;&amp; rai != ri)
-						addUniqueConnection(reg, rai);
-					if (rai &amp; RC_BORDER_REG)
-						reg.connectsToBorder = true;
-				}
-			}
-			
-		}
-		
-		// Update overlapping regions.
-		for (int i = 0; i &lt; lregs.size()-1; ++i)
-		{
-			for (int j = i+1; j &lt; lregs.size(); ++j)
-			{
-				if (lregs[i] != lregs[j])
-				{
-					rcRegion&amp; ri = regions[lregs[i]];
-					rcRegion&amp; rj = regions[lregs[j]];
-					addUniqueFloorRegion(ri, lregs[j]);
-					addUniqueFloorRegion(rj, lregs[i]);
-				}
-			}
-		}
-		
+		if (rega.connections[i] == regb.id)
+			n++;
 	}
+	if (n &gt; 1)
+		return false;
+	for (int i = 0; i &lt; rega.floors.size(); ++i)
+	{
+		if (rega.floors[i] == regb.id)
+			return false;
+	}
+	return true;
 }
 
-// Create 2D layers from regions.
-unsigned short layerId = 1;
+...
+</code></pre><ul>
+<li><code>canMergeWithRegion</code> 主要过滤不能合并的情况，包括：
+<ul>
+<li>源 <code>region</code> 和目标 <code>region</code> 的 <code>area</code> 不同。</li>
+<li>源 <code>region</code> 的 <code>connections</code> 出现超过一次目标 <code>region</code> 的 <code>regionId</code>，即目标 <code>region</code> 和源 <code>region</code> 交界处可能还有其他 <code>region</code>。</li>
+<li>源 <code>region</code> 的 <code>floors</code> 中存在目标 <code>region</code> 的 <code>regionId</code>，即目标 <code>region</code> 和源 <code>region</code> 具有出现在同一 <code>cell</code> 的情况。</li>
+</ul>
+</li>
+<li><code>mergeRegions</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastRegion.cpp
 
-for (int i = 0; i &lt; nreg; ++i)
-	regions[i].id = 0;
-
-// Merge montone regions to create non-overlapping areas.
-rcTempVector&lt;int&gt; stack(32);
-for (int i = 1; i &lt; nreg; ++i)
+...
+static bool mergeRegions(rcRegion&amp; rega, rcRegion&amp; regb)
 {
-	rcRegion&amp; root = regions[i];
-	// Skip already visited.
-	if (root.id != 0)
-		continue;
+	unsigned short aid = rega.id;
+	unsigned short bid = regb.id;
 	
-	// Start search.
-	root.id = layerId;
-
-	stack.clear();
-	stack.push_back(i);
+	// Duplicate current neighbourhood.
+	rcTempVector&lt;int&gt; acon;
+	acon.resize(rega.connections.size());
+	for (int i = 0; i &lt; rega.connections.size(); ++i)
+		acon[i] = rega.connections[i];
+	rcTempVector&lt;int&gt;&amp; bcon = regb.connections;
 	
-	while (stack.size() &gt; 0)
+	// Find insertion point on A.
+	int insa = -1;
+	for (int i = 0; i &lt; acon.size(); ++i)
 	{
-		// Pop front
-		rcRegion&amp; reg = regions[stack[0]];
-		for (int j = 0; j &lt; stack.size()-1; ++j)
-			stack[j] = stack[j+1];
-		stack.resize(stack.size()-1);
-		
-		const int ncons = (int)reg.connections.size();
-		for (int j = 0; j &lt; ncons; ++j)
+		if (acon[i] == bid)
 		{
-			const int nei = reg.connections[j];
-			rcRegion&amp; regn = regions[nei];
-			// Skip already visited.
-			if (regn.id != 0)
-				continue;
-			// Skip if different area type, do not connect regions with different area type.
-			if (reg.areaType != regn.areaType)
-				continue;
-			// Skip if the neighbour is overlapping root region.
-			bool overlap = false;
-			for (int k = 0; k &lt; root.floors.size(); k++)
+			insa = i;
+			break;
+		}
+	}
+	if (insa == -1)
+		return false;
+	
+	// Find insertion point on B.
+	int insb = -1;
+	for (int i = 0; i &lt; bcon.size(); ++i)
+	{
+		if (bcon[i] == aid)
+		{
+			insb = i;
+			break;
+		}
+	}
+	if (insb == -1)
+		return false;
+	
+	// Merge neighbours.
+	rega.connections.clear();
+	for (int i = 0, ni = static_cast&lt;int&gt;(acon.size()); i &lt; ni-1; ++i)
+	{
+		rega.connections.push_back(acon[(insa+1+i) % ni]);
+	}
+		
+	for (int i = 0, ni = static_cast&lt;int&gt;(bcon.size()); i &lt; ni-1; ++i)
+	{
+		rega.connections.push_back(bcon[(insb+1+i) % ni]);
+	}
+	
+	removeAdjacentNeighbours(rega);
+	
+	for (int j = 0; j &lt; regb.floors.size(); ++j)
+		addUniqueFloorRegion(rega, regb.floors[j]);
+	rega.spanCount += regb.spanCount;
+	regb.spanCount = 0;
+	regb.connections.resize(0);
+
+	return true;
+}
+
+...
+</code></pre><ul>
+<li><code>mergeRegions</code> 合并的主要过程为：
+<ul>
+<li>找出目标 <code>regionId</code> 在源 <code>region</code> 的 <code>connections</code> 中的索引 <code>insa</code> 。</li>
+<li>找出源 <code>regionId</code> 在目标 <code>region</code> 的 <code>connections</code> 中的索引 <code>insb</code> 。</li>
+<li>清空源 <code>region</code> 的 <code>connections</code>，从 <code>insa + 1</code> 的位置将源 <code>connections</code> 重新加入，<code>insa</code> 位置不加入，因为和目标 <code>region</code> 将要合并，所以原来边界中的目标 <code>regionId</code>，需要插入目标 <code>region</code> 的边界连接。</li>
+<li>从 <code>insb + 1</code> 的位置将目标 <code>connections</code> 加入源 <code>connections</code>，同理 <code>insb</code> 位置不加入。</li>
+<li>调用 <code>removeAdjacentNeighbours</code> 方法，移除源 <code>connections</code> 中相邻重复的 <code>regionId</code> 。</li>
+<li>调用 <code>addUniqueFloorRegion</code> 方法，将目标 <code>floors</code> 加入到源 <code>floors</code> 中。</li>
+<li>将目标 <code>spanCount</code> 加到源 <code>spanCount</code> 上，并清空目标 <code>region</code> 的 <code>spanCount</code> 和 <code>connections</code>，完成合并过程。</li>
+</ul>
+</li>
+<li>以 2D 为例，分水岭划分的全过程如下图：
+<img src="/img/Algorithm/NavmeshNavigation/Watershed.gif?raw=true" alt=Watershed.gif>
+</li>
+</ul>
+<h6 id=单调划分>单调划分</h6>
+<ul>
+<li>单调划分通过 <code>rcBuildRegionsMonotone</code> 方法进行，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastRegion.cpp
+
+...
+
+static const unsigned short RC_NULL_NEI = 0xffff;
+
+struct rcSweepSpan
+{
+	unsigned short rid;	// 行索引 id
+	unsigned short id;	// 地区 id
+	unsigned short ns;	// 该地区 id 采样的跨度个数
+	unsigned short nei;	// 邻居的地区 id，通常指下方的 id
+};
+
+...
+bool rcBuildRegionsMonotone(rcContext* ctx, rcCompactHeightfield&amp; chf,
+							const int borderSize, const int minRegionArea, const int mergeRegionArea)
+{
+	rcAssert(ctx);
+	
+	rcScopedTimer timer(ctx, RC_TIMER_BUILD_REGIONS);
+	
+	const int w = chf.width;
+	const int h = chf.height;
+	unsigned short id = 1;
+	
+	rcScopedDelete&lt;unsigned short&gt; srcReg((unsigned short*)rcAlloc(sizeof(unsigned short)*chf.spanCount, RC_ALLOC_TEMP));
+	if (!srcReg)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildRegionsMonotone: Out of memory 'src' (%d).&quot;, chf.spanCount);
+		return false;
+	}
+	memset(srcReg,0,sizeof(unsigned short)*chf.spanCount);
+
+	const int nsweeps = rcMax(chf.width,chf.height);
+	rcScopedDelete&lt;rcSweepSpan&gt; sweeps((rcSweepSpan*)rcAlloc(sizeof(rcSweepSpan)*nsweeps, RC_ALLOC_TEMP));
+	if (!sweeps)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildRegionsMonotone: Out of memory 'sweeps' (%d).&quot;, nsweeps);
+		return false;
+	}
+	
+	
+	// Mark border regions.
+	if (borderSize &gt; 0)
+	{
+		// Make sure border will not overflow.
+		const int bw = rcMin(w, borderSize);
+		const int bh = rcMin(h, borderSize);
+		// Paint regions
+		paintRectRegion(0, bw, 0, h, id|RC_BORDER_REG, chf, srcReg); id++;
+		paintRectRegion(w-bw, w, 0, h, id|RC_BORDER_REG, chf, srcReg); id++;
+		paintRectRegion(0, w, 0, bh, id|RC_BORDER_REG, chf, srcReg); id++;
+		paintRectRegion(0, w, h-bh, h, id|RC_BORDER_REG, chf, srcReg); id++;
+	}
+
+	chf.borderSize = borderSize;
+	
+	rcTempVector&lt;int&gt; prev(256);
+
+	// Sweep one line at a time.
+	for (int y = borderSize; y &lt; h-borderSize; ++y)
+	{
+		// Collect spans from this row.
+		prev.resize(id+1);
+		memset(&amp;prev[0],0,sizeof(int)*id);
+		unsigned short rid = 1;
+		
+		for (int x = borderSize; x &lt; w-borderSize; ++x)
+		{
+			const rcCompactCell&amp; c = chf.cells[x+y*w];
+			
+			for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
 			{
-				if (root.floors[k] == nei)
-				{
-					overlap = true;
-					break;
-				}
-			}
-			if (overlap)
-				continue;
+				const rcCompactSpan&amp; s = chf.spans[i];
+				if (chf.areas[i] == RC_NULL_AREA) continue;
 				
-			// Deepen
-			stack.push_back(nei);
+				// -x
+				unsigned short previd = 0;
+				if (rcGetCon(s, 0) != RC_NOT_CONNECTED)
+				{
+					const int ax = x + rcGetDirOffsetX(0);
+					const int ay = y + rcGetDirOffsetY(0);
+					const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, 0);
+					if ((srcReg[ai] &amp; RC_BORDER_REG) == 0 &amp;&amp; chf.areas[i] == chf.areas[ai])
+						previd = srcReg[ai];
+				}
 				
-			// Mark layer id
-			regn.id = layerId;
-			// Merge current layers to root.
-			for (int k = 0; k &lt; regn.floors.size(); ++k)
-				addUniqueFloorRegion(root, regn.floors[k]);
-			root.ymin = rcMin(root.ymin, regn.ymin);
-			root.ymax = rcMax(root.ymax, regn.ymax);
-			root.spanCount += regn.spanCount;
-			regn.spanCount = 0;
-			root.connectsToBorder = root.connectsToBorder || regn.connectsToBorder;
+				if (!previd)
+				{
+					previd = rid++;
+					sweeps[previd].rid = previd;
+					sweeps[previd].ns = 0;
+					sweeps[previd].nei = 0;
+				}
+
+				// -y
+				if (rcGetCon(s,3) != RC_NOT_CONNECTED)
+				{
+					const int ax = x + rcGetDirOffsetX(3);
+					const int ay = y + rcGetDirOffsetY(3);
+					const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, 3);
+					if (srcReg[ai] &amp;&amp; (srcReg[ai] &amp; RC_BORDER_REG) == 0 &amp;&amp; chf.areas[i] == chf.areas[ai])
+					{
+						unsigned short nr = srcReg[ai];
+						if (!sweeps[previd].nei || sweeps[previd].nei == nr)
+						{
+							sweeps[previd].nei = nr;
+							sweeps[previd].ns++;
+							prev[nr]++;
+						}
+						else
+						{
+							sweeps[previd].nei = RC_NULL_NEI;
+						}
+					}
+				}
+
+				srcReg[i] = previd;
+			}
+		}
+		
+		// Create unique ID.
+		for (int i = 1; i &lt; rid; ++i)
+		{
+			if (sweeps[i].nei != RC_NULL_NEI &amp;&amp; sweeps[i].nei != 0 &amp;&amp;
+				prev[sweeps[i].nei] == (int)sweeps[i].ns)
+			{
+				sweeps[i].id = sweeps[i].nei;
+			}
+			else
+			{
+				sweeps[i].id = id++;
+			}
+		}
+		
+		// Remap IDs
+		for (int x = borderSize; x &lt; w-borderSize; ++x)
+		{
+			const rcCompactCell&amp; c = chf.cells[x+y*w];
+			
+			for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
+			{
+				if (srcReg[i] &gt; 0 &amp;&amp; srcReg[i] &lt; rid)
+					srcReg[i] = sweeps[srcReg[i]].id;
+			}
+		}
+	}
+
+
+	{
+		rcScopedTimer timerFilter(ctx, RC_TIMER_BUILD_REGIONS_FILTER);
+
+		// Merge regions and filter out small regions.
+		rcTempVector&lt;int&gt; overlaps;
+		chf.maxRegions = id;
+		if (!mergeAndFilterRegions(ctx, minRegionArea, mergeRegionArea, chf.maxRegions, chf, srcReg, overlaps))
+			return false;
+
+		// Monotone partitioning does not generate overlapping regions.
+	}
+	
+	// Store the result out.
+	for (int i = 0; i &lt; chf.spanCount; ++i)
+		chf.spans[i].reg = srcReg[i];
+
+	return true;
+}
+
+...
+</code></pre><ul>
+<li><code>rcBuildRegionsMonotone</code> 使用了 <code>rcSweepSpan</code> 结构来记录处理过程的关系，主要流程为：
+<ul>
+<li>通过 <code>paintRectRegion</code> 方法，将 <code>borderSize</code> 范围内的 <code>span</code> 的 <code>region</code> 进行标识（<code>id|RC_BORDER_REG</code>）。</li>
+<li>遍历非 <code>borderSize</code> 范围的 <code>cell</code>，对其中的每个可行走的 <code>span</code> 进行处理。
+<ul>
+<li>遍历每一行时，将记录当前行 <code>span</code> 被连接的次数 <code>prev</code> 重置为 0，将 <code>rid</code> 重置为 1，</li>
+<li>如果当前 <code>span</code> 及其左邻居都可行走，且不在 <code>borderSize</code> 范围，则设置 <code>previd</code> 为左邻居的 <code>regionId</code>。</li>
+<li>如果 <code>previd</code> 为 0，则将其设置为当前未分配给 <code>region</code> 的 <code>rid</code>，并将 <code>rid + 1</code>，同时把 <code>previd</code> 记录到 <code>sweeps[pervid]</code> 中。</li>
+<li>如果当前 <code>span</code> 及其下邻居都可行走，且不在 <code>borderSize</code> 范围，且下邻居已分配 <code>regionId</code>，则需要设置 <code>sweeps[previd].nei</code>。
+<ul>
+<li>如果 <code>sweeps[previd].nei</code> 未设置，或者和下邻居的 <code>regionId</code> 相同，则将 <code>sweeps[previd].nei</code> 设置为下邻居的 <code>regionId</code>。
+<ul>
+<li><code>sweeps[previd].ns</code> 自增，即记录 <code>previd</code> 连接到 <code>nr</code> 的次数。</li>
+<li><code>prev[nr]</code> 自增，即记录 <code>nr</code> 被连接的次数。</li>
+</ul>
+</li>
+<li>如果 <code>sweeps[previd].nei</code> 已设置，并且和下邻居的 <code>regionId</code> 不同，则将 <code>sweeps[previd].nei</code> 设置为 <code>RC_NULL_NEI</code>，表示有多个邻居。</li>
+</ul>
+</li>
+<li>将 <code>previd</code> 设置为 <code>srcReg[i]</code> ，即作为当前 <code>span</code> 的 <code>regionId</code>。</li>
+<li>设置完每一行 <code>span</code> 的 <code>regionId</code> 后，遍历所有 <code>regionId</code>。
+<ul>
+<li>如果 <code>sweeps[regionId].nei</code> 不为 0 且不为 <code>RC_NULL_NEI</code>，并且 <code>nei</code> 的连接和被连接数量相同，则将 <code>sweeps[regionId].id</code> 设置为下一行的 <code>regionId</code>，认为是相同的 <code>region</code>。</li>
+<li>如果 <code>sweeps[regionId].nei</code> 为 0 或 <code>RC_NULL_NEI</code>，或 <code>nei</code> 的连接和被连接数量不相同，则将 <code>sweeps[regionId].id</code> 设置为 <code>id</code> ，即当前未使用的 <code>regionId</code>，认为是不同的 <code>region</code>，并将 <code>id</code> 自增。</li>
+</ul>
+</li>
+<li>将每一行 <code>sweeps</code> 记录的 <code>regionId</code>，更新到 <code>srcReg</code> 中。</li>
+</ul>
+</li>
+<li>通过 <code>mergeAndFilterRegions</code>，进行 <code>region</code> 的合并和过滤。</li>
+<li>将 <code>srcReg</code> 记录的最终 <code>region</code> 信息，应用到紧密高度场中的每一个 <code>span</code>，完成划分。</li>
+</ul>
+</li>
+<li>以 2D 为例，单调划分的全过程如下图：
+<img src="/img/Algorithm/NavmeshNavigation/Monotone.gif?raw=true" alt=Monotone.gif>
+</li>
+</ul>
+<h6 id=分层划分>分层划分</h6>
+<ul>
+<li>分层划分通过 <code>rcBuildRegionsLayer</code> 方法进行，其实现和单调划分基本一致，唯一不同的，就是单调划分使用 <code>mergeAndFilterRegions</code> 方法进行合并和过滤，而分层划分使用 <code>mergeAndFilterLayerRegions</code> 方法，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastRegion.cpp
+
+...
+
+static bool mergeAndFilterLayerRegions(rcContext* ctx, int minRegionArea,
+									   unsigned short&amp; maxRegionId,
+									   rcCompactHeightfield&amp; chf,
+									   unsigned short* srcReg)
+{
+	const int w = chf.width;
+	const int h = chf.height;
+	
+	const int nreg = maxRegionId+1;
+	rcTempVector&lt;rcRegion&gt; regions;
+	
+	// Construct regions
+	if (!regions.reserve(nreg)) {
+		ctx-&gt;log(RC_LOG_ERROR, &quot;mergeAndFilterLayerRegions: Out of memory 'regions' (%d).&quot;, nreg);
+		return false;
+	}
+	for (int i = 0; i &lt; nreg; ++i)
+		regions.push_back(rcRegion((unsigned short) i));
+	
+	// Find region neighbours and overlapping regions.
+	rcTempVector&lt;int&gt; lregs(32);
+	for (int y = 0; y &lt; h; ++y)
+	{
+		for (int x = 0; x &lt; w; ++x)
+		{
+			const rcCompactCell&amp; c = chf.cells[x+y*w];
+
+			lregs.clear();
+			
+			for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
+			{
+				const rcCompactSpan&amp; s = chf.spans[i];
+				const unsigned char area = chf.areas[i];
+				const unsigned short ri = srcReg[i];
+				if (ri == 0 || ri &gt;= nreg) continue;
+				rcRegion&amp; reg = regions[ri];
+				
+				reg.spanCount++;
+				reg.areaType = area;
+
+				reg.ymin = rcMin(reg.ymin, s.y);
+				reg.ymax = rcMax(reg.ymax, s.y);
+				
+				// Collect all region layers.
+				lregs.push_back(ri);
+				
+				// Update neighbours
+				for (int dir = 0; dir &lt; 4; ++dir)
+				{
+					if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
+					{
+						const int ax = x + rcGetDirOffsetX(dir);
+						const int ay = y + rcGetDirOffsetY(dir);
+						const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, dir);
+						const unsigned short rai = srcReg[ai];
+						if (rai &gt; 0 &amp;&amp; rai &lt; nreg &amp;&amp; rai != ri)
+							addUniqueConnection(reg, rai);
+						if (rai &amp; RC_BORDER_REG)
+							reg.connectsToBorder = true;
+					}
+				}
+				
+			}
+			
+			// Update overlapping regions.
+			for (int i = 0; i &lt; lregs.size()-1; ++i)
+			{
+				for (int j = i+1; j &lt; lregs.size(); ++j)
+				{
+					if (lregs[i] != lregs[j])
+					{
+						rcRegion&amp; ri = regions[lregs[i]];
+						rcRegion&amp; rj = regions[lregs[j]];
+						addUniqueFloorRegion(ri, lregs[j]);
+						addUniqueFloorRegion(rj, lregs[i]);
+					}
+				}
+			}
+			
+		}
+	}
+
+	// Create 2D layers from regions.
+	unsigned short layerId = 1;
+
+	for (int i = 0; i &lt; nreg; ++i)
+		regions[i].id = 0;
+
+	// Merge montone regions to create non-overlapping areas.
+	rcTempVector&lt;int&gt; stack(32);
+	for (int i = 1; i &lt; nreg; ++i)
+	{
+		rcRegion&amp; root = regions[i];
+		// Skip already visited.
+		if (root.id != 0)
+			continue;
+		
+		// Start search.
+		root.id = layerId;
+
+		stack.clear();
+		stack.push_back(i);
+		
+		while (stack.size() &gt; 0)
+		{
+			// Pop front
+			rcRegion&amp; reg = regions[stack[0]];
+			for (int j = 0; j &lt; stack.size()-1; ++j)
+				stack[j] = stack[j+1];
+			stack.resize(stack.size()-1);
+			
+			const int ncons = (int)reg.connections.size();
+			for (int j = 0; j &lt; ncons; ++j)
+			{
+				const int nei = reg.connections[j];
+				rcRegion&amp; regn = regions[nei];
+				// Skip already visited.
+				if (regn.id != 0)
+					continue;
+				// Skip if different area type, do not connect regions with different area type.
+				if (reg.areaType != regn.areaType)
+					continue;
+				// Skip if the neighbour is overlapping root region.
+				bool overlap = false;
+				for (int k = 0; k &lt; root.floors.size(); k++)
+				{
+					if (root.floors[k] == nei)
+					{
+						overlap = true;
+						break;
+					}
+				}
+				if (overlap)
+					continue;
+					
+				// Deepen
+				stack.push_back(nei);
+					
+				// Mark layer id
+				regn.id = layerId;
+				// Merge current layers to root.
+				for (int k = 0; k &lt; regn.floors.size(); ++k)
+					addUniqueFloorRegion(root, regn.floors[k]);
+				root.ymin = rcMin(root.ymin, regn.ymin);
+				root.ymax = rcMax(root.ymax, regn.ymax);
+				root.spanCount += regn.spanCount;
+				regn.spanCount = 0;
+				root.connectsToBorder = root.connectsToBorder || regn.connectsToBorder;
+			}
+		}
+		
+		layerId++;
+	}
+	
+	// Remove small regions
+	for (int i = 0; i &lt; nreg; ++i)
+	{
+		if (regions[i].spanCount &gt; 0 &amp;&amp; regions[i].spanCount &lt; minRegionArea &amp;&amp; !regions[i].connectsToBorder)
+		{
+			unsigned short reg = regions[i].id;
+			for (int j = 0; j &lt; nreg; ++j)
+				if (regions[j].id == reg)
+					regions[j].id = 0;
 		}
 	}
 	
-	layerId++;
-}
-
-// Remove small regions
-for (int i = 0; i &lt; nreg; ++i)
-{
-	if (regions[i].spanCount &gt; 0 &amp;&amp; regions[i].spanCount &lt; minRegionArea &amp;&amp; !regions[i].connectsToBorder)
+	// Compress region Ids.
+	for (int i = 0; i &lt; nreg; ++i)
 	{
-		unsigned short reg = regions[i].id;
-		for (int j = 0; j &lt; nreg; ++j)
-			if (regions[j].id == reg)
-				regions[j].id = 0;
+		regions[i].remap = false;
+		if (regions[i].id == 0) continue;				// Skip nil regions.
+		if (regions[i].id &amp; RC_BORDER_REG) continue;    // Skip external regions.
+		regions[i].remap = true;
 	}
-}
-
-// Compress region Ids.
-for (int i = 0; i &lt; nreg; ++i)
-{
-	regions[i].remap = false;
-	if (regions[i].id == 0) continue;				// Skip nil regions.
-	if (regions[i].id &amp; RC_BORDER_REG) continue;    // Skip external regions.
-	regions[i].remap = true;
-}
-
-unsigned short regIdGen = 0;
-for (int i = 0; i &lt; nreg; ++i)
-{
-	if (!regions[i].remap)
-		continue;
-	unsigned short oldId = regions[i].id;
-	unsigned short newId = ++regIdGen;
-	for (int j = i; j &lt; nreg; ++j)
+	
+	unsigned short regIdGen = 0;
+	for (int i = 0; i &lt; nreg; ++i)
 	{
-		if (regions[j].id == oldId)
+		if (!regions[i].remap)
+			continue;
+		unsigned short oldId = regions[i].id;
+		unsigned short newId = ++regIdGen;
+		for (int j = i; j &lt; nreg; ++j)
 		{
-			regions[j].id = newId;
-			regions[j].remap = false;
+			if (regions[j].id == oldId)
+			{
+				regions[j].id = newId;
+				regions[j].remap = false;
+			}
 		}
 	}
+	maxRegionId = regIdGen;
+	
+	// Remap regions.
+	for (int i = 0; i &lt; chf.spanCount; ++i)
+	{
+		if ((srcReg[i] &amp; RC_BORDER_REG) == 0)
+			srcReg[i] = regions[srcReg[i]].id;
+	}
+	
+	return true;
 }
-maxRegionId = regIdGen;
 
-// Remap regions.
-for (int i = 0; i &lt; chf.spanCount; ++i)
-{
-	if ((srcReg[i] &amp; RC_BORDER_REG) == 0)
-		srcReg[i] = regions[srcReg[i]].id;
-}
-
-return true;
-</code></pre>
-<p>}</p>
-<p>&mldr;</p>
-<pre tabindex=0><code>- `mergeAndFilterLayerRegions` 的主要流程为：
-	- 设置 `region` 的基本信息。
-		- 为每一个 `regionId` 创建一个 `rcRegion`，遍历所有 `cell` 上的所有 `span` 进行处理，包括：
-			- 将同一 `regionId` 的 `span` 数量统计到 `reg.spanCount` 中。
-			- 设置当前 `reg.areaType`。
-			- 设置当前 `reg.ymin` 和 `reg.ymax` 为 `cell` 上所有 `span` 中的最小最大 `span.y`。
-			- 检查四个方向的邻居，通过 `addUniqueConnection` 方法将邻居的 `regionId` 加入到 `reg.connections` 中。如果邻居为 `borderSize` 范围的边界，则设置 `reg.connectsToBorder` 为 `true`。
-			- 检查当前 `cell` 上所有连续且 `regionId` 不同的 `span`，通过 `addUniqueFloorRegion` 方法，分别将 `regionId` 加入到彼此的 `floors` 列表中。
-	- 合并没有重叠的 `region`。
-		- 初始化 `layerId` 为 1 。
-		- 将所有 `region` 的 `id` 初始化为 0 。
-		- 遍历每一个 `region` 进行处理。
-			- 如果当前 `regionId` 不为 0 ，则表示该 `regionId` 已经处理过，则不再处理。
-			- 设置当前 `region` 的 `regionId` 为 `layerId`。
-			- 清空 `stack`，将当前 `region` 加入到 `stack` 中，进行迭代处理。
-				- 从 `stack` 中取出一个 `reg`，从 `connections` 中找到所有未处理过的可行走的邻居 `regionId`，如果当前 `region` 的 `floors` 中不包含邻居 `regionId`，则代表该 `regionId` 没有和当前 `region` 重叠，则将邻居 `region` 合并到当前 `region`。
-					- 将邻居 `regionId` 加入到 `stack` 中。 
-					- 将邻居 `region` 的 `id` 设置为 `layerId`，即标记为已处理。
-					- 将邻居的 `floors` 添加到当前 `region` 中。
-					- 将邻居和当前 `region` 中最小的 `ymin` 和最大的 `ymax` 设置到当前 `region` 中。
-					- 将邻居的 `spanCount` 加入到当前 `region`，清空邻居的 `spanCount`。
-					- 如果邻居或当前 `region` 连接到 `borderSize` 范围的边界，则设置当前 `region` 的 `connectsToBorder` 为 `true`。
-				-  如果出现重叠，则继续 `stack` 的迭代处理。		
-			- 处理完一个 `regionId` ，则 `layerId` 自增，继续下一个 `regionId` 。
-	- 移除过小的 `region`。
-		- 从 1 开始遍历所有的 `region`，如果 `spanCount` 大于 0 且小于 `minRegionArea`，且没有连接到 `borderSize` 范围的边界，则此 `regionId` 需要被移除。由于上一步中合并后，同一个 `regionId` 会处于多个 `region` 中，但其中只有一个 `spanCount` 大于 0 ，所以需要将所有 `id` 为此 `regionId` 的 `region`，设置其 `id` 为 0。
-	- 重新映射 `regionId`。
-		- 遍历所有的 `region`，从 1 开始设置剩余的 `region`，将 `regionId` 映射为新的区间。
-	- 应用新的 `regionId`。
-		- 遍历 `srcReg`，使用新的 `regionId` 进行替换。
-- 以 2D 为例，分层划分的全过程如下图：
- ![Layers.gif](/img/Algorithm/NavmeshNavigation/Layers.gif?raw=true)
-###### 算法对比
-| | 分水岭划分 | 单调划分 | 分层划分 |
-| :----: | :----: | :----: | :----: |
-| 主要内容 | 计算距离场，洪水填充，按块合并 | 扫描填充，按块合并 | 扫描填充，分层合并 |
-| 性能开销 | 高&lt;br&gt;（需要计算整个距离场，洪水填充过程也需要多次迭代处理） | 低&lt;br&gt;（扫描填充计算量少，按块合并跳过在同一个 `cell` 上出现多次的 `region` ，即仅处理单层 `region`） | 中&lt;br&gt;（分层合并需要检查每个 `region` 的 `connections` 是否出现在当前 `cell` ，即需要层级关系，合并后还需要递归检查） |
-| 适用场景 | 开放空间和复杂地形 | 简单的平面 | 多层或垂直空间 |
-#### 追踪并简化轮廓
-
-#### 建立多边形网格
-
-#### 创建细节网格
-
-#### 创建导航数据
-
-### 参考
-- [Github - Recast Navigation](https://github.com/recastnavigation/recastnavigation) </code></pre>
+...
+</code></pre><ul>
+<li><code>mergeAndFilterLayerRegions</code> 的主要流程为：
+<ul>
+<li>设置 <code>region</code> 的基本信息。
+<ul>
+<li>为每一个 <code>regionId</code> 创建一个 <code>rcRegion</code>，遍历所有 <code>cell</code> 上的所有 <code>span</code> 进行处理，包括：
+<ul>
+<li>将同一 <code>regionId</code> 的 <code>span</code> 数量统计到 <code>reg.spanCount</code> 中。</li>
+<li>设置当前 <code>reg.areaType</code>。</li>
+<li>设置当前 <code>reg.ymin</code> 和 <code>reg.ymax</code> 为 <code>cell</code> 上所有 <code>span</code> 中的最小最大 <code>span.y</code>。</li>
+<li>检查四个方向的邻居，通过 <code>addUniqueConnection</code> 方法将邻居的 <code>regionId</code> 加入到 <code>reg.connections</code> 中。如果邻居为 <code>borderSize</code> 范围的边界，则设置 <code>reg.connectsToBorder</code> 为 <code>true</code>。</li>
+<li>检查当前 <code>cell</code> 上所有连续且 <code>regionId</code> 不同的 <code>span</code>，通过 <code>addUniqueFloorRegion</code> 方法，分别将 <code>regionId</code> 加入到彼此的 <code>floors</code> 列表中。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>合并没有重叠的 <code>region</code>。
+<ul>
+<li>初始化 <code>layerId</code> 为 1 。</li>
+<li>将所有 <code>region</code> 的 <code>id</code> 初始化为 0 。</li>
+<li>遍历每一个 <code>region</code> 进行处理。
+<ul>
+<li>如果当前 <code>regionId</code> 不为 0 ，则表示该 <code>regionId</code> 已经处理过，则不再处理。</li>
+<li>设置当前 <code>region</code> 的 <code>regionId</code> 为 <code>layerId</code>。</li>
+<li>清空 <code>stack</code>，将当前 <code>region</code> 加入到 <code>stack</code> 中，进行迭代处理。
+<ul>
+<li>从 <code>stack</code> 中取出一个 <code>reg</code>，从 <code>connections</code> 中找到所有未处理过的可行走的邻居 <code>regionId</code>，如果当前 <code>region</code> 的 <code>floors</code> 中不包含邻居 <code>regionId</code>，则代表该 <code>regionId</code> 没有和当前 <code>region</code> 重叠，则将邻居 <code>region</code> 合并到当前 <code>region</code>。
+<ul>
+<li>将邻居 <code>regionId</code> 加入到 <code>stack</code> 中。</li>
+<li>将邻居 <code>region</code> 的 <code>id</code> 设置为 <code>layerId</code>，即标记为已处理。</li>
+<li>将邻居的 <code>floors</code> 添加到当前 <code>region</code> 中。</li>
+<li>将邻居和当前 <code>region</code> 中最小的 <code>ymin</code> 和最大的 <code>ymax</code> 设置到当前 <code>region</code> 中。</li>
+<li>将邻居的 <code>spanCount</code> 加入到当前 <code>region</code>，清空邻居的 <code>spanCount</code>。</li>
+<li>如果邻居或当前 <code>region</code> 连接到 <code>borderSize</code> 范围的边界，则设置当前 <code>region</code> 的 <code>connectsToBorder</code> 为 <code>true</code>。</li>
+</ul>
+</li>
+<li>如果出现重叠，则继续 <code>stack</code> 的迭代处理。</li>
+</ul>
+</li>
+<li>处理完一个 <code>regionId</code> ，则 <code>layerId</code> 自增，继续下一个 <code>regionId</code> 。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>移除过小的 <code>region</code>。
+<ul>
+<li>从 1 开始遍历所有的 <code>region</code>，如果 <code>spanCount</code> 大于 0 且小于 <code>minRegionArea</code>，且没有连接到 <code>borderSize</code> 范围的边界，则此 <code>regionId</code> 需要被移除。由于上一步中合并后，同一个 <code>regionId</code> 会处于多个 <code>region</code> 中，但其中只有一个 <code>spanCount</code> 大于 0 ，所以需要将所有 <code>id</code> 为此 <code>regionId</code> 的 <code>region</code>，设置其 <code>id</code> 为 0。</li>
+</ul>
+</li>
+<li>重新映射 <code>regionId</code>。
+<ul>
+<li>遍历所有的 <code>region</code>，从 1 开始设置剩余的 <code>region</code>，将 <code>regionId</code> 映射为新的区间。</li>
+</ul>
+</li>
+<li>应用新的 <code>regionId</code>。
+<ul>
+<li>遍历 <code>srcReg</code>，使用新的 <code>regionId</code> 进行替换。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>以 2D 为例，分层划分的全过程如下图：
+<img src="/img/Algorithm/NavmeshNavigation/Layers.gif?raw=true" alt=Layers.gif>
+</li>
+</ul>
+<h6 id=算法对比>算法对比</h6>
+<table>
+<thead>
+<tr>
+<th style=text-align:center></th>
+<th style=text-align:center>分水岭划分</th>
+<th style=text-align:center>单调划分</th>
+<th style=text-align:center>分层划分</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style=text-align:center>主要内容</td>
+<td style=text-align:center>计算距离场，洪水填充，按块合并</td>
+<td style=text-align:center>扫描填充，按块合并</td>
+<td style=text-align:center>扫描填充，分层合并</td>
+</tr>
+<tr>
+<td style=text-align:center>性能开销</td>
+<td style=text-align:center>高<br>（需要计算整个距离场，洪水填充过程也需要多次迭代处理）</td>
+<td style=text-align:center>低<br>（扫描填充计算量少，按块合并跳过在同一个 <code>cell</code> 上出现多次的 <code>region</code> ，即仅处理单层 <code>region</code>）</td>
+<td style=text-align:center>中<br>（分层合并需要检查每个 <code>region</code> 的 <code>connections</code> 是否出现在当前 <code>cell</code> ，即需要层级关系，合并后还需要递归检查）</td>
+</tr>
+<tr>
+<td style=text-align:center>适用场景</td>
+<td style=text-align:center>开放空间和复杂地形</td>
+<td style=text-align:center>简单的平面</td>
+<td style=text-align:center>多层或垂直空间</td>
+</tr>
+</tbody>
+</table>
+<h4 id=追踪并简化轮廓>追踪并简化轮廓</h4>
+<h4 id=建立多边形网格>建立多边形网格</h4>
+<h4 id=创建细节网格>创建细节网格</h4>
+<h4 id=创建导航数据>创建导航数据</h4>
+<h3 id=参考>参考</h3>
+<ul>
+<li><a href=https://github.com/recastnavigation/recastnavigation>Github - Recast Navigation</a></li>
+</ul>
 <hr>
 <ul class=pager>
 <li class=previous>
