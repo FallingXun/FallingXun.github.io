@@ -249,7 +249,7 @@ struct rcConfig
 </li>
 <li><code>maxSimplificationError</code>
 <ul>
-<li>简化后的轮廓边缘和原轮廓的最大允许偏差。。</li>
+<li>简化后的轮廓边缘和原轮廓之间需要偏离的最大距离。</li>
 </ul>
 </li>
 <li><code>minRegionArea</code>
@@ -3226,7 +3226,1027 @@ static bool mergeAndFilterLayerRegions(rcContext* ctx, int minRegionArea,
 </tr>
 </tbody>
 </table>
-<h4 id=追踪并简化轮廓>追踪并简化轮廓</h4>
+<h4 id=查找并简化地区轮廓>查找并简化地区轮廓</h4>
+<ul>
+<li>处理地区轮廓过程，引入了几个新的结构：
+<ul>
+<li><code>rcContourSet</code> ：整个高度场的轮廓信息。</li>
+<li><code>rcContour</code>：单个轮廓的信息。</li>
+<li><code>rcContourRegion</code> ：单个 <code>region</code> 下的轮廓信息。</li>
+<li><code>rcContourHole</code> ： 单个孔洞的轮廓信息。</li>
+<li><code>rcPotentialDiagonal</code> ： 对角线信息。</li>
+</ul>
+</li>
+</ul>
+<pre tabindex=0><code>// Recast/Include/Recast.h
+
+...
+
+struct  rcContour
+{
+	int* verts;			/// 简化后的轮廓顶点
+	int nverts;			/// 简化后的轮廓顶点数量 
+	int* rverts;		/// 原始轮廓顶点
+	int nrverts;		/// 原始轮廓顶点数量
+	unsigned short reg;	/// 轮廓的地区id
+	unsigned char area;	/// 轮廓的区域id
+};
+
+
+struct rcContourSet
+{
+	...
+
+	rcContour* conts;	/// 轮廓列表
+	int nconts;			/// 轮廓数量
+	float bmin[3];  	/// 同 rcHeightfield
+	float bmax[3];		/// 同 rcHeightfield
+	float cs;			/// 同 rcHeightfield
+	float ch;			/// 同 rcHeightfield
+	int width;			/// 同 rcHeightfield
+	int height;			/// 同 rcHeightfield
+	int borderSize;		/// 同 rcConfig::borderSize
+	float maxError;		/// 轮廓简化后的最大边缘误差
+	
+	...
+};
+
+...
+</code></pre><pre tabindex=0><code>// Recast/Source/RecastContour.cpp
+...
+
+struct rcContourHole
+{
+	rcContour* contour;			/// 孔洞的轮廓
+	int minx, minz, leftmost;	/// 孔洞的轮廓点中最小 x、z 坐标和对应的索引
+};
+
+struct rcContourRegion
+{
+	rcContour* outline;			/// 当前地区的外轮廓（一个地区只能有一个外轮廓）
+ 	rcContourHole* holes;		/// 当前地区的孔洞列表
+	int nholes;					/// 当前地区的孔洞数量
+};
+
+struct rcPotentialDiagonal
+{
+	int vert;					/// 外轮廓的顶点索引
+	int dist;					/// 外轮廓顶点到目标点的距离平方
+};
+
+...
+</code></pre><ul>
+<li>处理过程主要通过 <code>rcBuildContours</code> 方法实现，其代码如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastContour.cpp
+
+...
+
+bool rcBuildContours(rcContext* ctx, const rcCompactHeightfield&amp; chf,
+					 const float maxError, const int maxEdgeLen,
+					 rcContourSet&amp; cset, const int buildFlags)
+{
+	rcAssert(ctx);
+	
+	const int w = chf.width;
+	const int h = chf.height;
+	const int borderSize = chf.borderSize;
+	
+	rcScopedTimer timer(ctx, RC_TIMER_BUILD_CONTOURS);
+	
+	rcVcopy(cset.bmin, chf.bmin);
+	rcVcopy(cset.bmax, chf.bmax);
+	if (borderSize &gt; 0)
+	{
+		// If the heightfield was build with bordersize, remove the offset.
+		const float pad = borderSize*chf.cs;
+		cset.bmin[0] += pad;
+		cset.bmin[2] += pad;
+		cset.bmax[0] -= pad;
+		cset.bmax[2] -= pad;
+	}
+	cset.cs = chf.cs;
+	cset.ch = chf.ch;
+	cset.width = chf.width - chf.borderSize*2;
+	cset.height = chf.height - chf.borderSize*2;
+	cset.borderSize = chf.borderSize;
+	cset.maxError = maxError;
+	
+	int maxContours = rcMax((int)chf.maxRegions, 8);
+	cset.conts = (rcContour*)rcAlloc(sizeof(rcContour)*maxContours, RC_ALLOC_PERM);
+	if (!cset.conts)
+		return false;
+	cset.nconts = 0;
+	
+	rcScopedDelete&lt;unsigned char&gt; flags((unsigned char*)rcAlloc(sizeof(unsigned char)*chf.spanCount, RC_ALLOC_TEMP));
+	if (!flags)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildContours: Out of memory 'flags' (%d).&quot;, chf.spanCount);
+		return false;
+	}
+	
+	ctx-&gt;startTimer(RC_TIMER_BUILD_CONTOURS_TRACE);
+	
+	// Mark boundaries.
+	for (int y = 0; y &lt; h; ++y)
+	{
+		for (int x = 0; x &lt; w; ++x)
+		{
+			const rcCompactCell&amp; c = chf.cells[x+y*w];
+			for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
+			{
+				unsigned char res = 0;
+				const rcCompactSpan&amp; s = chf.spans[i];
+				if (!chf.spans[i].reg || (chf.spans[i].reg &amp; RC_BORDER_REG))
+				{
+					flags[i] = 0;
+					continue;
+				}
+				for (int dir = 0; dir &lt; 4; ++dir)
+				{
+					unsigned short r = 0;
+					if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
+					{
+						const int ax = x + rcGetDirOffsetX(dir);
+						const int ay = y + rcGetDirOffsetY(dir);
+						const int ai = (int)chf.cells[ax+ay*w].index + rcGetCon(s, dir);
+						r = chf.spans[ai].reg;
+					}
+					if (r == chf.spans[i].reg)
+						res |= (1 &lt;&lt; dir);
+				}
+				flags[i] = res ^ 0xf; // Inverse, mark non connected edges.
+			}
+		}
+	}
+	
+	ctx-&gt;stopTimer(RC_TIMER_BUILD_CONTOURS_TRACE);
+	
+	rcTempVector&lt;int&gt; verts(256);
+	rcTempVector&lt;int&gt; simplified(64);
+	
+	for (int y = 0; y &lt; h; ++y)
+	{
+		for (int x = 0; x &lt; w; ++x)
+		{
+			const rcCompactCell&amp; c = chf.cells[x+y*w];
+			for (int i = (int)c.index, ni = (int)(c.index+c.count); i &lt; ni; ++i)
+			{
+				if (flags[i] == 0 || flags[i] == 0xf)
+				{
+					flags[i] = 0;
+					continue;
+				}
+				const unsigned short reg = chf.spans[i].reg;
+				if (!reg || (reg &amp; RC_BORDER_REG))
+					continue;
+				const unsigned char area = chf.areas[i];
+				
+				verts.clear();
+				simplified.clear();
+				
+				ctx-&gt;startTimer(RC_TIMER_BUILD_CONTOURS_TRACE);
+				walkContour(x, y, i, chf, flags, verts);
+				ctx-&gt;stopTimer(RC_TIMER_BUILD_CONTOURS_TRACE);
+				
+				ctx-&gt;startTimer(RC_TIMER_BUILD_CONTOURS_SIMPLIFY);
+				simplifyContour(verts, simplified, maxError, maxEdgeLen, buildFlags);
+				removeDegenerateSegments(simplified);
+				ctx-&gt;stopTimer(RC_TIMER_BUILD_CONTOURS_SIMPLIFY);
+				
+				
+				// Store region-&gt;contour remap info.
+				// Create contour.
+				if (simplified.size()/4 &gt;= 3)
+				{
+					if (cset.nconts &gt;= maxContours)
+					{
+						// Allocate more contours.
+						// This happens when a region has holes.
+						const int oldMax = maxContours;
+						maxContours *= 2;
+						rcContour* newConts = (rcContour*)rcAlloc(sizeof(rcContour)*maxContours, RC_ALLOC_PERM);
+						for (int j = 0; j &lt; cset.nconts; ++j)
+						{
+							newConts[j] = cset.conts[j];
+							// Reset source pointers to prevent data deletion.
+							cset.conts[j].verts = 0;
+							cset.conts[j].rverts = 0;
+						}
+						rcFree(cset.conts);
+						cset.conts = newConts;
+						
+						ctx-&gt;log(RC_LOG_WARNING, &quot;rcBuildContours: Expanding max contours from %d to %d.&quot;, oldMax, maxContours);
+					}
+					
+					rcContour* cont = &amp;cset.conts[cset.nconts++];
+					
+					cont-&gt;nverts = static_cast&lt;int&gt;(simplified.size()) / 4;
+					cont-&gt;verts = (int*)rcAlloc(sizeof(int)*cont-&gt;nverts*4, RC_ALLOC_PERM);
+					if (!cont-&gt;verts)
+					{
+						ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildContours: Out of memory 'verts' (%d).&quot;, cont-&gt;nverts);
+						return false;
+					}
+					memcpy(cont-&gt;verts, &amp;simplified[0], sizeof(int)*cont-&gt;nverts*4);
+					if (borderSize &gt; 0)
+					{
+						// If the heightfield was build with bordersize, remove the offset.
+						for (int j = 0; j &lt; cont-&gt;nverts; ++j)
+						{
+							int* v = &amp;cont-&gt;verts[j*4];
+							v[0] -= borderSize;
+							v[2] -= borderSize;
+						}
+					}
+					
+					cont-&gt;nrverts = static_cast&lt;int&gt;(verts.size()) / 4;
+					cont-&gt;rverts = static_cast&lt;int*&gt;(rcAlloc(sizeof(int) * cont-&gt;nrverts * 4, RC_ALLOC_PERM));
+					if (!cont-&gt;rverts)
+					{
+						ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildContours: Out of memory 'rverts' (%d).&quot;, cont-&gt;nrverts);
+						return false;
+					}
+					memcpy(cont-&gt;rverts, &amp;verts[0], sizeof(int)*cont-&gt;nrverts*4);
+					if (borderSize &gt; 0)
+					{
+						// If the heightfield was build with bordersize, remove the offset.
+						for (int j = 0; j &lt; cont-&gt;nrverts; ++j)
+						{
+							int* v = &amp;cont-&gt;rverts[j*4];
+							v[0] -= borderSize;
+							v[2] -= borderSize;
+						}
+					}
+					
+					cont-&gt;reg = reg;
+					cont-&gt;area = area;
+				}
+			}
+		}
+	}
+	
+	// Merge holes if needed.
+	if (cset.nconts &gt; 0)
+	{
+		// Calculate winding of all polygons.
+		rcScopedDelete&lt;signed char&gt; winding((signed char*)rcAlloc(sizeof(signed char)*cset.nconts, RC_ALLOC_TEMP));
+		if (!winding)
+		{
+			ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildContours: Out of memory 'hole' (%d).&quot;, cset.nconts);
+			return false;
+		}
+		int nholes = 0;
+		for (int i = 0; i &lt; cset.nconts; ++i)
+		{
+			rcContour&amp; cont = cset.conts[i];
+			// If the contour is wound backwards, it is a hole.
+			winding[i] = calcAreaOfPolygon2D(cont.verts, cont.nverts) &lt; 0 ? -1 : 1;
+			if (winding[i] &lt; 0)
+				nholes++;
+		}
+		
+		if (nholes &gt; 0)
+		{
+			// Collect outline contour and holes contours per region.
+			// We assume that there is one outline and multiple holes.
+			const int nregions = chf.maxRegions+1;
+			rcScopedDelete&lt;rcContourRegion&gt; regions((rcContourRegion*)rcAlloc(sizeof(rcContourRegion)*nregions, RC_ALLOC_TEMP));
+			if (!regions)
+			{
+				ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildContours: Out of memory 'regions' (%d).&quot;, nregions);
+				return false;
+			}
+			memset(regions, 0, sizeof(rcContourRegion)*nregions);
+			
+			rcScopedDelete&lt;rcContourHole&gt; holes((rcContourHole*)rcAlloc(sizeof(rcContourHole)*cset.nconts, RC_ALLOC_TEMP));
+			if (!holes)
+			{
+				ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildContours: Out of memory 'holes' (%d).&quot;, cset.nconts);
+				return false;
+			}
+			memset(holes, 0, sizeof(rcContourHole)*cset.nconts);
+			
+			for (int i = 0; i &lt; cset.nconts; ++i)
+			{
+				rcContour&amp; cont = cset.conts[i];
+				// Positively would contours are outlines, negative holes.
+				if (winding[i] &gt; 0)
+				{
+					if (regions[cont.reg].outline)
+						ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildContours: Multiple outlines for region %d.&quot;, cont.reg);
+					regions[cont.reg].outline = &amp;cont;
+				}
+				else
+				{
+					regions[cont.reg].nholes++;
+				}
+			}
+			int index = 0;
+			for (int i = 0; i &lt; nregions; i++)
+			{
+				if (regions[i].nholes &gt; 0)
+				{
+					regions[i].holes = &amp;holes[index];
+					index += regions[i].nholes;
+					regions[i].nholes = 0;
+				}
+			}
+			for (int i = 0; i &lt; cset.nconts; ++i)
+			{
+				rcContour&amp; cont = cset.conts[i];
+				rcContourRegion&amp; reg = regions[cont.reg];
+				if (winding[i] &lt; 0)
+					reg.holes[reg.nholes++].contour = &amp;cont;
+			}
+			
+			// Finally merge each regions holes into the outline.
+			for (int i = 0; i &lt; nregions; i++)
+			{
+				rcContourRegion&amp; reg = regions[i];
+				if (!reg.nholes) continue;
+				
+				if (reg.outline)
+				{
+					mergeRegionHoles(ctx, reg);
+				}
+				else
+				{
+					// The region does not have an outline.
+					// This can happen if the contour becaomes selfoverlapping because of
+					// too aggressive simplification settings.
+					ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildContours: Bad outline for region %d, contour simplification is likely too aggressive.&quot;, i);
+				}
+			}
+		}
+		
+	}
+	
+	return true;
+}
+</code></pre><ul>
+<li>处理轮廓的主要步骤如下：
+<ul>
+<li>初始化 <code>rcContourSet</code> 结构 <code>cset</code>，创建 <code>rcContour</code> 数组 <code>cset.conts</code> ，用于存储轮廓数据。</li>
+<li>遍历每个 <code>cell</code> 上的 <code>span</code> 进行处理。
+<ul>
+<li>如果 <code>span</code> 不可通行或者为 <code>borderSize</code> 范围的边界，则标记当前 <code>span</code> 的无边界。</li>
+<li>检查 <code>span</code> 的四个邻居，将不可通行或 <code>region</code> 与自身不同的方向标记为边界。</li>
+</ul>
+</li>
+<li>再次遍历每个 <code>cell</code> 上的 <code>span</code>进行处理。
+<ul>
+<li>如果 <code>span</code> 无边界或四个方向都为边界，则标记为无边界，不处理。</li>
+<li>如果 <code>span</code> 不可通行或者为 <code>borderSize</code> 范围的边界，则不处理。</li>
+<li>通过 <code>walkContour</code> 方法找到 <code>span</code> 的轮廓顶点。</li>
+<li>通过 <code>simplifyContour</code> 方法简化轮廓顶点。</li>
+<li>通过 <code>removeDegenerateSegments</code> 方法，将相邻轮廓顶点中 x、z 坐标相同的顶点移除。</li>
+<li>将简化前后的轮廓顶点减去 <code>borderSize</code> 后记录到 <code>cset</code> 中，设置所属的 <code>region</code> 和 <code>area</code>。</li>
+</ul>
+</li>
+<li>合并孔洞。
+<ul>
+<li>遍历 <code>cset.conts</code> 中的每个轮廓，通过 <code>calcAreaOfPolygon2D</code> 方法计算轮廓组成的多边形面积，如果小于 0，表示该轮廓为孔洞。</li>
+<li>如果没有孔洞，则直接跳过。如果存在孔洞，则需要进行处理。
+<ul>
+<li>遍历所有轮廓，将轮廓按所属的 <code>region</code> 分组，将轮廓分为 <code>outline</code> 和 <code>holes</code>。</li>
+<li>遍历所有 <code>region</code> 对应的分组，对有 <code>outline</code> 和 <code>holes</code> 的轮廓，调用 <code>mergeRegionHoles</code> 方法进行合并处理。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h5 id=寻找轮廓顶点>寻找轮廓顶点</h5>
+<ul>
+<li>寻找轮廓顶点通过 <code>walkContour(RecastContour.cpp)</code> 方法实现，而前面分水岭算法中使用的是 <code>walkContour(RecastRegion.cpp)</code>，两者思路类似，具体实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastContour.cpp
+
+...
+
+static void walkContour(int x, int y, int i,
+						const rcCompactHeightfield&amp; chf,
+						unsigned char* flags, rcTempVector&lt;int&gt;&amp; points)
+{
+	// Choose the first non-connected edge
+	unsigned char dir = 0;
+	while ((flags[i] &amp; (1 &lt;&lt; dir)) == 0)
+		dir++;
+	
+	unsigned char startDir = dir;
+	int starti = i;
+	
+	const unsigned char area = chf.areas[i];
+	
+	int iter = 0;
+	while (++iter &lt; 40000)
+	{
+		if (flags[i] &amp; (1 &lt;&lt; dir))
+		{
+			// Choose the edge corner
+			bool isBorderVertex = false;
+			bool isAreaBorder = false;
+			int px = x;
+			int py = getCornerHeight(x, y, i, dir, chf, isBorderVertex);
+			int pz = y;
+			switch(dir)
+			{
+				case 0: pz++; break;
+				case 1: px++; pz++; break;
+				case 2: px++; break;
+			}
+			int r = 0;
+			const rcCompactSpan&amp; s = chf.spans[i];
+			if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
+			{
+				const int ax = x + rcGetDirOffsetX(dir);
+				const int ay = y + rcGetDirOffsetY(dir);
+				const int ai = (int)chf.cells[ax+ay*chf.width].index + rcGetCon(s, dir);
+				r = (int)chf.spans[ai].reg;
+				if (area != chf.areas[ai])
+					isAreaBorder = true;
+			}
+			if (isBorderVertex)
+				r |= RC_BORDER_VERTEX;
+			if (isAreaBorder)
+				r |= RC_AREA_BORDER;
+			points.push_back(px);
+			points.push_back(py);
+			points.push_back(pz);
+			points.push_back(r);
+			
+			flags[i] &amp;= ~(1 &lt;&lt; dir); // Remove visited edges
+			dir = (dir+1) &amp; 0x3;  // Rotate CW
+		}
+		else
+		{
+			int ni = -1;
+			const int nx = x + rcGetDirOffsetX(dir);
+			const int ny = y + rcGetDirOffsetY(dir);
+			const rcCompactSpan&amp; s = chf.spans[i];
+			if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
+			{
+				const rcCompactCell&amp; nc = chf.cells[nx+ny*chf.width];
+				ni = (int)nc.index + rcGetCon(s, dir);
+			}
+			if (ni == -1)
+			{
+				// Should not happen.
+				return;
+			}
+			x = nx;
+			y = ny;
+			i = ni;
+			dir = (dir+3) &amp; 0x3;	// Rotate CCW
+		}
+		
+		if (starti == i &amp;&amp; startDir == dir)
+		{
+			break;
+		}
+	}
+}
+
+...
+</code></pre><ul>
+<li>寻找轮廓顶点过程，使用了 <code>points</code> 数组来记录原始轮廓点，每个原始轮廓点使用 4 个整数来表示，依次为 x 、y 、z 和 <code>region</code> 信息。其中 <code>region</code> 信息经过二次处理，加上了 <code>area</code> 边界标记（和邻居的 <code>area</code> 不同时）和 <code>borderSize</code> 边界标记（和 <code>borderSize</code> 相邻或处于其中）。</li>
+<li><code>walkContour</code> 的主要步骤如下：
+<ul>
+<li>找到第一个边界方向，作为起始方向，当前 <code>span</code> 作为起始 <code>span</code>。</li>
+<li>迭代检查当前 <code>span</code> 的当前方向是否为边界方向。
+<ul>
+<li>如果当前方向为边界，则
+<ul>
+<li>通过 <code>getCornerHeight</code> 方法获取当前点的 y 坐标即是否为 <code>borderSize</code> 边界点，如果方向为 0 或 1，则 z 坐标加 1，如果方向为 1 或 2 ，则 x 坐标加 1。
+<ul>
+<li>x 、z 坐标通过边界所在的方向进行偏移，从而保证最终得到的每个轮廓都为右上包含边界，左下不包含边界，避免出现重复。</li>
+</ul>
+</li>
+<li>获取当前方向的邻居 <code>span</code> 的 <code>region</code> 信息，将边界信息记录到其中。</li>
+<li>将当前点的坐标 x 、y 、z 和 <code>region</code> 记录到 <code>points</code> 中，作为一个轮廓顶点。</li>
+<li>清除当前 <code>span</code> 的当前方向标记，后续不再处理该方向。</li>
+<li>将方向设置为下一个方向。</li>
+</ul>
+</li>
+<li>如果当前方向不为边界或已经处理过，则
+<ul>
+<li>将当前方向的邻居 <code>span</code> 作为当前 <code>span</code>，并设置方向为上一个方向，迭代进行检查处理。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>直到当前 <code>span</code> 和起始 <code>span</code> 相同，且方向相同，则结束迭代，完成轮廓的查找。
+<img src="/img/Algorithm/NavmeshNavigation/WalkContour.gif?raw=true" alt=WalkContour.gif>
+</li>
+</ul>
+</li>
+<li><code>getCornerHeight</code> 方法的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastContour.cpp
+
+...
+
+static int getCornerHeight(int x, int y, int i, int dir,
+						   const rcCompactHeightfield&amp; chf,
+						   bool&amp; isBorderVertex)
+{
+	const rcCompactSpan&amp; s = chf.spans[i];
+	int ch = (int)s.y;
+	int dirp = (dir+1) &amp; 0x3;
+	
+	unsigned int regs[4] = {0,0,0,0};
+	
+	// Combine region and area codes in order to prevent
+	// border vertices which are in between two areas to be removed.
+	regs[0] = chf.spans[i].reg | (chf.areas[i] &lt;&lt; 16);
+	
+	if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
+	{
+		const int ax = x + rcGetDirOffsetX(dir);
+		const int ay = y + rcGetDirOffsetY(dir);
+		const int ai = (int)chf.cells[ax+ay*chf.width].index + rcGetCon(s, dir);
+		const rcCompactSpan&amp; as = chf.spans[ai];
+		ch = rcMax(ch, (int)as.y);
+		regs[1] = chf.spans[ai].reg | (chf.areas[ai] &lt;&lt; 16);
+		if (rcGetCon(as, dirp) != RC_NOT_CONNECTED)
+		{
+			const int ax2 = ax + rcGetDirOffsetX(dirp);
+			const int ay2 = ay + rcGetDirOffsetY(dirp);
+			const int ai2 = (int)chf.cells[ax2+ay2*chf.width].index + rcGetCon(as, dirp);
+			const rcCompactSpan&amp; as2 = chf.spans[ai2];
+			ch = rcMax(ch, (int)as2.y);
+			regs[2] = chf.spans[ai2].reg | (chf.areas[ai2] &lt;&lt; 16);
+		}
+	}
+	if (rcGetCon(s, dirp) != RC_NOT_CONNECTED)
+	{
+		const int ax = x + rcGetDirOffsetX(dirp);
+		const int ay = y + rcGetDirOffsetY(dirp);
+		const int ai = (int)chf.cells[ax+ay*chf.width].index + rcGetCon(s, dirp);
+		const rcCompactSpan&amp; as = chf.spans[ai];
+		ch = rcMax(ch, (int)as.y);
+		regs[3] = chf.spans[ai].reg | (chf.areas[ai] &lt;&lt; 16);
+		if (rcGetCon(as, dir) != RC_NOT_CONNECTED)
+		{
+			const int ax2 = ax + rcGetDirOffsetX(dir);
+			const int ay2 = ay + rcGetDirOffsetY(dir);
+			const int ai2 = (int)chf.cells[ax2+ay2*chf.width].index + rcGetCon(as, dir);
+			const rcCompactSpan&amp; as2 = chf.spans[ai2];
+			ch = rcMax(ch, (int)as2.y);
+			regs[2] = chf.spans[ai2].reg | (chf.areas[ai2] &lt;&lt; 16);
+		}
+	}
+
+	// Check if the vertex is special edge vertex, these vertices will be removed later.
+	for (int j = 0; j &lt; 4; ++j)
+	{
+		const int a = j;
+		const int b = (j+1) &amp; 0x3;
+		const int c = (j+2) &amp; 0x3;
+		const int d = (j+3) &amp; 0x3;
+		
+		// The vertex is a border vertex there are two same exterior cells in a row,
+		// followed by two interior cells and none of the regions are out of bounds.
+		const bool twoSameExts = (regs[a] &amp; regs[b] &amp; RC_BORDER_REG) != 0 &amp;&amp; regs[a] == regs[b];
+		const bool twoInts = ((regs[c] | regs[d]) &amp; RC_BORDER_REG) == 0;
+		const bool intsSameArea = (regs[c]&gt;&gt;16) == (regs[d]&gt;&gt;16);
+		const bool noZeros = regs[a] != 0 &amp;&amp; regs[b] != 0 &amp;&amp; regs[c] != 0 &amp;&amp; regs[d] != 0;
+		if (twoSameExts &amp;&amp; twoInts &amp;&amp; intsSameArea &amp;&amp; noZeros)
+		{
+			isBorderVertex = true;
+			break;
+		}
+	}
+	
+	return ch;
+}
+
+...
+</code></pre><ul>
+<li><code>getCornerHeight</code> 的主要步骤为：
+<ul>
+<li>初始化 y 坐标为当前 <code>span</code> 的 y 坐标。</li>
+<li>如果当前方向邻居 <code>span</code> 可通行，则取邻居 <code>span</code> 的 y 坐标和当前 y 坐标中的最大值作为当前 y 坐标。</li>
+<li>如果当前方向邻居 <code>span</code> 可通行，且邻居 <code>span</code> 的下一个方向邻居 <code>span</code> 可通行，则同样取其 y 坐标和当前 y 坐标中的最大值作为当前 y 坐标。</li>
+<li>如果下一个方向邻居 <code>span</code> 可通行，则取其 y 坐标和当前 y 坐标中的最大值作为当前 y 坐标。</li>
+<li>如果下一个方向邻居 <code>span</code> 可通行，且当前方向邻居 <code>span</code> 可通行，则同样取其 y 坐标和当前 y 坐标中的最大值作为当前 y 坐标。</li>
+<li>检查完成后，当前 y 坐标即为轮廓点的 y 坐标。</li>
+<li>当前 <code>span</code> 、当前方向邻居 <code>span</code> 、当前方向邻居 <code>span</code> 的下一个方向邻居 <code>span</code> 、下一个方向邻居 <code>span</code> ，保持先后顺序，每次以其中一个为起始进行迭代检查。
+<ul>
+<li>以当前的起始算起，如果前两个的 <code>region</code> 相同且为 <code>borderSize</code> 边界，后两个的 <code>area</code> 相同且不为 <code>borderSize</code> 边界，且四个 <code>span</code> 都可通行，则当前点为 <code>borderSize</code> 边界点。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h5 id=简化轮廓顶点>简化轮廓顶点</h5>
+<ul>
+<li>简化轮廓顶点的方法 <code>simplifyContour</code> 实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastContour.cpp
+
+...
+
+static void simplifyContour(rcTempVector&lt;int&gt;&amp; points, rcTempVector&lt;int&gt;&amp; simplified,
+							const float maxError, const int maxEdgeLen, const int buildFlags)
+{
+	// Add initial points.
+	bool hasConnections = false;
+	for (int i = 0; i &lt; points.size(); i += 4)
+	{
+		if ((points[i+3] &amp; RC_CONTOUR_REG_MASK) != 0)
+		{
+			hasConnections = true;
+			break;
+		}
+	}
+	
+	if (hasConnections)
+	{
+		// The contour has some portals to other regions.
+		// Add a new point to every location where the region changes.
+		for (int i = 0, ni = static_cast&lt;int&gt;(points.size()) / 4; i &lt; ni; ++i)
+		{
+			int ii = (i+1) % ni;
+			const bool differentRegs = (points[i*4+3] &amp; RC_CONTOUR_REG_MASK) != (points[ii*4+3] &amp; RC_CONTOUR_REG_MASK);
+			const bool areaBorders = (points[i*4+3] &amp; RC_AREA_BORDER) != (points[ii*4+3] &amp; RC_AREA_BORDER);
+			if (differentRegs || areaBorders)
+			{
+				simplified.push_back(points[i*4+0]);
+				simplified.push_back(points[i*4+1]);
+				simplified.push_back(points[i*4+2]);
+				simplified.push_back(i);
+			}
+		}
+	}
+	
+	if (simplified.size() == 0)
+	{
+		// If there is no connections at all,
+		// create some initial points for the simplification process.
+		// Find lower-left and upper-right vertices of the contour.
+		int llx = points[0];
+		int lly = points[1];
+		int llz = points[2];
+		int lli = 0;
+		int urx = points[0];
+		int ury = points[1];
+		int urz = points[2];
+		int uri = 0;
+		for (int i = 0; i &lt; points.size(); i += 4)
+		{
+			int x = points[i+0];
+			int y = points[i+1];
+			int z = points[i+2];
+			if (x &lt; llx || (x == llx &amp;&amp; z &lt; llz))
+			{
+				llx = x;
+				lly = y;
+				llz = z;
+				lli = i/4;
+			}
+			if (x &gt; urx || (x == urx &amp;&amp; z &gt; urz))
+			{
+				urx = x;
+				ury = y;
+				urz = z;
+				uri = i/4;
+			}
+		}
+		simplified.push_back(llx);
+		simplified.push_back(lly);
+		simplified.push_back(llz);
+		simplified.push_back(lli);
+		
+		simplified.push_back(urx);
+		simplified.push_back(ury);
+		simplified.push_back(urz);
+		simplified.push_back(uri);
+	}
+	
+	// Add points until all raw points are within
+	// error tolerance to the simplified shape.
+	const int pn = static_cast&lt;int&gt;(points.size()) / 4;
+	for (int i = 0; i &lt; simplified.size()/4; )
+	{
+		int ii = (i+1) % (simplified.size()/4);
+		
+		int ax = simplified[i*4+0];
+		int az = simplified[i*4+2];
+		int ai = simplified[i*4+3];
+
+		int bx = simplified[ii*4+0];
+		int bz = simplified[ii*4+2];
+		int bi = simplified[ii*4+3];
+
+		// Find maximum deviation from the segment.
+		float maxd = 0;
+		int maxi = -1;
+		int ci, cinc, endi;
+
+		// Traverse the segment in lexilogical order so that the
+		// max deviation is calculated similarly when traversing
+		// opposite segments.
+		if (bx &gt; ax || (bx == ax &amp;&amp; bz &gt; az))
+		{
+			cinc = 1;
+			ci = (ai+cinc) % pn;
+			endi = bi;
+		}
+		else
+		{
+			cinc = pn-1;
+			ci = (bi+cinc) % pn;
+			endi = ai;
+			rcSwap(ax, bx);
+			rcSwap(az, bz);
+		}
+		
+		// Tessellate only outer edges or edges between areas.
+		if ((points[ci*4+3] &amp; RC_CONTOUR_REG_MASK) == 0 ||
+			(points[ci*4+3] &amp; RC_AREA_BORDER))
+		{
+			while (ci != endi)
+			{
+				float d = distancePtSeg(points[ci*4+0], points[ci*4+2], ax, az, bx, bz);
+				if (d &gt; maxd)
+				{
+					maxd = d;
+					maxi = ci;
+				}
+				ci = (ci+cinc) % pn;
+			}
+		}
+		
+		
+		// If the max deviation is larger than accepted error,
+		// add new point, else continue to next segment.
+		if (maxi != -1 &amp;&amp; maxd &gt; (maxError*maxError))
+		{
+			// Add space for the new point.
+			simplified.resize(simplified.size()+4);
+			const int n = static_cast&lt;int&gt;(simplified.size()) / 4;
+			for (int j = n-1; j &gt; i; --j)
+			{
+				simplified[j*4+0] = simplified[(j-1)*4+0];
+				simplified[j*4+1] = simplified[(j-1)*4+1];
+				simplified[j*4+2] = simplified[(j-1)*4+2];
+				simplified[j*4+3] = simplified[(j-1)*4+3];
+			}
+			// Add the point.
+			simplified[(i+1)*4+0] = points[maxi*4+0];
+			simplified[(i+1)*4+1] = points[maxi*4+1];
+			simplified[(i+1)*4+2] = points[maxi*4+2];
+			simplified[(i+1)*4+3] = maxi;
+		}
+		else
+		{
+			++i;
+		}
+	}
+	
+	// Split too long edges.
+	if (maxEdgeLen &gt; 0 &amp;&amp; (buildFlags &amp; (RC_CONTOUR_TESS_WALL_EDGES|RC_CONTOUR_TESS_AREA_EDGES)) != 0)
+	{
+		for (int i = 0; i &lt; simplified.size()/4; )
+		{
+			const int ii = (i+1) % (simplified.size()/4);
+			
+			const int ax = simplified[i*4+0];
+			const int az = simplified[i*4+2];
+			const int ai = simplified[i*4+3];
+			
+			const int bx = simplified[ii*4+0];
+			const int bz = simplified[ii*4+2];
+			const int bi = simplified[ii*4+3];
+			
+			// Find maximum deviation from the segment.
+			int maxi = -1;
+			int ci = (ai+1) % pn;
+			
+			// Tessellate only outer edges or edges between areas.
+			bool tess = false;
+			// Wall edges.
+			if ((buildFlags &amp; RC_CONTOUR_TESS_WALL_EDGES) &amp;&amp; (points[ci*4+3] &amp; RC_CONTOUR_REG_MASK) == 0)
+				tess = true;
+			// Edges between areas.
+			if ((buildFlags &amp; RC_CONTOUR_TESS_AREA_EDGES) &amp;&amp; (points[ci*4+3] &amp; RC_AREA_BORDER))
+				tess = true;
+			
+			if (tess)
+			{
+				int dx = bx - ax;
+				int dz = bz - az;
+				if (dx*dx + dz*dz &gt; maxEdgeLen*maxEdgeLen)
+				{
+					// Round based on the segments in lexilogical order so that the
+					// max tesselation is consistent regardless in which direction
+					// segments are traversed.
+					const int n = bi &lt; ai ? (bi+pn - ai) : (bi - ai);
+					if (n &gt; 1)
+					{
+						if (bx &gt; ax || (bx == ax &amp;&amp; bz &gt; az))
+							maxi = (ai + n/2) % pn;
+						else
+							maxi = (ai + (n+1)/2) % pn;
+					}
+				}
+			}
+			
+			// If the max deviation is larger than accepted error,
+			// add new point, else continue to next segment.
+			if (maxi != -1)
+			{
+				// Add space for the new point.
+				simplified.resize(simplified.size()+4);
+				const int n = static_cast&lt;int&gt;(simplified.size()) / 4;
+				for (int j = n-1; j &gt; i; --j)
+				{
+					simplified[j*4+0] = simplified[(j-1)*4+0];
+					simplified[j*4+1] = simplified[(j-1)*4+1];
+					simplified[j*4+2] = simplified[(j-1)*4+2];
+					simplified[j*4+3] = simplified[(j-1)*4+3];
+				}
+				// Add the point.
+				simplified[(i+1)*4+0] = points[maxi*4+0];
+				simplified[(i+1)*4+1] = points[maxi*4+1];
+				simplified[(i+1)*4+2] = points[maxi*4+2];
+				simplified[(i+1)*4+3] = maxi;
+			}
+			else
+			{
+				++i;
+			}
+		}
+	}
+	
+	for (int i = 0; i &lt; simplified.size()/4; ++i)
+	{
+		// The edge vertex flag is take from the current raw point,
+		// and the neighbour region is take from the next raw point.
+		const int ai = (simplified[i*4+3]+1) % pn;
+		const int bi = simplified[i*4+3];
+		simplified[i*4+3] = (points[ai*4+3] &amp; (RC_CONTOUR_REG_MASK|RC_AREA_BORDER)) | (points[bi*4+3] &amp; RC_BORDER_VERTEX);
+	}
+	
+}
+
+...
+</code></pre><ul>
+<li>简化轮廓的过程使用了 <code>simplified</code> 数组记录简化后的轮廓点信息，每个简化点使用 4 个整数表示，依次为 x 、y 、z 和在原始轮廓 <code>points</code> 中的索引信息，简化完成后再将索引信息替换为 <code>region</code> 信息。</li>
+<li><code>simplifyContour</code> 的过程如下：
+<ul>
+<li>如果轮廓中存在可行走的点，则依次遍历每个原轮廓点，如果当前点和下个点的 <code>region</code> 或 <code>area</code> 不同，则将当前点加入到简化轮廓列表 <code>simplified</code> 中。</li>
+<li>如果 <code>simplified</code> 为空，即没有找到 <code>region</code> 或 <code>area</code> 不同的点，则将轮廓的左下点和右上点加入到 <code>simplified</code> 中。</li>
+<li>遍历 <code>simplified</code> 组成的每一条边，找到所有 <code>region</code> 不为 0 或者是 <code>area</code> 边界的原轮廓点，通过 <code>distancePtSeg</code> 方法计算这些原轮廓点到这条边的距离，从中找到距离最大的原轮廓点，如果该距离大于 <code>maxError</code>，则将该原轮廓点插入到 <code>simplified</code> 中此边的中间，否则跳过此边。</li>
+<li>如果设置了 <code>maxEdgeLen</code> 且设置了需要进行细化，则依次遍历 <code>simplified</code> 组成的每一条边.
+<ul>
+<li>如果边的起点的下一个原始轮廓点的 <code>region</code> 不为 0 且设置了细化墙边（RC_CONTOUR_TESS_WALL_EDGES），或者下一个原始轮廓点为 <code>area</code> 边界且设置了细化区域边（RC_CONTOUR_TESS_AREA_EDGES），则此边需要进行细化处理。</li>
+<li>对于需要细化处理的边，如果边的长度大于 <code>maxEdgeLen</code>，且边上除端点外的原始轮廓点数量大于 1，则取中间的原始轮廓点，插入到 <code>simplified</code> 中此边的中间。</li>
+</ul>
+</li>
+<li>遍历 <code>simplified</code> 的每个点，将索引信息替换为 <code>region</code> 信息。</li>
+</ul>
+</li>
+</ul>
+<h5 id=查找孔洞>查找孔洞</h5>
+<ul>
+<li>通过 <code>calcAreaOfPolygon2D</code> 方法，在所有轮廓中识别出孔洞，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastContour.cpp
+...
+
+static int calcAreaOfPolygon2D(const int* verts, const int nverts)
+{
+	int area = 0;
+	for (int i = 0, j = nverts-1; i &lt; nverts; j=i++)
+	{
+		const int* vi = &amp;verts[i*4];
+		const int* vj = &amp;verts[j*4];
+		area += vi[0] * vj[2] - vj[0] * vi[2];
+	}
+	return (area+1) / 2;
+}
+
+...
+</code></pre><ul>
+<li>查找轮廓的时候是按顺时针方向进行得到的结果，而多边形的顶点是按逆时针方向排序的，所以计算面积时需要使用轮廓的当前顶点和上一个顶点来计算。</li>
+<li>遍历每个顶点，根据原点和当前顶点的向量，以及原点到上一个顶点的向量，两者的叉积得到三个点组成的三角形的面积，而所有三角形面积之和即为多边形的面积。其中，叉积为正，表示从向量 1 到向量 2 为逆时针旋转。叉积为负，表示从向量 1 到向量 2 为顺时针旋转。</li>
+<li>如果最终多边形的面积为负，则表示该轮廓为逆时针方向，即为孔洞。相反，如果面积为正，则表示该轮廓为外轮廓。</li>
+</ul>
+<h5 id=合并孔洞>合并孔洞</h5>
+<ul>
+<li>通过 <code>mergeRegionHoles</code> 方法，将孔洞合并到外轮廓中，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastContour.cpp
+
+...
+
+static void mergeRegionHoles(rcContext* ctx, rcContourRegion&amp; region)
+{
+	// Sort holes from left to right.
+	for (int i = 0; i &lt; region.nholes; i++)
+		findLeftMostVertex(region.holes[i].contour, &amp;region.holes[i].minx, &amp;region.holes[i].minz, &amp;region.holes[i].leftmost);
+	
+	qsort(region.holes, region.nholes, sizeof(rcContourHole), compareHoles);
+	
+	int maxVerts = region.outline-&gt;nverts;
+	for (int i = 0; i &lt; region.nholes; i++)
+		maxVerts += region.holes[i].contour-&gt;nverts;
+	
+	rcScopedDelete&lt;rcPotentialDiagonal&gt; diags((rcPotentialDiagonal*)rcAlloc(sizeof(rcPotentialDiagonal)*maxVerts, RC_ALLOC_TEMP));
+	if (!diags)
+	{
+		ctx-&gt;log(RC_LOG_WARNING, &quot;mergeRegionHoles: Failed to allocated diags %d.&quot;, maxVerts);
+		return;
+	}
+	
+	rcContour* outline = region.outline;
+	
+	// Merge holes into the outline one by one.
+	for (int i = 0; i &lt; region.nholes; i++)
+	{
+		rcContour* hole = region.holes[i].contour;
+		
+		int index = -1;
+		int bestVertex = region.holes[i].leftmost;
+		for (int iter = 0; iter &lt; hole-&gt;nverts; iter++)
+		{
+			// Find potential diagonals.
+			// The 'best' vertex must be in the cone described by 3 consecutive vertices of the outline.
+			// ..o j-1
+			//   |
+			//   |   * best
+			//   |
+			// j o-----o j+1
+			//         :
+			int ndiags = 0;
+			const int* corner = &amp;hole-&gt;verts[bestVertex*4];
+			for (int j = 0; j &lt; outline-&gt;nverts; j++)
+			{
+				if (inCone(j, outline-&gt;nverts, outline-&gt;verts, corner))
+				{
+					int dx = outline-&gt;verts[j*4+0] - corner[0];
+					int dz = outline-&gt;verts[j*4+2] - corner[2];
+					diags[ndiags].vert = j;
+					diags[ndiags].dist = dx*dx + dz*dz;
+					ndiags++;
+				}
+			}
+			// Sort potential diagonals by distance, we want to make the connection as short as possible.
+			qsort(diags, ndiags, sizeof(rcPotentialDiagonal), compareDiagDist);
+			
+			// Find a diagonal that is not intersecting the outline not the remaining holes.
+			index = -1;
+			for (int j = 0; j &lt; ndiags; j++)
+			{
+				const int* pt = &amp;outline-&gt;verts[diags[j].vert*4];
+				bool intersect = intersectSegContour(pt, corner, diags[i].vert, outline-&gt;nverts, outline-&gt;verts);	//这里的 diags[i] 应该是错误的，实际应该是 diags[j]
+				for (int k = i; k &lt; region.nholes &amp;&amp; !intersect; k++)
+					intersect |= intersectSegContour(pt, corner, -1, region.holes[k].contour-&gt;nverts, region.holes[k].contour-&gt;verts);
+				if (!intersect)
+				{
+					index = diags[j].vert;
+					break;
+				}
+			}
+			// If found non-intersecting diagonal, stop looking.
+			if (index != -1)
+				break;
+			// All the potential diagonals for the current vertex were intersecting, try next vertex.
+			bestVertex = (bestVertex + 1) % hole-&gt;nverts;
+		}
+		
+		if (index == -1)
+		{
+			ctx-&gt;log(RC_LOG_WARNING, &quot;mergeHoles: Failed to find merge points for %p and %p.&quot;, region.outline, hole);
+			continue;
+		}
+		if (!mergeContours(*region.outline, *hole, index, bestVertex))
+		{
+			ctx-&gt;log(RC_LOG_WARNING, &quot;mergeHoles: Failed to merge contours %p and %p.&quot;, region.outline, hole);
+			continue;
+		}
+	}
+}
+
+...
+</code></pre><ul>
+<li><code>mergeRegionHoles</code> 合并的主要步骤如下：
+<ul>
+<li>遍历当前 <code>region</code> 的每个 <code>hole</code>，设置每个 <code>hole</code> 的左下点坐标及索引，并将 <code>hole</code> 按照左下点坐标进行排序，越靠近左下的排在前面。</li>
+<li>遍历当前 <code>region</code> 的每个 <code>hole</code>，从最左下点开始，设置为拐角点，迭代进行检查。
+<ul>
+<li>遍历当前 <code>region</code> 外轮廓的每个点，通过 <code>inCone</code> 方法判断拐角点是否在当前外轮廓点及其前后两个点组成的角度区域内，如果在，则计算该点和拐角点的距离，并将该点加入到 <code>diags</code> 数组中。</li>
+<li>对 <code>diags</code> 数组按照距离从小到大进行排序。</li>
+<li>遍历 <code>diags</code> 数组，通过 <code>intersectSegContour</code> 方法依次检查每个点和拐角点的线段是否和外轮廓不含这个点的边相交</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
 <h4 id=建立多边形网格>建立多边形网格</h4>
 <h4 id=创建细节网格>创建细节网格</h4>
 <h4 id=创建导航数据>创建导航数据</h4>
