@@ -4237,17 +4237,712 @@ static void mergeRegionHoles(rcContext* ctx, rcContourRegion&amp; region)
 <li><code>mergeRegionHoles</code> 合并的主要步骤如下：
 <ul>
 <li>遍历当前 <code>region</code> 的每个 <code>hole</code>，设置每个 <code>hole</code> 的左下点坐标及索引，并将 <code>hole</code> 按照左下点坐标进行排序，越靠近左下的排在前面。</li>
-<li>遍历当前 <code>region</code> 的每个 <code>hole</code>，从最左下点开始，设置为拐角点，迭代进行检查。
+<li>遍历当前 <code>region</code> 的每个 <code>hole</code>，对每个 <code>hole</code> 进行处理。
+<ul>
+<li>从当前 <code>hole</code> 最左下点开始，依次将每个点为拐角点，迭代进行检查。
 <ul>
 <li>遍历当前 <code>region</code> 外轮廓的每个点，通过 <code>inCone</code> 方法判断拐角点是否在当前外轮廓点及其前后两个点组成的角度区域内，如果在，则计算该点和拐角点的距离，并将该点加入到 <code>diags</code> 数组中。</li>
 <li>对 <code>diags</code> 数组按照距离从小到大进行排序。</li>
-<li>遍历 <code>diags</code> 数组，通过 <code>intersectSegContour</code> 方法依次检查每个点和拐角点的线段是否和外轮廓不含这个点的边相交</li>
+<li>遍历 <code>diags</code> 数组，通过 <code>intersectSegContour</code> 方法依次检查 <code>diags[j]</code> 和拐角点的线段是否和 <code>outline</code> 中不包含 <code>diags[j]</code> 的边不相交，并且和剩余的 <code>hole</code> 的任意边也不相交，如果都不相交，则 <code>diags[j]</code> 为合并点，结束迭代。</li>
+<li>如果没有找到合并点，则将下一个点设置为拐角点，继续迭代。</li>
+</ul>
+</li>
+<li>如果找到了合并点，则通过 <code>mergeContours</code> 方法将 <code>hole</code> 合并到 <code>outline</code> 中，检查相交情况时，则不需要再检查此 <code>hole</code>，因为已经加入到 <code>outline</code> 中，检查和 <code>outline</code> 的相交情况已经同时处理了。（如果没有找到合并点，后续也没有重新检查未被合并的 <code>hole</code> 的相交情况，可能存在问题？）</li>
 </ul>
 </li>
 </ul>
+</li>
+<li><code>inCone</code> 方法的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastContour.cpp
+
+...
+
+static bool	inCone(int i, int n, const int* verts, const int* pj)
+{
+	const int* pi = &amp;verts[i * 4];
+	const int* pi1 = &amp;verts[next(i, n) * 4];
+	const int* pin1 = &amp;verts[prev(i, n) * 4];
+	
+	// If P[i] is a convex vertex [ i+1 left or on (i-1,i) ].
+	if (leftOn(pin1, pi, pi1))
+		return left(pi, pj, pin1) &amp;&amp; left(pj, pi, pi1);
+	// Assume (i-1,i,i+1) not collinear.
+	// else P[i] is reflex.
+	return !(leftOn(pi, pj, pi1) &amp;&amp; leftOn(pj, pi, pin1));
+}
+
+...
+
+inline int area2(const int* a, const int* b, const int* c)
+{
+	return (b[0] - a[0]) * (c[2] - a[2]) - (c[0] - a[0]) * (b[2] - a[2]);
+}
+
+// Returns true iff c is strictly to the left of the directed
+// line through a to b.
+inline bool left(const int* a, const int* b, const int* c)
+{
+	return area2(a, b, c) &lt; 0;
+}
+
+inline bool leftOn(const int* a, const int* b, const int* c)
+{
+	return area2(a, b, c) &lt;= 0;
+}
+...
+</code></pre><ul>
+<li><code>inCone</code> 方法通过当前顶点、上一个顶点、下一个顶点组成的角，判断目标点是否在角组成的范围内。<code>left</code> 方法通过向量 AB 和向量 AC 的叉积，来判断点所在的位置。通常情况下，如果向量叉积为正，则点 C 在向量 AB 的逆时针方向，即左侧，如果为负，则点 C 在向量 AB 的顺时针方向，即右侧。而这里的 <code>left</code> 方法判断相反，但前面提到，轮廓顶点是按顺时针方向得到的，多边形顶点则是按逆时针方向排序的，而这里使用的是轮廓的顶点顺序，因此 <code>left</code> 代表的是多边形排序的左侧，所以结果上也是正确的。</li>
+<li><code>intersectSegContour</code> 方法的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastContour.cpp
+
+...
+
+inline bool collinear(const int* a, const int* b, const int* c)
+{
+	return area2(a, b, c) == 0;
+}
+
+static bool intersectProp(const int* a, const int* b, const int* c, const int* d)
+{
+	// Eliminate improper cases.
+	if (collinear(a,b,c) || collinear(a,b,d) ||
+		collinear(c,d,a) || collinear(c,d,b))
+		return false;
+	
+	return (left(a,b,c) ^ left(a,b,d)) &amp;&amp; (left(c,d,a) ^ left(c,d,b));
+}
+
+// Returns T iff (a,b,c) are collinear and point c lies
+// on the closed segment ab.
+static bool between(const int* a, const int* b, const int* c)
+{
+	if (!collinear(a, b, c))
+		return false;
+	// If ab not vertical, check betweenness on x; else on y.
+	if (a[0] != b[0])
+		return	((a[0] &lt;= c[0]) &amp;&amp; (c[0] &lt;= b[0])) || ((a[0] &gt;= c[0]) &amp;&amp; (c[0] &gt;= b[0]));
+	else
+		return	((a[2] &lt;= c[2]) &amp;&amp; (c[2] &lt;= b[2])) || ((a[2] &gt;= c[2]) &amp;&amp; (c[2] &gt;= b[2]));
+}
+
+// Returns true iff segments ab and cd intersect, properly or improperly.
+static bool intersect(const int* a, const int* b, const int* c, const int* d)
+{
+	if (intersectProp(a, b, c, d))
+		return true;
+	else if (between(a, b, c) || between(a, b, d) ||
+			 between(c, d, a) || between(c, d, b))
+		return true;
+	else
+		return false;
+}
+
+static bool vequal(const int* a, const int* b)
+{
+	return a[0] == b[0] &amp;&amp; a[2] == b[2];
+}
+
+static bool intersectSegContour(const int* d0, const int* d1, int i, int n, const int* verts)
+{
+	// For each edge (k,k+1) of P
+	for (int k = 0; k &lt; n; k++)
+	{
+		int k1 = next(k, n);
+		// Skip edges incident to i.
+		if (i == k || i == k1)
+			continue;
+		const int* p0 = &amp;verts[k * 4];
+		const int* p1 = &amp;verts[k1 * 4];
+		if (vequal(d0, p0) || vequal(d1, p0) || vequal(d0, p1) || vequal(d1, p1))
+			continue;
+		
+		if (intersect(d0, d1, p0, p1))
+			return true;
+	}
+	return false;
+}
+</code></pre><ul>
+<li><code>intersectSegContour</code> 方法通过传入的两个点组成的线段，遍历顶点数组中的每条边，跳过和输入点及指定索引相同的顶点所在的边，通过 <code>intersect</code> 方法判断线段是否和边相交。同样，也是通过向量叉积的方式进行计算，当线段 1 的两个顶点在线段 2 的两侧，且线段 2 的顶点也在线段 1 的两侧，说明线段 1 和线段 2 相交。</li>
+<li><code>mergeContours</code> 方法的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastContour.cpp
+
+static bool mergeContours(rcContour&amp; ca, rcContour&amp; cb, int ia, int ib)
+{
+	const int maxVerts = ca.nverts + cb.nverts + 2;
+	int* verts = (int*)rcAlloc(sizeof(int)*maxVerts*4, RC_ALLOC_PERM);
+	if (!verts)
+		return false;
+	
+	int nv = 0;
+	
+	// Copy contour A.
+	for (int i = 0; i &lt;= ca.nverts; ++i)
+	{
+		int* dst = &amp;verts[nv*4];
+		const int* src = &amp;ca.verts[((ia+i)%ca.nverts)*4];
+		dst[0] = src[0];
+		dst[1] = src[1];
+		dst[2] = src[2];
+		dst[3] = src[3];
+		nv++;
+	}
+
+	// Copy contour B
+	for (int i = 0; i &lt;= cb.nverts; ++i)
+	{
+		int* dst = &amp;verts[nv*4];
+		const int* src = &amp;cb.verts[((ib+i)%cb.nverts)*4];
+		dst[0] = src[0];
+		dst[1] = src[1];
+		dst[2] = src[2];
+		dst[3] = src[3];
+		nv++;
+	}
+	
+	rcFree(ca.verts);
+	ca.verts = verts;
+	ca.nverts = nv;
+	
+	rcFree(cb.verts);
+	cb.verts = 0;
+	cb.nverts = 0;
+	
+	return true;
+}
+
+...
+</code></pre><ul>
+<li><code>mergeContours</code> 方法，从 <code>outline</code> 找到的合并点的下一个点起，将 <code>outline</code> 的所有点加入的到新的轮廓中，再从 <code>hole</code> 的拐角点的下一个点起，将 <code>hole</code> 的所有点加入到新轮廓中，得到合并后的轮廓。
+<img src="/img/Algorithm/NavmeshNavigation/Nav2_4.gif?raw=true" alt=Nav2_4.png>
 </li>
 </ul>
 <h4 id=建立多边形网格>建立多边形网格</h4>
+<ul>
+<li>建立多边形网格过程，使用 <code>rcPolyMesh</code> 结构保存多边形网格数据，其定义如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Include/Recast.h
+
+...
+
+struct rcPolyMesh
+{
+	...
+
+	unsigned short* verts;	/// 顶点坐标，每个顶点占 3 位
+	unsigned short* polys;	/// 多边形顶点索引，以及其每条边的邻居多边形索引，尺寸为 npolys * nvp * 2，[0 , npolys * nvp - 1] 为顶点索引，[npolys * nvp , npolys * nvp * 2 - 1] 为邻居多边形索引
+	unsigned short* regs;	/// 每个多边形的地区
+	unsigned short* flags;	/// 每个多边形的标记
+	unsigned char* areas;	/// 每个多边形的区域
+	int nverts;				/// 顶点数量
+	int npolys;				/// 多边形数量
+	int maxpolys;			/// 已申请的最大多边形数量
+	int nvp;				/// 每个多边形的最大顶点数量
+	float bmin[3];			/// 同 rcHeightfield
+	float bmax[3];			/// 同 rcHeightfield
+	float cs;				/// 同 rcHeightfield
+	float ch;				/// 同 rcHeightfield
+	int borderSize;			/// 同 rcConfig::borderSize
+	float maxEdgeError;		/// 同 rcContourSet::maxError
+	
+	...
+};
+
+</code></pre><ul>
+<li>建立过程通过 <code>rcBuildPolyMesh</code> 方法实现，其代码如下：</li>
+</ul>
+<pre tabindex=0><code>
+bool rcBuildPolyMesh(rcContext* ctx, const rcContourSet&amp; cset, const int nvp, rcPolyMesh&amp; mesh)
+{
+	rcAssert(ctx);
+	
+	rcScopedTimer timer(ctx, RC_TIMER_BUILD_POLYMESH);
+
+	rcVcopy(mesh.bmin, cset.bmin);
+	rcVcopy(mesh.bmax, cset.bmax);
+	mesh.cs = cset.cs;
+	mesh.ch = cset.ch;
+	mesh.borderSize = cset.borderSize;
+	mesh.maxEdgeError = cset.maxError;
+	
+	int maxVertices = 0;
+	int maxTris = 0;
+	int maxVertsPerCont = 0;
+	for (int i = 0; i &lt; cset.nconts; ++i)
+	{
+		// Skip null contours.
+		if (cset.conts[i].nverts &lt; 3) continue;
+		maxVertices += cset.conts[i].nverts;
+		maxTris += cset.conts[i].nverts - 2;
+		maxVertsPerCont = rcMax(maxVertsPerCont, cset.conts[i].nverts);
+	}
+	
+	if (maxVertices &gt;= 0xfffe)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Too many vertices %d.&quot;, maxVertices);
+		return false;
+	}
+		
+	rcScopedDelete&lt;unsigned char&gt; vflags((unsigned char*)rcAlloc(sizeof(unsigned char)*maxVertices, RC_ALLOC_TEMP));
+	if (!vflags)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Out of memory 'vflags' (%d).&quot;, maxVertices);
+		return false;
+	}
+	memset(vflags, 0, maxVertices);
+	
+	mesh.verts = (unsigned short*)rcAlloc(sizeof(unsigned short)*maxVertices*3, RC_ALLOC_PERM);
+	if (!mesh.verts)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Out of memory 'mesh.verts' (%d).&quot;, maxVertices);
+		return false;
+	}
+	mesh.polys = (unsigned short*)rcAlloc(sizeof(unsigned short)*maxTris*nvp*2, RC_ALLOC_PERM);
+	if (!mesh.polys)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Out of memory 'mesh.polys' (%d).&quot;, maxTris*nvp*2);
+		return false;
+	}
+	mesh.regs = (unsigned short*)rcAlloc(sizeof(unsigned short)*maxTris, RC_ALLOC_PERM);
+	if (!mesh.regs)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Out of memory 'mesh.regs' (%d).&quot;, maxTris);
+		return false;
+	}
+	mesh.areas = (unsigned char*)rcAlloc(sizeof(unsigned char)*maxTris, RC_ALLOC_PERM);
+	if (!mesh.areas)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Out of memory 'mesh.areas' (%d).&quot;, maxTris);
+		return false;
+	}
+	
+	mesh.nverts = 0;
+	mesh.npolys = 0;
+	mesh.nvp = nvp;
+	mesh.maxpolys = maxTris;
+	
+	memset(mesh.verts, 0, sizeof(unsigned short)*maxVertices*3);
+	memset(mesh.polys, 0xff, sizeof(unsigned short)*maxTris*nvp*2);
+	memset(mesh.regs, 0, sizeof(unsigned short)*maxTris);
+	memset(mesh.areas, 0, sizeof(unsigned char)*maxTris);
+	
+	rcScopedDelete&lt;int&gt; nextVert((int*)rcAlloc(sizeof(int)*maxVertices, RC_ALLOC_TEMP));
+	if (!nextVert)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Out of memory 'nextVert' (%d).&quot;, maxVertices);
+		return false;
+	}
+	memset(nextVert, 0, sizeof(int)*maxVertices);
+	
+	rcScopedDelete&lt;int&gt; firstVert((int*)rcAlloc(sizeof(int)*VERTEX_BUCKET_COUNT, RC_ALLOC_TEMP));
+	if (!firstVert)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Out of memory 'firstVert' (%d).&quot;, VERTEX_BUCKET_COUNT);
+		return false;
+	}
+	for (int i = 0; i &lt; VERTEX_BUCKET_COUNT; ++i)
+		firstVert[i] = -1;
+	
+	rcScopedDelete&lt;int&gt; indices((int*)rcAlloc(sizeof(int)*maxVertsPerCont, RC_ALLOC_TEMP));
+	if (!indices)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Out of memory 'indices' (%d).&quot;, maxVertsPerCont);
+		return false;
+	}
+	rcScopedDelete&lt;int&gt; tris((int*)rcAlloc(sizeof(int)*maxVertsPerCont*3, RC_ALLOC_TEMP));
+	if (!tris)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Out of memory 'tris' (%d).&quot;, maxVertsPerCont*3);
+		return false;
+	}
+	rcScopedDelete&lt;unsigned short&gt; polys((unsigned short*)rcAlloc(sizeof(unsigned short)*(maxVertsPerCont+1)*nvp, RC_ALLOC_TEMP));
+	if (!polys)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Out of memory 'polys' (%d).&quot;, maxVertsPerCont*nvp);
+		return false;
+	}
+	unsigned short* tmpPoly = &amp;polys[maxVertsPerCont*nvp];
+
+	for (int i = 0; i &lt; cset.nconts; ++i)
+	{
+		rcContour&amp; cont = cset.conts[i];
+		
+		// Skip null contours.
+		if (cont.nverts &lt; 3)
+			continue;
+		
+		// Triangulate contour
+		for (int j = 0; j &lt; cont.nverts; ++j)
+			indices[j] = j;
+			
+		int ntris = triangulate(cont.nverts, cont.verts, &amp;indices[0], &amp;tris[0]);
+		if (ntris &lt;= 0)
+		{
+			// Bad triangulation, should not happen.
+/*			printf(&quot;\tconst float bmin[3] = {%ff,%ff,%ff};\n&quot;, cset.bmin[0], cset.bmin[1], cset.bmin[2]);
+			printf(&quot;\tconst float cs = %ff;\n&quot;, cset.cs);
+			printf(&quot;\tconst float ch = %ff;\n&quot;, cset.ch);
+			printf(&quot;\tconst int verts[] = {\n&quot;);
+			for (int k = 0; k &lt; cont.nverts; ++k)
+			{
+				const int* v = &amp;cont.verts[k*4];
+				printf(&quot;\t\t%d,%d,%d,%d,\n&quot;, v[0], v[1], v[2], v[3]);
+			}
+			printf(&quot;\t};\n\tconst int nverts = sizeof(verts)/(sizeof(int)*4);\n&quot;);*/
+			ctx-&gt;log(RC_LOG_WARNING, &quot;rcBuildPolyMesh: Bad triangulation Contour %d.&quot;, i);
+			ntris = -ntris;
+		}
+				
+		// Add and merge vertices.
+		for (int j = 0; j &lt; cont.nverts; ++j)
+		{
+			const int* v = &amp;cont.verts[j*4];
+			indices[j] = addVertex((unsigned short)v[0], (unsigned short)v[1], (unsigned short)v[2],
+								   mesh.verts, firstVert, nextVert, mesh.nverts);
+			if (v[3] &amp; RC_BORDER_VERTEX)
+			{
+				// This vertex should be removed.
+				vflags[indices[j]] = 1;
+			}
+		}
+
+		// Build initial polygons.
+		int npolys = 0;
+		memset(polys, 0xff, maxVertsPerCont*nvp*sizeof(unsigned short));
+		for (int j = 0; j &lt; ntris; ++j)
+		{
+			int* t = &amp;tris[j*3];
+			if (t[0] != t[1] &amp;&amp; t[0] != t[2] &amp;&amp; t[1] != t[2])
+			{
+				polys[npolys*nvp+0] = (unsigned short)indices[t[0]];
+				polys[npolys*nvp+1] = (unsigned short)indices[t[1]];
+				polys[npolys*nvp+2] = (unsigned short)indices[t[2]];
+				npolys++;
+			}
+		}
+		if (!npolys)
+			continue;
+		
+		// Merge polygons.
+		if (nvp &gt; 3)
+		{
+			for(;;)
+			{
+				// Find best polygons to merge.
+				int bestMergeVal = 0;
+				int bestPa = 0, bestPb = 0, bestEa = 0, bestEb = 0;
+				
+				for (int j = 0; j &lt; npolys-1; ++j)
+				{
+					unsigned short* pj = &amp;polys[j*nvp];
+					for (int k = j+1; k &lt; npolys; ++k)
+					{
+						unsigned short* pk = &amp;polys[k*nvp];
+						int ea, eb;
+						int v = getPolyMergeValue(pj, pk, mesh.verts, ea, eb, nvp);
+						if (v &gt; bestMergeVal)
+						{
+							bestMergeVal = v;
+							bestPa = j;
+							bestPb = k;
+							bestEa = ea;
+							bestEb = eb;
+						}
+					}
+				}
+				
+				if (bestMergeVal &gt; 0)
+				{
+					// Found best, merge.
+					unsigned short* pa = &amp;polys[bestPa*nvp];
+					unsigned short* pb = &amp;polys[bestPb*nvp];
+					mergePolyVerts(pa, pb, bestEa, bestEb, tmpPoly, nvp);
+					unsigned short* lastPoly = &amp;polys[(npolys-1)*nvp];
+					if (pb != lastPoly)
+						memcpy(pb, lastPoly, sizeof(unsigned short)*nvp);
+					npolys--;
+				}
+				else
+				{
+					// Could not merge any polygons, stop.
+					break;
+				}
+			}
+		}
+		
+		// Store polygons.
+		for (int j = 0; j &lt; npolys; ++j)
+		{
+			unsigned short* p = &amp;mesh.polys[mesh.npolys*nvp*2];
+			unsigned short* q = &amp;polys[j*nvp];
+			for (int k = 0; k &lt; nvp; ++k)
+				p[k] = q[k];
+			mesh.regs[mesh.npolys] = cont.reg;
+			mesh.areas[mesh.npolys] = cont.area;
+			mesh.npolys++;
+			if (mesh.npolys &gt; maxTris)
+			{
+				ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Too many polygons %d (max:%d).&quot;, mesh.npolys, maxTris);
+				return false;
+			}
+		}
+	}
+	
+	
+	// Remove edge vertices.
+	for (int i = 0; i &lt; mesh.nverts; ++i)
+	{
+		if (vflags[i])
+		{
+			if (!canRemoveVertex(ctx, mesh, (unsigned short)i))
+				continue;
+			if (!removeVertex(ctx, mesh, (unsigned short)i, maxTris))
+			{
+				// Failed to remove vertex
+				ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Failed to remove edge vertex %d.&quot;, i);
+				return false;
+			}
+			// Remove vertex
+			// Note: mesh.nverts is already decremented inside removeVertex()!
+			// Fixup vertex flags
+			for (int j = i; j &lt; mesh.nverts; ++j)
+				vflags[j] = vflags[j+1];
+			--i;
+		}
+	}
+	
+	// Calculate adjacency.
+	if (!buildMeshAdjacency(mesh.polys, mesh.npolys, mesh.nverts, nvp))
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Adjacency failed.&quot;);
+		return false;
+	}
+	
+	// Find portal edges
+	if (mesh.borderSize &gt; 0)
+	{
+		const int w = cset.width;
+		const int h = cset.height;
+		for (int i = 0; i &lt; mesh.npolys; ++i)
+		{
+			unsigned short* p = &amp;mesh.polys[i*2*nvp];
+			for (int j = 0; j &lt; nvp; ++j)
+			{
+				if (p[j] == RC_MESH_NULL_IDX) break;
+				// Skip connected edges.
+				if (p[nvp+j] != RC_MESH_NULL_IDX)
+					continue;
+				int nj = j+1;
+				if (nj &gt;= nvp || p[nj] == RC_MESH_NULL_IDX) nj = 0;
+				const unsigned short* va = &amp;mesh.verts[p[j]*3];
+				const unsigned short* vb = &amp;mesh.verts[p[nj]*3];
+
+				if ((int)va[0] == 0 &amp;&amp; (int)vb[0] == 0)
+					p[nvp+j] = 0x8000 | 0;
+				else if ((int)va[2] == h &amp;&amp; (int)vb[2] == h)
+					p[nvp+j] = 0x8000 | 1;
+				else if ((int)va[0] == w &amp;&amp; (int)vb[0] == w)
+					p[nvp+j] = 0x8000 | 2;
+				else if ((int)va[2] == 0 &amp;&amp; (int)vb[2] == 0)
+					p[nvp+j] = 0x8000 | 3;
+			}
+		}
+	}
+
+	// Just allocate the mesh flags array. The user is resposible to fill it.
+	mesh.flags = (unsigned short*)rcAlloc(sizeof(unsigned short)*mesh.npolys, RC_ALLOC_PERM);
+	if (!mesh.flags)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: Out of memory 'mesh.flags' (%d).&quot;, mesh.npolys);
+		return false;
+	}
+	memset(mesh.flags, 0, sizeof(unsigned short) * mesh.npolys);
+	
+	if (mesh.nverts &gt; 0xffff)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: The resulting mesh has too many vertices %d (max %d). Data can be corrupted.&quot;, mesh.nverts, 0xffff);
+	}
+	if (mesh.npolys &gt; 0xffff)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMesh: The resulting mesh has too many polygons %d (max %d). Data can be corrupted.&quot;, mesh.npolys, 0xffff);
+	}
+	
+	return true;
+}
+
+...
+</code></pre><ul>
+<li><code>rcBuildPolyMesh</code> 的主要步骤如下：
+<ul>
+<li>初始化 <code>rcPolyMesh</code> 结构 <code>mesh</code> 对象，用于存储网格信息。</li>
+<li>遍历 <code>cset</code> 中的轮廓处理。
+<ul>
+<li>初始化顶点索引 <code>indices</code>，通过 <code>triangulate</code> 方法将轮廓划分成三角形，存储到 <code>tris</code> 中。</li>
+<li>遍历轮廓的每个顶点，通过 <code>addVertex</code> 方法去除重复顶点（x、z 坐标相同，y 坐标差值在 2 以内），重新生成顶点索引，更新到 <code>indices</code> 中，并将顶点坐标记录到 <code>mesh.verts</code> 中。同时，对处在 <code>borderSize</code> 范围内的顶点标记到 <code>vflags</code> 中。</li>
+<li>将 <code>indices</code> 每个三角形的顶点索引存储到 <code>polys</code> 中。</li>
+<li>如果每个多边形的最大顶点数 <code>nvp</code> 大于 3，则进行多边形合并。
+<ul>
+<li>遍历 <code>polys</code> 中每两个多边形，通过 <code>getPolyMergeValue</code> 方法找到所有具有公共边的多边形组合，取其中公共边最长的多边形组合，通过 <code>mergePolyVerts</code>方法，按照顶点顺序，从各自的公共边终点起，依次加入到新的多边形顶点数组中。</li>
+<li>直到没有多边形能进行合并时，结束合并。</li>
+</ul>
+</li>
+<li>将多边形数据存储到 <code>mesh.polys</code> 中，且记录每个多边形所属的 <code>region</code> 和 <code>area</code>。</li>
+</ul>
+</li>
+<li>遍历 <code>mesh.verts</code> 中的每个顶点，如果该顶点标记在 <code>vflags</code> 中，则通过 <code>canRemoveVertex</code> 方法检查该顶点能否移除，如果能移除则通过 <code>removeVertex</code> 方法移除。</li>
+<li>通过 <code>buildMeshAdjacency</code> 方法，计算并记录多边形的邻居信息。</li>
+<li>如果 <code>borderSize</code> 大于 0，则检查所有多边形的非共享边，根据边的 x 、z 坐标，将边界信息记录到 <code>mesh.polys[nvp + j]</code> 中（j 为边的起始点索引）。
+<ul>
+<li>如果边的 x 坐标都为 0 ，即为左边界，则 <code>mesh.polys[nvp + j] = 0x8001</code>。</li>
+<li>如果边的 z 坐标都为 <code>cset.height</code> ，即为上边界，则 <code>mesh.polys[nvp + j] = 0x8002</code>。</li>
+<li>如果边的 x 坐标都为 <code>cset.width</code> ，即为右边界，则 <code>mesh.polys[nvp + j] = 0x8003</code>。</li>
+<li>如果边的 z 坐标都为 0 ，即为下边界，则 <code>mesh.polys[nvp + j] = 0x8004</code>。</li>
+</ul>
+</li>
+<li>初始化 <code>mesh.flags</code> 数组，大小为 <code>mesh.npolys</code>，用于后续标记使用。</li>
+</ul>
+</li>
+</ul>
+<h5 id=将轮廓点划分成三角形>将轮廓点划分成三角形</h5>
+<ul>
+<li><code>triangulate</code> 方法的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recase/Source/RecastMesh.cpp
+
+...
+
+static int triangulate(int n, const int* verts, int* indices, int* tris)
+{
+	int ntris = 0;
+	int* dst = tris;
+	
+	// The last bit of the index is used to indicate if the vertex can be removed.
+	for (int i = 0; i &lt; n; i++)
+	{
+		int i1 = next(i, n);
+		int i2 = next(i1, n);
+		if (diagonal(i, i2, n, verts, indices))
+			indices[i1] |= 0x80000000;
+	}
+	
+	while (n &gt; 3)
+	{
+		int minLen = -1;
+		int mini = -1;
+		for (int i = 0; i &lt; n; i++)
+		{
+			int i1 = next(i, n);
+			if (indices[i1] &amp; 0x80000000)
+			{
+				const int* p0 = &amp;verts[(indices[i] &amp; 0x0fffffff) * 4];
+				const int* p2 = &amp;verts[(indices[next(i1, n)] &amp; 0x0fffffff) * 4];
+				
+				int dx = p2[0] - p0[0];
+				int dy = p2[2] - p0[2];
+				int len = dx*dx + dy*dy;
+				
+				if (minLen &lt; 0 || len &lt; minLen)
+				{
+					minLen = len;
+					mini = i;
+				}
+			}
+		}
+		
+		if (mini == -1)
+		{
+			// We might get here because the contour has overlapping segments, like this:
+			//
+			//  A o-o=====o---o B
+			//   /  |C   D|    \.
+			//  o   o     o     o
+			//  :   :     :     :
+			// We'll try to recover by loosing up the inCone test a bit so that a diagonal
+			// like A-B or C-D can be found and we can continue.
+			minLen = -1;
+			mini = -1;
+			for (int i = 0; i &lt; n; i++)
+			{
+				int i1 = next(i, n);
+				int i2 = next(i1, n);
+				if (diagonalLoose(i, i2, n, verts, indices))
+				{
+					const int* p0 = &amp;verts[(indices[i] &amp; 0x0fffffff) * 4];
+					const int* p2 = &amp;verts[(indices[next(i2, n)] &amp; 0x0fffffff) * 4];
+					int dx = p2[0] - p0[0];
+					int dy = p2[2] - p0[2];
+					int len = dx*dx + dy*dy;
+					
+					if (minLen &lt; 0 || len &lt; minLen)
+					{
+						minLen = len;
+						mini = i;
+					}
+				}
+			}
+			if (mini == -1)
+			{
+				// The contour is messed up. This sometimes happens
+				// if the contour simplification is too aggressive.
+				return -ntris;
+			}
+		}
+		
+		int i = mini;
+		int i1 = next(i, n);
+		int i2 = next(i1, n);
+		
+		*dst++ = indices[i] &amp; 0x0fffffff;
+		*dst++ = indices[i1] &amp; 0x0fffffff;
+		*dst++ = indices[i2] &amp; 0x0fffffff;
+		ntris++;
+		
+		// Removes P[i1] by copying P[i+1]...P[n-1] left one index.
+		n--;
+		for (int k = i1; k &lt; n; k++)
+			indices[k] = indices[k+1];
+		
+		if (i1 &gt;= n) i1 = 0;
+		i = prev(i1,n);
+		// Update diagonal flags.
+		if (diagonal(prev(i, n), i1, n, verts, indices))
+			indices[i] |= 0x80000000;
+		else
+			indices[i] &amp;= 0x0fffffff;
+		
+		if (diagonal(i, next(i1, n), n, verts, indices))
+			indices[i1] |= 0x80000000;
+		else
+			indices[i1] &amp;= 0x0fffffff;
+	}
+	
+	// Append the remaining triangle.
+	*dst++ = indices[0] &amp; 0x0fffffff;
+	*dst++ = indices[1] &amp; 0x0fffffff;
+	*dst++ = indices[2] &amp; 0x0fffffff;
+	ntris++;
+	
+	return ntris;
+}
+
+...
+</code></pre><ul>
+<li>将轮廓点划分成三角形的步骤如下：
+<ul>
+<li>遍历每个顶点 <code>i</code>，通过 <code>diagonal</code> 方法，检查顶点 <code>i</code> 和 <code>i + 2</code> 组成的线段是否和轮廓不包含这两个点的边相交，如果不相交，表示该线段可以划分三角形，标记 <code>indices[i + 1]</code> 的最高位为 1。</li>
+</ul>
+</li>
+</ul>
+<h5 id=查找多边形公共边>查找多边形公共边</h5>
+<ul>
+<li><code>getPolyMergeValue</code></li>
+</ul>
+<h5 id=计算多边形邻居>计算多边形邻居</h5>
+<ul>
+<li><code>buildMeshAdjacency</code></li>
+</ul>
 <h4 id=创建细节网格>创建细节网格</h4>
 <h4 id=创建导航数据>创建导航数据</h4>
 <h3 id=参考>参考</h3>
