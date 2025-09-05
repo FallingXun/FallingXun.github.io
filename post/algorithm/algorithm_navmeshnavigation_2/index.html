@@ -4243,7 +4243,7 @@ static void mergeRegionHoles(rcContext* ctx, rcContourRegion&amp; region)
 <ul>
 <li>遍历当前 <code>region</code> 外轮廓的每个点，通过 <code>inCone</code> 方法判断拐角点是否在当前外轮廓点及其前后两个点组成的角度区域内，如果在，则计算该点和拐角点的距离，并将该点加入到 <code>diags</code> 数组中。</li>
 <li>对 <code>diags</code> 数组按照距离从小到大进行排序。</li>
-<li>遍历 <code>diags</code> 数组，通过 <code>intersectSegContour</code> 方法依次检查 <code>diags[j]</code> 和拐角点的线段是否和 <code>outline</code> 中不包含 <code>diags[j]</code> 的边不相交，并且和剩余的 <code>hole</code> 的任意边也不相交，如果都不相交，则 <code>diags[j]</code> 为合并点，结束迭代。</li>
+<li>遍历 <code>diags</code> 数组，通过 <code>intersectSegContour</code> 方法依次检查 <code>diags[j]</code> 和拐角点的线段的包围盒是否和 <code>outline</code> 中不包含 <code>diags[j]</code> 的边的包围盒不相交，并且和剩余的 <code>hole</code> 的任意边的包围盒也不相交，如果都不相交，则 <code>diags[j]</code> 为合并点，结束迭代。</li>
 <li>如果没有找到合并点，则将下一个点设置为拐角点，继续迭代。</li>
 </ul>
 </li>
@@ -4364,7 +4364,7 @@ static bool intersectSegContour(const int* d0, const int* d1, int i, int n, cons
 	return false;
 }
 </code></pre><ul>
-<li><code>intersectSegContour</code> 方法通过传入的两个点组成的线段，遍历顶点数组中的每条边，跳过和输入点及指定索引相同的顶点所在的边，通过 <code>intersect</code> 方法判断线段是否和边相交。同样，也是通过向量叉积的方式进行计算，当线段 1 的两个顶点在线段 2 的两侧，且线段 2 的顶点也在线段 1 的两侧，说明线段 1 和线段 2 相交。</li>
+<li><code>intersectSegContour</code> 方法通过传入的两个点组成的线段，遍历顶点数组中的每条边，跳过和输入点及指定索引相同的顶点所在的边，通过 <code>intersect</code> 方法判断在 xz 平面上线段的包围盒和边的包围盒是否相交。同样，也是通过向量叉积的方式进行计算，当两条线段中各自的顶点，都处在另一线段的两侧，说明两条线段直接相交。当两条线段中的任一顶点，处在另一条线段的包围盒中，则两条线段的包围盒相交。</li>
 <li><code>mergeContours</code> 方法的实现如下：</li>
 </ul>
 <pre tabindex=0><code>// Recast/Source/RecastContour.cpp
@@ -4415,7 +4415,7 @@ static bool mergeContours(rcContour&amp; ca, rcContour&amp; cb, int ia, int ib)
 
 ...
 </code></pre><ul>
-<li><code>mergeContours</code> 方法，从 <code>outline</code> 找到的合并点的下一个点起，将 <code>outline</code> 的所有点加入的到新的轮廓中，再从 <code>hole</code> 的拐角点的下一个点起，将 <code>hole</code> 的所有点加入到新轮廓中，得到合并后的轮廓。
+<li><code>mergeContours</code> 方法，从 <code>outline</code> 找到的合并点起，将 <code>outline</code> 的所有点加入的到新的轮廓中，再把合并点加入，接着从 <code>hole</code> 的拐角点起，将 <code>hole</code> 的所有点加入，再把拐角点加入，得到合并后的轮廓。每个轮廓都将起始点重复加入，确保闭合。
 <img src="/img/Algorithm/NavmeshNavigation/Nav2_4.gif?raw=true" alt=Nav2_4.png>
 </li>
 </ul>
@@ -4931,7 +4931,24 @@ static int triangulate(int n, const int* verts, int* indices, int* tris)
 </code></pre><ul>
 <li>将轮廓点划分成三角形的步骤如下：
 <ul>
-<li>遍历每个顶点 <code>i</code>，通过 <code>diagonal</code> 方法，检查顶点 <code>i</code> 和 <code>i + 2</code> 组成的线段是否和轮廓不包含这两个点的边相交，如果不相交，表示该线段可以划分三角形，标记 <code>indices[i + 1]</code> 的最高位为 1。</li>
+<li>遍历每个顶点 <code>i</code>，通过 <code>diagonal</code> 方法，检查顶点 <code>i</code> 和 <code>i + 2</code> 组成的线段的包围盒是否和轮廓不包含这两个点的边的包围盒相交，如果不相交，表示该线段可以划分三角形，标记 <code>indices[i + 1]</code> 的最高位为 1。
+<ul>
+<li><code>diagonal</code> 方法最终也是通过 <code>inCone</code> 和 <code>intersect</code> 方法实现。</li>
+</ul>
+</li>
+<li>当轮廓顶点数量超过 3 时，即可以划分成多个三角形，则进行迭代检查处理。
+<ul>
+<li>遍历每个顶点 <code>i</code>，如果 <code>indices[i + 1]</code> 已经标记，则计算 <code>i</code> 和 <code>i + 2</code> 组成的线段长度，记录所有长度中的最小值及对应的顶点索引。</li>
+<li>如果顶点都没有标记，则通过 <code>diagonalLoose</code> 方法，再次遍历每个顶点 <code>i</code> 检查相交情况。如果不相交，同样计算 <code>i</code> 和 <code>i + 2</code> 组成的线段长度，记录所有长度中的最小值及对应的顶点索引。如果还是没有找到不相交的对角线，则当前轮廓无法再划分三角形，返回 <code>-ntris</code>。
+<ul>
+<li><code>diagonalLoose</code> 方法是通过 <code>inConeLoose</code> 和 <code>intersectProp</code> 方法实现，降低了对划分三角形的对角线要求，即。其中，<code>inConeLoose</code> 检查点是否在角度范围内时，增加了三个点共线的情况，<code>intersectProp</code> 方法只检查线段直接相交的情况。</li>
+</ul>
+</li>
+<li>将长度最小值对应的顶点索引 <code>i</code> 及其后续两个顶点 <code>i + 1</code> 和 <code>i + 2</code>，依次加入到 <code>tris</code> 中，作为一个划分的三角形，并从轮廓点中移除 <code>i + 1</code> 顶点。</li>
+<li>对顶点 <code>i - 1</code> 和 <code>i</code>，通过 <code>diagonal</code> 方法，重新检查相交情况进行标记。</li>
+<li>继续进行迭代划分，直到不能再划分为止。</li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
