@@ -3609,7 +3609,7 @@ bool rcBuildContours(rcContext* ctx, const rcCompactHeightfield&amp; chf,
 <li>遍历 <code>cset.conts</code> 中的每个轮廓，通过 <code>calcAreaOfPolygon2D</code> 方法计算轮廓组成的多边形面积，如果小于 0，表示该轮廓为孔洞。</li>
 <li>如果没有孔洞，则直接跳过。如果存在孔洞，则需要进行处理。
 <ul>
-<li>遍历所有轮廓，将轮廓按所属的 <code>region</code> 分组，将轮廓分为 <code>outline</code> 和 <code>holes</code>。</li>
+<li>遍历所有轮廓，将轮廓按所属的 <code>region</code> 分组，将轮廓分为 <code>outline</code> 和 <code>holes</code>。每个 <code>region</code> 有且只能有一个 <code>outline</code>，可以有多个 <code>hole</code>。</li>
 <li>遍历所有 <code>region</code> 对应的分组，对有 <code>outline</code> 和 <code>holes</code> 的轮廓，调用 <code>mergeRegionHoles</code> 方法进行合并处理。</li>
 </ul>
 </li>
@@ -3617,6 +3617,7 @@ bool rcBuildContours(rcContext* ctx, const rcCompactHeightfield&amp; chf,
 </li>
 </ul>
 </li>
+<li>处理完成后，通常情况下，<code>cset.conts</code> 中只剩下多个不同 <code>region</code> 的 <code>outline</code> ，而 <code>holes</code> 则都会被合并到 <code>outline</code> 中。</li>
 </ul>
 <h5 id=寻找轮廓顶点>寻找轮廓顶点</h5>
 <ul>
@@ -4781,14 +4782,14 @@ bool rcBuildPolyMesh(rcContext* ctx, const rcContourSet&amp; cset, const int nvp
 <ul>
 <li>初始化顶点索引 <code>indices</code>，通过 <code>triangulate</code> 方法将轮廓划分成三角形，存储到 <code>tris</code> 中。</li>
 <li>遍历轮廓的每个顶点，通过 <code>addVertex</code> 方法去除重复顶点（x、z 坐标相同，y 坐标差值在 2 以内），重新生成顶点索引，更新到 <code>indices</code> 中，并将顶点坐标记录到 <code>mesh.verts</code> 中。同时，对处在 <code>borderSize</code> 范围内的顶点标记到 <code>vflags</code> 中。</li>
-<li>将 <code>indices</code> 每个三角形的顶点索引存储到 <code>polys</code> 中。</li>
+<li>将 <code>indices</code> 每个三角形的顶点索引存储到临时数组 <code>polys</code> 中。</li>
 <li>如果每个多边形的最大顶点数 <code>nvp</code> 大于 3，则进行多边形合并。
 <ul>
 <li>遍历 <code>polys</code> 中每两个多边形，通过 <code>getPolyMergeValue</code> 方法找到所有具有公共边的多边形组合，取其中公共边最长的多边形组合，通过 <code>mergePolyVerts</code>方法，按照顶点顺序，从各自的公共边终点起，依次加入到新的多边形顶点数组中。</li>
 <li>直到没有多边形能进行合并时，结束合并。</li>
 </ul>
 </li>
-<li>将多边形数据存储到 <code>mesh.polys</code> 中，且记录每个多边形所属的 <code>region</code> 和 <code>area</code>。</li>
+<li>将多边形数据存储到 <code>mesh.polys[i * nvp * 2]</code> 中，且记录每个多边形所属的 <code>region</code> 和 <code>area</code>，<code>mesh.polys[i * nvp]</code> 的暂时不填充数据。</li>
 </ul>
 </li>
 <li>遍历 <code>mesh.verts</code> 中的每个顶点，如果该顶点标记在 <code>vflags</code> 中，则通过 <code>canRemoveVertex</code> 方法检查该顶点能否移除，如果能移除则通过 <code>removeVertex</code> 方法移除。</li>
@@ -4946,7 +4947,9 @@ static int triangulate(int n, const int* verts, int* indices, int* tris)
 </li>
 <li>将长度最小值对应的顶点索引 <code>i</code> 及其后续两个顶点 <code>i + 1</code> 和 <code>i + 2</code>，依次加入到 <code>tris</code> 中，作为一个划分的三角形，并从轮廓点中移除 <code>i + 1</code> 顶点。</li>
 <li>对顶点 <code>i - 1</code> 和 <code>i</code>，通过 <code>diagonal</code> 方法，重新检查相交情况进行标记。</li>
-<li>继续进行迭代划分，直到不能再划分为止。</li>
+<li>继续进行迭代划分，直到不能再划分为止。
+<img src="/img/Algorithm/NavmeshNavigation/Nav_5.gif?raw=true" alt=Nav_5.png>
+</li>
 </ul>
 </li>
 </ul>
@@ -4954,13 +4957,664 @@ static int triangulate(int n, const int* verts, int* indices, int* tris)
 </ul>
 <h5 id=查找多边形公共边>查找多边形公共边</h5>
 <ul>
-<li><code>getPolyMergeValue</code></li>
+<li><code>getPolyMergeValue</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastMesh.cpp
+
+...
+
+static int getPolyMergeValue(unsigned short* pa, unsigned short* pb,
+							 const unsigned short* verts, int&amp; ea, int&amp; eb,
+							 const int nvp)
+{
+	const int na = countPolyVerts(pa, nvp);
+	const int nb = countPolyVerts(pb, nvp);
+	
+	// If the merged polygon would be too big, do not merge.
+	if (na+nb-2 &gt; nvp)
+		return -1;
+	
+	// Check if the polygons share an edge.
+	ea = -1;
+	eb = -1;
+	
+	for (int i = 0; i &lt; na; ++i)
+	{
+		unsigned short va0 = pa[i];
+		unsigned short va1 = pa[(i+1) % na];
+		if (va0 &gt; va1)
+			rcSwap(va0, va1);
+		for (int j = 0; j &lt; nb; ++j)
+		{
+			unsigned short vb0 = pb[j];
+			unsigned short vb1 = pb[(j+1) % nb];
+			if (vb0 &gt; vb1)
+				rcSwap(vb0, vb1);
+			if (va0 == vb0 &amp;&amp; va1 == vb1)
+			{
+				ea = i;
+				eb = j;
+				break;
+			}
+		}
+	}
+	
+	// No common edge, cannot merge.
+	if (ea == -1 || eb == -1)
+		return -1;
+	
+	// Check to see if the merged polygon would be convex.
+	unsigned short va, vb, vc;
+	
+	va = pa[(ea+na-1) % na];
+	vb = pa[ea];
+	vc = pb[(eb+2) % nb];
+	if (!uleft(&amp;verts[va*3], &amp;verts[vb*3], &amp;verts[vc*3]))
+		return -1;
+	
+	va = pb[(eb+nb-1) % nb];
+	vb = pb[eb];
+	vc = pa[(ea+2) % na];
+	if (!uleft(&amp;verts[va*3], &amp;verts[vb*3], &amp;verts[vc*3]))
+		return -1;
+	
+	va = pa[ea];
+	vb = pa[(ea+1)%na];
+	
+	int dx = (int)verts[va*3+0] - (int)verts[vb*3+0];
+	int dy = (int)verts[va*3+2] - (int)verts[vb*3+2];
+	
+	return dx*dx + dy*dy;
+}
+
+...
+</code></pre><ul>
+<li><code>getPolyMergeValue</code> 查找公共边的步骤如下：
+<ul>
+<li>检查两个多边形合并后的顶点数量，如果超过 <code>nvp</code> 则不能合并。</li>
+<li>遍历第一个多边形的每条边，从第二个多边形中查找是否有相同的边，找到则记录边对应的顶点索引。</li>
+<li>检查公共边合并后新的两个角是否为凸角，如果是则计算公共边距离平方返回，表示该公共边可以合并。检查方式为：
+<ul>
+<li>检查第二个多边形中公共边的下一个顶点，是否在第一个多边形公共边的上一个顶点及第一个顶点组成的向量右侧。</li>
+<li>检查第一个多边形中公共边的下一个顶点，是否在第二个多边形公共边的上一个顶点及第一个顶点组成的向量右侧。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h5 id=移除边界顶点>移除边界顶点</h5>
+<ul>
+<li>合并完成后，对于处在 <code>borderSize</code> 范围内的顶点，通过 <code>canRemoveVertex</code> 检查是否能移除，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastMesh.cpp
+
+...
+
+static bool canRemoveVertex(rcContext* ctx, rcPolyMesh&amp; mesh, const unsigned short rem)
+{
+	const int nvp = mesh.nvp;
+	
+	// Count number of polygons to remove.
+	int numTouchedVerts = 0;
+	int numRemainingEdges = 0;
+	for (int i = 0; i &lt; mesh.npolys; ++i)
+	{
+		unsigned short* p = &amp;mesh.polys[i*nvp*2];
+		const int nv = countPolyVerts(p, nvp);
+		int numRemoved = 0;
+		int numVerts = 0;
+		for (int j = 0; j &lt; nv; ++j)
+		{
+			if (p[j] == rem)
+			{
+				numTouchedVerts++;
+				numRemoved++;
+			}
+			numVerts++;
+		}
+		if (numRemoved)
+		{
+			numRemainingEdges += numVerts-(numRemoved+1);
+		}
+	}
+	
+	// There would be too few edges remaining to create a polygon.
+	// This can happen for example when a tip of a triangle is marked
+	// as deletion, but there are no other polys that share the vertex.
+	// In this case, the vertex should not be removed.
+	if (numRemainingEdges &lt;= 2)
+		return false;
+	
+	// Find edges which share the removed vertex.
+	const int maxEdges = numTouchedVerts*2;
+	int nedges = 0;
+	rcScopedDelete&lt;int&gt; edges((int*)rcAlloc(sizeof(int)*maxEdges*3, RC_ALLOC_TEMP));
+	if (!edges)
+	{
+		ctx-&gt;log(RC_LOG_WARNING, &quot;canRemoveVertex: Out of memory 'edges' (%d).&quot;, maxEdges*3);
+		return false;
+	}
+		
+	for (int i = 0; i &lt; mesh.npolys; ++i)
+	{
+		unsigned short* p = &amp;mesh.polys[i*nvp*2];
+		const int nv = countPolyVerts(p, nvp);
+
+		// Collect edges which touches the removed vertex.
+		for (int j = 0, k = nv-1; j &lt; nv; k = j++)
+		{
+			if (p[j] == rem || p[k] == rem)
+			{
+				// Arrange edge so that a=rem.
+				int a = p[j], b = p[k];
+				if (b == rem)
+					rcSwap(a,b);
+					
+				// Check if the edge exists
+				bool exists = false;
+				for (int m = 0; m &lt; nedges; ++m)
+				{
+					int* e = &amp;edges[m*3];
+					if (e[1] == b)
+					{
+						// Exists, increment vertex share count.
+						e[2]++;
+						exists = true;
+					}
+				}
+				// Add new edge.
+				if (!exists)
+				{
+					int* e = &amp;edges[nedges*3];
+					e[0] = a;
+					e[1] = b;
+					e[2] = 1;
+					nedges++;
+				}
+			}
+		}
+	}
+
+	// There should be no more than 2 open edges.
+	// This catches the case that two non-adjacent polygons
+	// share the removed vertex. In that case, do not remove the vertex.
+	int numOpenEdges = 0;
+	for (int i = 0; i &lt; nedges; ++i)
+	{
+		if (edges[i*3+2] &lt; 2)
+			numOpenEdges++;
+	}
+	if (numOpenEdges &gt; 2)
+		return false;
+	
+	return true;
+}
+
+...
+</code></pre><ul>
+<li><code>canRemoveVertex</code> 的检查过程如下：
+<ul>
+<li>遍历 <code>mesh</code> 中的所有多边形，统计顶点总数和包含待移除的顶点数量，计算移除顶点后的剩余边数，确保不能小于 2。</li>
+<li>遍历 <code>mesh</code> 的每个多边形，记录包含待移除顶点的边的出现次数，如果出现次数大于 2，则该边为公共边，否则为开放边。</li>
+<li>检查包含待移除顶点的所有边，如果出现超过 2 条开放边，则表示该顶点移除会出现多个开口，会破坏多边形结构，因此不能移除。</li>
+</ul>
+</li>
+<li>移除顶点的方法 <code>removeVertex</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastMesh.cpp
+
+...
+
+static bool removeVertex(rcContext* ctx, rcPolyMesh&amp; mesh, const unsigned short rem, const int maxTris)
+{
+	const int nvp = mesh.nvp;
+
+	// Count number of polygons to remove.
+	int numRemovedVerts = 0;
+	for (int i = 0; i &lt; mesh.npolys; ++i)
+	{
+		unsigned short* p = &amp;mesh.polys[i*nvp*2];
+		const int nv = countPolyVerts(p, nvp);
+		for (int j = 0; j &lt; nv; ++j)
+		{
+			if (p[j] == rem)
+				numRemovedVerts++;
+		}
+	}
+	
+	int nedges = 0;
+	rcScopedDelete&lt;int&gt; edges((int*)rcAlloc(sizeof(int)*numRemovedVerts*nvp*4, RC_ALLOC_TEMP));
+	if (!edges)
+	{
+		ctx-&gt;log(RC_LOG_WARNING, &quot;removeVertex: Out of memory 'edges' (%d).&quot;, numRemovedVerts*nvp*4);
+		return false;
+	}
+
+	int nhole = 0;
+	rcScopedDelete&lt;int&gt; hole((int*)rcAlloc(sizeof(int)*numRemovedVerts*nvp, RC_ALLOC_TEMP));
+	if (!hole)
+	{
+		ctx-&gt;log(RC_LOG_WARNING, &quot;removeVertex: Out of memory 'hole' (%d).&quot;, numRemovedVerts*nvp);
+		return false;
+	}
+
+	int nhreg = 0;
+	rcScopedDelete&lt;int&gt; hreg((int*)rcAlloc(sizeof(int)*numRemovedVerts*nvp, RC_ALLOC_TEMP));
+	if (!hreg)
+	{
+		ctx-&gt;log(RC_LOG_WARNING, &quot;removeVertex: Out of memory 'hreg' (%d).&quot;, numRemovedVerts*nvp);
+		return false;
+	}
+
+	int nharea = 0;
+	rcScopedDelete&lt;int&gt; harea((int*)rcAlloc(sizeof(int)*numRemovedVerts*nvp, RC_ALLOC_TEMP));
+	if (!harea)
+	{
+		ctx-&gt;log(RC_LOG_WARNING, &quot;removeVertex: Out of memory 'harea' (%d).&quot;, numRemovedVerts*nvp);
+		return false;
+	}
+	
+	for (int i = 0; i &lt; mesh.npolys; ++i)
+	{
+		unsigned short* p = &amp;mesh.polys[i*nvp*2];
+		const int nv = countPolyVerts(p, nvp);
+		bool hasRem = false;
+		for (int j = 0; j &lt; nv; ++j)
+			if (p[j] == rem) hasRem = true;
+		if (hasRem)
+		{
+			// Collect edges which does not touch the removed vertex.
+			for (int j = 0, k = nv-1; j &lt; nv; k = j++)
+			{
+				if (p[j] != rem &amp;&amp; p[k] != rem)
+				{
+					int* e = &amp;edges[nedges*4];
+					e[0] = p[k];
+					e[1] = p[j];
+					e[2] = mesh.regs[i];
+					e[3] = mesh.areas[i];
+					nedges++;
+				}
+			}
+			// Remove the polygon.
+			unsigned short* p2 = &amp;mesh.polys[(mesh.npolys-1)*nvp*2];
+			if (p != p2)
+				memcpy(p,p2,sizeof(unsigned short)*nvp);
+			memset(p+nvp,0xff,sizeof(unsigned short)*nvp);
+			mesh.regs[i] = mesh.regs[mesh.npolys-1];
+			mesh.areas[i] = mesh.areas[mesh.npolys-1];
+			mesh.npolys--;
+			--i;
+		}
+	}
+	
+	// Remove vertex.
+	for (int i = (int)rem; i &lt; mesh.nverts - 1; ++i)
+	{
+		mesh.verts[i*3+0] = mesh.verts[(i+1)*3+0];
+		mesh.verts[i*3+1] = mesh.verts[(i+1)*3+1];
+		mesh.verts[i*3+2] = mesh.verts[(i+1)*3+2];
+	}
+	mesh.nverts--;
+
+	// Adjust indices to match the removed vertex layout.
+	for (int i = 0; i &lt; mesh.npolys; ++i)
+	{
+		unsigned short* p = &amp;mesh.polys[i*nvp*2];
+		const int nv = countPolyVerts(p, nvp);
+		for (int j = 0; j &lt; nv; ++j)
+			if (p[j] &gt; rem) p[j]--;
+	}
+	for (int i = 0; i &lt; nedges; ++i)
+	{
+		if (edges[i*4+0] &gt; rem) edges[i*4+0]--;
+		if (edges[i*4+1] &gt; rem) edges[i*4+1]--;
+	}
+
+	if (nedges == 0)
+		return true;
+
+	// Start with one vertex, keep appending connected
+	// segments to the start and end of the hole.
+	pushBack(edges[0], hole, nhole);
+	pushBack(edges[2], hreg, nhreg);
+	pushBack(edges[3], harea, nharea);
+	
+	while (nedges)
+	{
+		bool match = false;
+		
+		for (int i = 0; i &lt; nedges; ++i)
+		{
+			const int ea = edges[i*4+0];
+			const int eb = edges[i*4+1];
+			const int r = edges[i*4+2];
+			const int a = edges[i*4+3];
+			bool add = false;
+			if (hole[0] == eb)
+			{
+				// The segment matches the beginning of the hole boundary.
+				pushFront(ea, hole, nhole);
+				pushFront(r, hreg, nhreg);
+				pushFront(a, harea, nharea);
+				add = true;
+			}
+			else if (hole[nhole-1] == ea)
+			{
+				// The segment matches the end of the hole boundary.
+				pushBack(eb, hole, nhole);
+				pushBack(r, hreg, nhreg);
+				pushBack(a, harea, nharea);
+				add = true;
+			}
+			if (add)
+			{
+				// The edge segment was added, remove it.
+				edges[i*4+0] = edges[(nedges-1)*4+0];
+				edges[i*4+1] = edges[(nedges-1)*4+1];
+				edges[i*4+2] = edges[(nedges-1)*4+2];
+				edges[i*4+3] = edges[(nedges-1)*4+3];
+				--nedges;
+				match = true;
+				--i;
+			}
+		}
+		
+		if (!match)
+			break;
+	}
+
+	rcScopedDelete&lt;int&gt; tris((int*)rcAlloc(sizeof(int)*nhole*3, RC_ALLOC_TEMP));
+	if (!tris)
+	{
+		ctx-&gt;log(RC_LOG_WARNING, &quot;removeVertex: Out of memory 'tris' (%d).&quot;, nhole*3);
+		return false;
+	}
+
+	rcScopedDelete&lt;int&gt; tverts((int*)rcAlloc(sizeof(int)*nhole*4, RC_ALLOC_TEMP));
+	if (!tverts)
+	{
+		ctx-&gt;log(RC_LOG_WARNING, &quot;removeVertex: Out of memory 'tverts' (%d).&quot;, nhole*4);
+		return false;
+	}
+
+	rcScopedDelete&lt;int&gt; thole((int*)rcAlloc(sizeof(int)*nhole, RC_ALLOC_TEMP));
+	if (!thole)
+	{
+		ctx-&gt;log(RC_LOG_WARNING, &quot;removeVertex: Out of memory 'thole' (%d).&quot;, nhole);
+		return false;
+	}
+
+	// Generate temp vertex array for triangulation.
+	for (int i = 0; i &lt; nhole; ++i)
+	{
+		const int pi = hole[i];
+		tverts[i*4+0] = mesh.verts[pi*3+0];
+		tverts[i*4+1] = mesh.verts[pi*3+1];
+		tverts[i*4+2] = mesh.verts[pi*3+2];
+		tverts[i*4+3] = 0;
+		thole[i] = i;
+	}
+
+	// Triangulate the hole.
+	int ntris = triangulate(nhole, &amp;tverts[0], &amp;thole[0], tris);
+	if (ntris &lt; 0)
+	{
+		ntris = -ntris;
+		ctx-&gt;log(RC_LOG_WARNING, &quot;removeVertex: triangulate() returned bad results.&quot;);
+	}
+	
+	// Merge the hole triangles back to polygons.
+	rcScopedDelete&lt;unsigned short&gt; polys((unsigned short*)rcAlloc(sizeof(unsigned short)*(ntris+1)*nvp, RC_ALLOC_TEMP));
+	if (!polys)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;removeVertex: Out of memory 'polys' (%d).&quot;, (ntris+1)*nvp);
+		return false;
+	}
+	rcScopedDelete&lt;unsigned short&gt; pregs((unsigned short*)rcAlloc(sizeof(unsigned short)*ntris, RC_ALLOC_TEMP));
+	if (!pregs)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;removeVertex: Out of memory 'pregs' (%d).&quot;, ntris);
+		return false;
+	}
+	rcScopedDelete&lt;unsigned char&gt; pareas((unsigned char*)rcAlloc(sizeof(unsigned char)*ntris, RC_ALLOC_TEMP));
+	if (!pareas)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;removeVertex: Out of memory 'pareas' (%d).&quot;, ntris);
+		return false;
+	}
+	
+	unsigned short* tmpPoly = &amp;polys[ntris*nvp];
+			
+	// Build initial polygons.
+	int npolys = 0;
+	memset(polys, 0xff, ntris*nvp*sizeof(unsigned short));
+	for (int j = 0; j &lt; ntris; ++j)
+	{
+		int* t = &amp;tris[j*3];
+		if (t[0] != t[1] &amp;&amp; t[0] != t[2] &amp;&amp; t[1] != t[2])
+		{
+			polys[npolys*nvp+0] = (unsigned short)hole[t[0]];
+			polys[npolys*nvp+1] = (unsigned short)hole[t[1]];
+			polys[npolys*nvp+2] = (unsigned short)hole[t[2]];
+
+			// If this polygon covers multiple region types then
+			// mark it as such
+			if (hreg[t[0]] != hreg[t[1]] || hreg[t[1]] != hreg[t[2]])
+				pregs[npolys] = RC_MULTIPLE_REGS;
+			else
+				pregs[npolys] = (unsigned short)hreg[t[0]];
+
+			pareas[npolys] = (unsigned char)harea[t[0]];
+			npolys++;
+		}
+	}
+	if (!npolys)
+		return true;
+	
+	// Merge polygons.
+	if (nvp &gt; 3)
+	{
+		for (;;)
+		{
+			// Find best polygons to merge.
+			int bestMergeVal = 0;
+			int bestPa = 0, bestPb = 0, bestEa = 0, bestEb = 0;
+			
+			for (int j = 0; j &lt; npolys-1; ++j)
+			{
+				unsigned short* pj = &amp;polys[j*nvp];
+				for (int k = j+1; k &lt; npolys; ++k)
+				{
+					unsigned short* pk = &amp;polys[k*nvp];
+					int ea, eb;
+					int v = getPolyMergeValue(pj, pk, mesh.verts, ea, eb, nvp);
+					if (v &gt; bestMergeVal)
+					{
+						bestMergeVal = v;
+						bestPa = j;
+						bestPb = k;
+						bestEa = ea;
+						bestEb = eb;
+					}
+				}
+			}
+			
+			if (bestMergeVal &gt; 0)
+			{
+				// Found best, merge.
+				unsigned short* pa = &amp;polys[bestPa*nvp];
+				unsigned short* pb = &amp;polys[bestPb*nvp];
+				mergePolyVerts(pa, pb, bestEa, bestEb, tmpPoly, nvp);
+				if (pregs[bestPa] != pregs[bestPb])
+					pregs[bestPa] = RC_MULTIPLE_REGS;
+
+				unsigned short* last = &amp;polys[(npolys-1)*nvp];
+				if (pb != last)
+					memcpy(pb, last, sizeof(unsigned short)*nvp);
+				pregs[bestPb] = pregs[npolys-1];
+				pareas[bestPb] = pareas[npolys-1];
+				npolys--;
+			}
+			else
+			{
+				// Could not merge any polygons, stop.
+				break;
+			}
+		}
+	}
+	
+	// Store polygons.
+	for (int i = 0; i &lt; npolys; ++i)
+	{
+		if (mesh.npolys &gt;= maxTris) break;
+		unsigned short* p = &amp;mesh.polys[mesh.npolys*nvp*2];
+		memset(p,0xff,sizeof(unsigned short)*nvp*2);
+		for (int j = 0; j &lt; nvp; ++j)
+			p[j] = polys[i*nvp+j];
+		mesh.regs[mesh.npolys] = pregs[i];
+		mesh.areas[mesh.npolys] = pareas[i];
+		mesh.npolys++;
+		if (mesh.npolys &gt; maxTris)
+		{
+			ctx-&gt;log(RC_LOG_ERROR, &quot;removeVertex: Too many polygons %d (max:%d).&quot;, mesh.npolys, maxTris);
+			return false;
+		}
+	}
+	
+	return true;
+}
+
+...
+</code></pre><ul>
+<li><code>removeVertex</code> 移除的主要步骤如下：
+<ul>
+<li>遍历 <code>mesh</code> 的所有多边形，将所有包含待移除顶点的边记录到 <code>edges</code> 中，并将该多边形从 <code>mesh.polys</code> 中移除。</li>
+<li>将目标顶点从 <code>mesh</code> 的 <code>verts</code> 中移除，且更新 <code>mesh.polys[i * nvp * 2]</code> 和 <code>edges</code> 中的顶点索引。</li>
+<li>以 <code>edges</code> 的第一条边的两个顶点为左侧点和右侧点，遍历 <code>edges</code> 中的剩余边，找到和左侧点相邻的边，将其的左侧点作为左侧点，找到和右侧点相邻的边，将其右侧点作为右侧点，最终得到一组重新排序的顶点。</li>
+<li>将排序后的顶点，通过 <code>triangulate</code> 方法划分成三角形。</li>
+<li>将三角形加入到临时数组 <code>polys</code> 中，并记录对应的 <code>region</code> 和 <code>area</code> 到 <code>pregs</code> 和 <code>pareas</code> 中。如果三角形的 <code>region</code> 不同，则将 <code>pregs</code> 中对应的值设置为 <code>RC_MULTIPLE_REGS</code>。</li>
+<li>如果每个多边形的最大顶点数 <code>nvp</code> 大于 3，则进行多边形合并。通过 <code>getPolyMergeValue</code> 方法找到公共边，<code>mergePolyVerts</code> 方法进行合并。如果两个多边形的 <code>region</code> 不同，则合并后的多边形的 <code>region</code> 设置为 <code>RC_MULTIPLE_REGS</code>。</li>
+<li>将合并后的多边形加入到 <code>mesh.polys[i * nvp * 2]</code> 中，同时更新 <code>mesh.regs</code> 和 <code>mesh.areas</code>。</li>
+</ul>
+</li>
 </ul>
 <h5 id=计算多边形邻居>计算多边形邻居</h5>
 <ul>
-<li><code>buildMeshAdjacency</code></li>
+<li>计算多边形邻居时，使用了 <code>rcEdge</code> 记录边的信息，其结构如下：</li>
 </ul>
-<h4 id=创建细节网格>创建细节网格</h4>
+<pre tabindex=0><code>// Recast/Source/RecastMesh.cpp
+
+...
+
+struct rcEdge
+{
+	unsigned short vert[2];			
+	unsigned short polyEdge[2];
+	unsigned short poly[2];
+};
+
+...
+</code></pre><ul>
+<li><code>buildMeshAdjacency</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastMesh.cpp
+
+...
+
+static bool buildMeshAdjacency(unsigned short* polys, const int npolys,
+							   const int nverts, const int vertsPerPoly)
+{
+	// Based on code by Eric Lengyel from:
+	// https://web.archive.org/web/20080704083314/http://www.terathon.com/code/edges.php
+	
+	int maxEdgeCount = npolys*vertsPerPoly;
+	unsigned short* firstEdge = (unsigned short*)rcAlloc(sizeof(unsigned short)*(nverts + maxEdgeCount), RC_ALLOC_TEMP);
+	if (!firstEdge)
+		return false;
+	unsigned short* nextEdge = firstEdge + nverts;
+	int edgeCount = 0;
+	
+	rcEdge* edges = (rcEdge*)rcAlloc(sizeof(rcEdge)*maxEdgeCount, RC_ALLOC_TEMP);
+	if (!edges)
+	{
+		rcFree(firstEdge);
+		return false;
+	}
+	
+	for (int i = 0; i &lt; nverts; i++)
+		firstEdge[i] = RC_MESH_NULL_IDX;
+	
+	for (int i = 0; i &lt; npolys; ++i)
+	{
+		unsigned short* t = &amp;polys[i*vertsPerPoly*2];
+		for (int j = 0; j &lt; vertsPerPoly; ++j)
+		{
+			if (t[j] == RC_MESH_NULL_IDX) break;
+			unsigned short v0 = t[j];
+			unsigned short v1 = (j+1 &gt;= vertsPerPoly || t[j+1] == RC_MESH_NULL_IDX) ? t[0] : t[j+1];
+			if (v0 &lt; v1)
+			{
+				rcEdge&amp; edge = edges[edgeCount];
+				edge.vert[0] = v0;
+				edge.vert[1] = v1;
+				edge.poly[0] = (unsigned short)i;
+				edge.polyEdge[0] = (unsigned short)j;
+				edge.poly[1] = (unsigned short)i;
+				edge.polyEdge[1] = 0;
+				// Insert edge
+				nextEdge[edgeCount] = firstEdge[v0];
+				firstEdge[v0] = (unsigned short)edgeCount;
+				edgeCount++;
+			}
+		}
+	}
+	
+	for (int i = 0; i &lt; npolys; ++i)
+	{
+		unsigned short* t = &amp;polys[i*vertsPerPoly*2];
+		for (int j = 0; j &lt; vertsPerPoly; ++j)
+		{
+			if (t[j] == RC_MESH_NULL_IDX) break;
+			unsigned short v0 = t[j];
+			unsigned short v1 = (j+1 &gt;= vertsPerPoly || t[j+1] == RC_MESH_NULL_IDX) ? t[0] : t[j+1];
+			if (v0 &gt; v1)
+			{
+				for (unsigned short e = firstEdge[v1]; e != RC_MESH_NULL_IDX; e = nextEdge[e])
+				{
+					rcEdge&amp; edge = edges[e];
+					if (edge.vert[1] == v0 &amp;&amp; edge.poly[0] == edge.poly[1])
+					{
+						edge.poly[1] = (unsigned short)i;
+						edge.polyEdge[1] = (unsigned short)j;
+						break;
+					}
+				}
+			}
+		}
+	}
+	
+	// Store adjacency
+	for (int i = 0; i &lt; edgeCount; ++i)
+	{
+		const rcEdge&amp; e = edges[i];
+		if (e.poly[0] != e.poly[1])
+		{
+			unsigned short* p0 = &amp;polys[e.poly[0]*vertsPerPoly*2];
+			unsigned short* p1 = &amp;polys[e.poly[1]*vertsPerPoly*2];
+			p0[vertsPerPoly + e.polyEdge[0]] = e.poly[1];
+			p1[vertsPerPoly + e.polyEdge[1]] = e.poly[0];
+		}
+	}
+	
+	rcFree(firstEdge);
+	rcFree(edges);
+	
+	return true;
+}
+
+...
+</code></pre><h4 id=创建细节网格>创建细节网格</h4>
 <h4 id=创建导航数据>创建导航数据</h4>
 <h3 id=参考>参考</h3>
 <ul>
