@@ -4789,7 +4789,7 @@ bool rcBuildPolyMesh(rcContext* ctx, const rcContourSet&amp; cset, const int nvp
 <li>直到没有多边形能进行合并时，结束合并。</li>
 </ul>
 </li>
-<li>将多边形数据存储到 <code>mesh.polys[i * nvp * 2]</code> 中，且记录每个多边形所属的 <code>region</code> 和 <code>area</code>，<code>mesh.polys[i * nvp]</code> 的暂时不填充数据。</li>
+<li>将多边形数据 <code>polys</code> 存储到 <code>mesh.polys</code> 中，且记录每个多边形所属的 <code>region</code> 和 <code>area</code>。</li>
 </ul>
 </li>
 <li>遍历 <code>mesh.verts</code> 中的每个顶点，如果该顶点标记在 <code>vflags</code> 中，则通过 <code>canRemoveVertex</code> 方法检查该顶点能否移除，如果能移除则通过 <code>removeVertex</code> 方法移除。</li>
@@ -5490,12 +5490,12 @@ static bool removeVertex(rcContext* ctx, rcPolyMesh&amp; mesh, const unsigned sh
 <li><code>removeVertex</code> 移除的主要步骤如下：
 <ul>
 <li>遍历 <code>mesh</code> 的所有多边形，将所有包含待移除顶点的边记录到 <code>edges</code> 中，并将该多边形从 <code>mesh.polys</code> 中移除。</li>
-<li>将目标顶点从 <code>mesh</code> 的 <code>verts</code> 中移除，且更新 <code>mesh.polys[i * nvp * 2]</code> 和 <code>edges</code> 中的顶点索引。</li>
+<li>将目标顶点从 <code>mesh</code> 的 <code>verts</code> 中移除，且更新 <code>mesh.polys</code> 和 <code>edges</code> 中的顶点索引。</li>
 <li>以 <code>edges</code> 的第一条边的两个顶点为左侧点和右侧点，遍历 <code>edges</code> 中的剩余边，找到和左侧点相邻的边，将其的左侧点作为左侧点，找到和右侧点相邻的边，将其右侧点作为右侧点，最终得到一组重新排序的顶点。</li>
 <li>将排序后的顶点，通过 <code>triangulate</code> 方法划分成三角形。</li>
 <li>将三角形加入到临时数组 <code>polys</code> 中，并记录对应的 <code>region</code> 和 <code>area</code> 到 <code>pregs</code> 和 <code>pareas</code> 中。如果三角形的 <code>region</code> 不同，则将 <code>pregs</code> 中对应的值设置为 <code>RC_MULTIPLE_REGS</code>。</li>
 <li>如果每个多边形的最大顶点数 <code>nvp</code> 大于 3，则进行多边形合并。通过 <code>getPolyMergeValue</code> 方法找到公共边，<code>mergePolyVerts</code> 方法进行合并。如果两个多边形的 <code>region</code> 不同，则合并后的多边形的 <code>region</code> 设置为 <code>RC_MULTIPLE_REGS</code>。</li>
-<li>将合并后的多边形加入到 <code>mesh.polys[i * nvp * 2]</code> 中，同时更新 <code>mesh.regs</code> 和 <code>mesh.areas</code>。</li>
+<li>将合并后的多边形 <code>polys</code> 加入到 <code>mesh.polys</code> 中，同时更新 <code>mesh.regs</code> 和 <code>mesh.areas</code>。</li>
 </ul>
 </li>
 </ul>
@@ -5509,9 +5509,9 @@ static bool removeVertex(rcContext* ctx, rcPolyMesh&amp; mesh, const unsigned sh
 
 struct rcEdge
 {
-	unsigned short vert[2];			
-	unsigned short polyEdge[2];
-	unsigned short poly[2];
+	unsigned short vert[2];				/// 边的两个顶点的索引
+	unsigned short polyEdge[2];			/// 如果边的起始点索引比终点小，则 polyEdge[0] 为起始点在当前多边形中的第几个顶点。如果此时边为公共边，则 polyEdge[1] 为终点在邻居多边形中的第几个顶点
+	unsigned short poly[2];				/// 两个顶点各自对应的多边形索引
 };
 
 ...
@@ -5614,7 +5614,33 @@ static bool buildMeshAdjacency(unsigned short* polys, const int npolys,
 }
 
 ...
-</code></pre><h4 id=创建细节网格>创建细节网格</h4>
+</code></pre><ul>
+<li><code>buildMeshAdjacency</code> 的主要步骤如下：
+<ul>
+<li>对每一个多边形，遍历其所有顶点，获取每个顶点为起始点的边，将起始点比终点索引小的边记录到 <code>edges</code> 中。
+<ul>
+<li><code>edge.vert[0]</code> 设置为起始顶点的索引，<code>edge.vert[1]</code> 设置为终点顶点的索引。</li>
+<li><code>edge.poly[0]</code> 和 <code>edge.poly[1]</code> 都设置为当前多边形的索引。</li>
+<li><code>edge.polyEdge[0]</code> 设置为起始点在当前多边形中的第几个顶点，<code>edge.polyEdge[1]</code> 设置为 0 。</li>
+<li>将具有相同起始点的边通过 <code>nextEdge</code> 连接起来。</li>
+</ul>
+</li>
+<li>对每一个多边形，遍历其所有顶点，获取每个顶点为起始点的边，对起始点比终点索引大的边进行检查，如果该边在 <code>edges</code> 中，则更新边的信息。
+<ul>
+<li><code>edge.poly[1]</code> 设置为当前多边形的索引，即为 <code>edge.poly[0]</code> 的邻居多边形。</li>
+<li><code>edge.polyEdge[1]</code> 设置为 <code>edge.vert[1]</code> 在邻居多边形中的第几个顶点。</li>
+</ul>
+</li>
+<li>遍历 <code>edges</code> 中的边，如果两个多边形的索引不同，则该边为公共边，需要将相邻信息记录到各自所属的多边形中，即 <code>mesh.polys</code> 中，其中 <code>mesh.polys[i * nvp * 2 + j]</code> 为多边形 <code>i</code> 的第 <code>j</code> 个顶点，则邻居信息需要记录在 <code>mesh.polys[i * nvp * 2 + nvp + j]</code> 中，
+<ul>
+<li><code>mesh.polys[edge.poly[0] * nvp * 2 + nvp + edge.polyEdge[0]]</code> 设置为 <code>edge.poly[1]</code>，即 <code>edge.poly[0]</code> 的第 <code>edge.polyEdge[0]</code> 个顶点的邻居多边形为 <code>edge.poly[1]</code>。</li>
+<li><code>mesh.polys[edge.poly[1] * nvp * 2 + nvp + edge.polyEdge[1]]</code> 设置为 <code>edge.poly[0]</code>，即 <code>edge.poly[1]</code> 的第 <code>edge.polyEdge[1]</code> 个顶点的邻居多边形为 <code>edge.poly[0]</code>。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id=创建细节网格>创建细节网格</h4>
 <h4 id=创建导航数据>创建导航数据</h4>
 <h3 id=参考>参考</h3>
 <ul>
