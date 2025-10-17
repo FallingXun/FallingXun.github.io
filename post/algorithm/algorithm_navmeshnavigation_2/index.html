@@ -1866,7 +1866,7 @@ bool rcBuildRegions(rcContext* ctx, rcCompactHeightfield&amp; chf,
 </code></pre><ul>
 <li><code>rcBuildRegions</code> 的步骤如下：
 <ul>
-<li>首先，根据边界尺寸 <code>borderSize</code>，通过 <code>paintRectRegion</code> 方法，将边界范围的 <code>region</code> 进行设置。</li>
+<li>首先，根据边界尺寸 <code>borderSize</code>，通过 <code>paintRectRegion</code> 方法，将边界范围的 <code>region</code> 进行设置，并设置紧密高度场 <code>chf.borderSize</code> 为 <code>borderSize</code> 。</li>
 <li>接着，设置 <code>level</code> 为距离最大值向上取偶数，根据 <code>level</code> 的大小，从大到小，每次处理两级，处理流程如下：
 <ul>
 <li>收集本次处理的所有 <code>span</code> 到 <code>lvlStacks</code> 数组中。
@@ -2883,7 +2883,7 @@ bool rcBuildRegionsMonotone(rcContext* ctx, rcCompactHeightfield&amp; chf,
 </code></pre><ul>
 <li><code>rcBuildRegionsMonotone</code> 使用了 <code>rcSweepSpan</code> 结构来记录处理过程的关系，主要流程为：
 <ul>
-<li>通过 <code>paintRectRegion</code> 方法，将 <code>borderSize</code> 范围内的 <code>span</code> 的 <code>region</code> 进行标识（<code>id|RC_BORDER_REG</code>）。</li>
+<li>通过 <code>paintRectRegion</code> 方法，将 <code>borderSize</code> 范围内的 <code>span</code> 的 <code>region</code> 进行标识（<code>id|RC_BORDER_REG</code>），并设置紧密高度场 <code>chf.borderSize</code> 为 <code>borderSize</code> 。</li>
 <li>遍历非 <code>borderSize</code> 范围的 <code>cell</code>，对其中的每个可行走的 <code>span</code> 进行处理。
 <ul>
 <li>遍历每一行时，将记录当前行 <code>span</code> 被连接的次数 <code>prev</code> 重置为 0，将 <code>rid</code> 重置为 1，</li>
@@ -3587,7 +3587,8 @@ bool rcBuildContours(rcContext* ctx, const rcCompactHeightfield&amp; chf,
 </code></pre><ul>
 <li>处理轮廓的主要步骤如下：
 <ul>
-<li>初始化 <code>rcContourSet</code> 结构 <code>cset</code>，创建 <code>rcContour</code> 数组 <code>cset.conts</code> ，用于存储轮廓数据。</li>
+<li>初始化 <code>rcContourSet</code> 结构 <code>cset</code>，根据 <code>borderSize</code> 设置 <code>cset</code> 的 <code>bmin</code> 和 <code>bmax</code> ，即 <code>cset.bmin</code> = <code>chf.bmin</code> + <code>borderSize</code> 和 <code>cset.bmax</code> = <code>chf.bmax</code> - <code>borderSize</code>。</li>
+<li>创建 <code>rcContour</code> 数组 <code>cset.conts</code> ，用于存储轮廓数据。</li>
 <li>遍历每个 <code>cell</code> 上的 <code>span</code> 进行处理。
 <ul>
 <li>如果 <code>span</code> 不可通行或者为 <code>borderSize</code> 范围的边界，则标记当前 <code>span</code> 的无边界。</li>
@@ -3601,7 +3602,7 @@ bool rcBuildContours(rcContext* ctx, const rcCompactHeightfield&amp; chf,
 <li>通过 <code>walkContour</code> 方法找到 <code>span</code> 的轮廓顶点。</li>
 <li>通过 <code>simplifyContour</code> 方法简化轮廓顶点。</li>
 <li>通过 <code>removeDegenerateSegments</code> 方法，将相邻轮廓顶点中 x、z 坐标相同的顶点移除。</li>
-<li>将简化前后的轮廓顶点减去 <code>borderSize</code> 后记录到 <code>cset</code> 中，设置所属的 <code>region</code> 和 <code>area</code>。</li>
+<li>由于 <code>cset</code> 的基准点发生了变化，所以将简化前后的轮廓顶点减去 <code>borderSize</code> 后记录到 <code>cset</code> 中，设置所属的 <code>region</code> 和 <code>area</code>。</li>
 </ul>
 </li>
 <li>合并孔洞。

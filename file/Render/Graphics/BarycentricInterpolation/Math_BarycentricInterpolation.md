@@ -50,17 +50,17 @@ S_{\Delta CAB} = \frac{(x_A - x_C)(y_B - y_C) - (x_B - x_C)(y_A - y_C)}{2}
 
 - Math_BarycentricInterpolation_11
 ```math
-\alpha = \frac{(x_A - x_P)(y_B - y_P) - (x_B - x_P)(y_A - y_P)}{(x_A - x_C)(y_B - y_C) - (x_B - x_C)(y_A - y_C)}
+\alpha = \frac{(x_B - x_P)(y_C - y_P) - (x_C - x_P)(y_B - y_P)}{(x_A - x_C)(y_B - y_C) - (x_B - x_C)(y_A - y_C)}
 ```
 
 - Math_BarycentricInterpolation_12
 ```math
-\beta = \frac{(x_B - x_P)(y_C - y_P) - (x_C - x_P)(y_B - y_P)}{(x_A - x_C)(y_B - y_C) - (x_B - x_C)(y_A - y_C)}
+\beta = \frac{(x_C - x_P)(y_A - y_P) - (x_A - x_P)(y_C - y_P)}{(x_A - x_C)(y_B - y_C) - (x_B - x_C)(y_A - y_C)}
 ```
 
 - Math_BarycentricInterpolation_13
 ```math
-\gamma = \frac{(x_C - x_P)(y_A - y_P) - (x_A - x_P)(y_C - y_P)}{(x_A - x_C)(y_B - y_C) - (x_B - x_C)(y_A - y_C)}
+\gamma = \frac{(x_A - x_P)(y_B - y_P) - (x_B - x_P)(y_A - y_P)}{(x_A - x_C)(y_B - y_C) - (x_B - x_C)(y_A - y_C)}
 ```
 
 - Math_BarycentricInterpolation_14
@@ -166,4 +166,9 @@ y_P = \alpha y_A + \beta y_B + \gamma y_C
 - Math_BarycentricInterpolation_33
 ```math
 \frac{1}{z_{P'}} = \frac{1}{z_{A'}}\alpha + \frac{1}{z_{B'}}\beta + \frac{1}{z_{C'}}
+```
+
+- Math_BarycentricInterpolation_34
+```math
+P = \alpha A + \beta B + \gamma C = (1 - \beta - \gamma)A + \beta B + \gamma C = A + \beta\overrightarrow{AB} + \gamma\overrightarrow{AC}
 ```
