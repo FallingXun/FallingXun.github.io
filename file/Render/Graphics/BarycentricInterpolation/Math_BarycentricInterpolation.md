@@ -172,3 +172,26 @@ y_P = \alpha y_A + \beta y_B + \gamma y_C
 ```math
 P = \alpha A + \beta B + \gamma C = (1 - \beta - \gamma)A + \beta B + \gamma C = A + \beta\overrightarrow{AB} + \gamma\overrightarrow{AC}
 ```
+
+- Math_BarycentricInterpolation_35
+```math
+\overrightarrow{AP} = \beta\overrightarrow{AB} + \gamma\overrightarrow{AC}
+```
+
+- Math_BarycentricInterpolation_36
+```math
+\overrightarrow{AP} \cdot \overrightarrow{AB}= \beta（\overrightarrow{AB} \cdot \overrightarrow{AB}） + \gamma（\overrightarrow{AB} \cdot \overrightarrow{AC}） 
+\\
+\
+\\
+\overrightarrow{AP} \cdot \overrightarrow{AC}= \beta（\overrightarrow{AB} \cdot \overrightarrow{AC}） + \gamma（\overrightarrow{AC} \cdot \overrightarrow{AC}）
+```
+
+- Math_BarycentricInterpolation_37
+```math
+\beta = \frac{(\overrightarrow{AP} \cdot \overrightarrow{AB})(\overrightarrow{AC} \cdot \overrightarrow{AC}) - (\overrightarrow{AP} \cdot \overrightarrow{AC})(\overrightarrow{AC} \cdot \overrightarrow{AB})}{(\overrightarrow{AB} \cdot \overrightarrow{AB})(\overrightarrow{AC} \cdot \overrightarrow{AC}) - (\overrightarrow{AB} \cdot \overrightarrow{AC})(\overrightarrow{AB} \cdot \overrightarrow{AC})}
+\\
+\
+\\
+\gamma = \frac{(\overrightarrow{AP} \cdot \overrightarrow{AC})(\overrightarrow{AB} \cdot \overrightarrow{AB}) - (\overrightarrow{AP} \cdot \overrightarrow{AB})(\overrightarrow{AB} \cdot \overrightarrow{AC})}{(\overrightarrow{AB} \cdot \overrightarrow{AB})(\overrightarrow{AC} \cdot \overrightarrow{AC}) - (\overrightarrow{AB} \cdot \overrightarrow{AC})(\overrightarrow{AB} \cdot \overrightarrow{AC})}
+```
