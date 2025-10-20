@@ -137,6 +137,17 @@ post-container">
 <img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_34.png?raw=true" alt=Math_BarycentricInterpolation_34.png>
 </li>
 </ul>
+<h4 id=向量点乘方案>向量点乘方案</h4>
+<ul>
+<li>向量叉乘计算是通过面积比例来计算的，重心坐标还能通过向量点乘的方式来进行。向量 AP 可以表示为
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_35.png?raw=true" alt=Math_BarycentricInterpolation_35.png>
+</li>
+<li>两边分别乘上向量 AB 和 AC ，可以得到
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_36.png?raw=true" alt=Math_BarycentricInterpolation_36.png>
+解方程组可以得到
+<img src="/img/Render/Graphics/BarycentricInterpolation/Math_BarycentricInterpolation_37.png?raw=true" alt=Math_BarycentricInterpolation_37.png>
+</li>
+</ul>
 <h3 id=透视校正插值>透视校正插值</h3>
 <ul>
 <li>渲染流水线中，重心坐标插值，通常是在光栅化阶段，对屏幕空间（Screen Space）下的像素进行，而不是在观察空间（View Space）下进行。由于透视投影不是线性变换，因此变换后的三角形和变换前的形状可能会发生变化，如下图所示
