@@ -102,8 +102,8 @@ Monday, July 7, 2025
 col-md-10 col-md-offset-1
 post-container">
 <p>Navmesh 的寻路依赖于导航网格的生成，本文将基于 Recast Navigation 源码进行分析。</p>
-<h3 id=简介>简介</h3>
-<h4 id=初始化生成配置>初始化生成配置</h4>
+<h1 id=简介>简介</h1>
+<h1 id=一初始化生成配置>一、初始化生成配置</h1>
 <ul>
 <li>导航网格的生成配置结构 <code>rcConfig</code> 如下：</li>
 </ul>
@@ -280,11 +280,11 @@ struct rcConfig
 </ul>
 </li>
 </ul>
-<h4 id=光栅化输入的多边形汤>光栅化输入的多边形汤</h4>
+<h1 id=二光栅化输入的多边形汤>二、光栅化输入的多边形汤</h1>
 <ul>
 <li>输入的原始 3D 模型数据，通常是一组无序的三角形（或其他多边形），没有明确的拓扑结构或层级关系，这些多边形可能重叠、重复或不封闭，统称为多边形汤，光栅化过程需要对这一组三角形做处理。</li>
 </ul>
-<h5 id=标记可行走三角面>标记可行走三角面</h5>
+<h2 id=标记可行走三角面>标记可行走三角面</h2>
 <ul>
 <li>通过 <code>rcMarkWalkableTriangles</code> 方法，将坡度小于 <code>walkableSlopeAngle</code> 的三角面标记为可行走区域，其实现如下：</li>
 </ul>
@@ -324,7 +324,7 @@ void rcMarkWalkableTriangles(rcContext* context, const float walkableSlopeAngle,
 <li>三角面和 xz 平面的夹角即为坡度 θ，而法线和 y 轴的夹角也为 θ。由于法线为归一化，则法线在 y 轴上的投影即为 <code>cosθ</code>。随着坡度 θ 增大，<code>cosθ</code> 逐渐减小，当坡度 θ 小于 <code>walkableSlopeAngle</code> 时，该三角面则为可行走区域，将三角面的 <code>areaID</code> 设置为 <code>RC_WALKABLE_AREA</code>。</li>
 <li>光栅化前先对坡度较大的三角面进行过滤，比起光栅化后再对每一个 <code>cell</code> 进行坡度判断，可以减少较多的计算量。</li>
 </ul>
-<h5 id=光栅化三角面>光栅化三角面</h5>
+<h3 id=光栅化三角面>光栅化三角面</h3>
 <ul>
 <li>光栅化三角面的过程，主要是对每个三角面，通过 <code>rasterizeTri</code> 方法进行处理，其实现如下：</li>
 </ul>
@@ -683,9 +683,9 @@ static void dividePoly(const float* inVerts, int inVertsCount,
 
 
 </code></pre><ul>
-<li><code>span</code> 信息即多边形的 y' 格子坐标 <code>span</code>，在高度场中，<code>span</code> 信息通过链表存储，记录了每一个 <code>cell</code> 的所有 <code>span</code> 区间，区间按坐标从小到大顺序存储。插入新区间时，同样需要保持从小到大的顺序，找到插入位置。如果新区间和原有区间有相交，则会将两个区间进行合并。</li>
+<li><code>span</code> 信息即多边形的 y' 单元格坐标 <code>span</code>，在高度场中，<code>span</code> 信息通过链表存储，记录了每一个 <code>cell</code> 的所有 <code>span</code> 区间，区间按坐标从小到大顺序存储。插入新区间时，同样需要保持从小到大的顺序，找到插入位置。如果新区间和原有区间有相交，则会将两个区间进行合并。</li>
 </ul>
-<h4 id=过滤可行走表面>过滤可行走表面</h4>
+<h1 id=三过滤可行走表面>三、过滤可行走表面</h1>
 <ul>
 <li>在三角面上行走，需要满足几个主要情况：
 <ul>
@@ -696,7 +696,7 @@ static void dividePoly(const float* inVerts, int inVertsCount,
 </li>
 <li>坡度的过滤在光栅化过程已经完成，此阶段不需要再处理。另外两个条件，通过三个过滤方式来处理。</li>
 </ul>
-<h5 id=处理低悬挂障碍物>处理低悬挂障碍物</h5>
+<h2 id=处理低悬挂障碍物>处理低悬挂障碍物</h2>
 <ul>
 <li>通过 <code>rcFilterLowHangingWalkableObstacles</code> 方法，进行低悬挂障碍物的处理，其实现如下:</li>
 </ul>
@@ -747,7 +747,7 @@ void rcFilterLowHangingWalkableObstacles(rcContext* context, const int walkableC
 <li>检查 xz 平面的每个 <code>cell</code> 的 <code>span</code> 列表，<code>span</code> 列表是从小到大排序的，当前 <code>span</code> 不可行走时，如果上一个 <code>span</code> 可行走，且当前 <code>span</code> 的地面 <code>span->max</code> 和上一个 <code>span</code> 的地面 <code>previousSpan->max</code> 的差不超过可跨域距离 <code>walkableClimb</code> ，则将当前 <code>span->area</code> 标记为可行走区域。</li>
 <li>加入此检查，可以避免角色因低障碍物（如：门槛、小台阶等）而受到阻挡无法行走，以及对于一些悬挂的障碍（如：桥梁、屋檐）等，可以支持角色跨越通过。</li>
 </ul>
-<h5 id=处理边缘跨度>处理边缘跨度</h5>
+<h2 id=处理边缘跨度>处理边缘跨度</h2>
 <ul>
 <li>处理边缘 <code>span</code> 的方法 <code>rcFilterLedgeSpans</code> 如下：</li>
 </ul>
@@ -875,7 +875,7 @@ void rcFilterLedgeSpans(rcContext* context, const int walkableHeight, const int 
 </li>
 <li>处理边缘 <code>span</code> 采用保守策略，对于高度差较大的 <code>span</code>，都选择标记为不可行走，减少特殊地形带来的角色移动表现问题的出现。</li>
 </ul>
-<h5 id=处理低高度跨度>处理低高度跨度</h5>
+<h2 id=处理低高度跨度>处理低高度跨度</h2>
 <ul>
 <li>低高度 <code>span</code> 处理，主要是为了确保对象有足够空间可以在表面站立，才能够正常行走，通过 <code>rcFilterWalkableLowHeightSpans</code> 方法实现，代码如下：</li>
 </ul>
@@ -912,8 +912,8 @@ void rcFilterWalkableLowHeightSpans(rcContext* context, const int walkableHeight
 </code></pre><ul>
 <li>低高度 <code>span</code> 处理相对比较简单，就是对每一个 <code>span</code> 做检查，如果当前 <code>span</code> 的天花板（即下一个的最小值 <code>span->next->smin</code>）和地面（<code>span->smax</code>）的高度差小于 <code>walkableHeight</code> ，即当前 <code>span</code> 不支持站立，则标记 <code>span->area</code> 为不可行走。</li>
 </ul>
-<h4 id=划分地区>划分地区</h4>
-<h5 id=建立紧密高度场>建立紧密高度场</h5>
+<h1 id=四将可行走表面划分为地区>四、将可行走表面划分为地区</h1>
+<h2 id=建立紧密高度场>建立紧密高度场</h2>
 <ul>
 <li>经过上一步处理后，得到了一个高度场，高度场的结构如下：</li>
 </ul>
@@ -1117,7 +1117,7 @@ inline void rcSetCon(rcCompactSpan&amp; span, int direction, int neighborIndex)
 </code></pre><ul>
 <li>方向为左上右下，分别对应 0 ~ 3 ，每个方向使用一个 6 位的值，代表在邻居 <code>cell</code> 中的第几个 <code>span</code> ，每个 <code>cell</code> 最多能有 62 个 <code>span</code> 。某个方向设置了连通后，则不再检查该方向后续的 <code>span</code>，即取首个可连通的 <code>span</code>。</li>
 </ul>
-<h5 id=收缩可行走区域>收缩可行走区域</h5>
+<h2 id=收缩可行走区域>收缩可行走区域</h2>
 <ul>
 <li>为了防止移动过程由于太靠近障碍边缘而出现问题，需要将可行走区域沿着障碍边缘进行收缩。收缩过程由 <code>rcErodeWalkableArea</code> 方法实现，主要分为三个步骤：
 <ul>
@@ -1382,7 +1382,7 @@ bool rcErodeWalkableArea(rcContext* context, const int erosionRadius, rcCompactH
 </code></pre><ul>
 <li>为了尽可能远离边缘，使用两倍的 <code>walkableRadius</code> 作为阈值划分，小于这个值的，该 <code>span</code> 的 <code>area</code> 都要标记为不可通行。</li>
 </ul>
-<h5 id=标记凸多边形区域>标记凸多边形区域</h5>
+<h2 id=标记凸多边形区域>标记凸多边形区域</h2>
 <ul>
 <li>地图编辑过程，可能会预先对一些区域进行标记，如：不可通行、特殊区域（水池、草地等），此时则需要通过 <code>rcMarkConvexPolyArea</code> 方法将这些区域更新到 <code>area</code> 中，其实现如下：</li>
 </ul>
@@ -1476,7 +1476,7 @@ void rcMarkConvexPolyArea(rcContext* context, const float* verts, const int numV
 </code></pre><ul>
 <li>根据多边形的顶点，计算出多边形的包围盒信息，找到紧密高度场中对应的 <code>cell</code> ，遍历其中的 <code>span</code> ，找到可通行且和包围盒相交的 <code>span</code>，计算其中心点在 xz 平面上的点。如果该点在多边形的投影面内，则表示该 <code>span</code> 属于当前的多边形，将其 <code>area</code> 设置为多边形的 <code>areaId</code> 。</li>
 </ul>
-<h5 id=建立地区>建立地区</h5>
+<h2 id=建立地区>建立地区</h2>
 <ul>
 <li>建立地区有几种算法：
 <ul>
@@ -1486,7 +1486,7 @@ void rcMarkConvexPolyArea(rcContext* context, const float* verts, const int numV
 </ul>
 </li>
 </ul>
-<h6 id=分水岭划分>分水岭划分</h6>
+<h3 id=分水岭划分>分水岭划分</h3>
 <ul>
 <li>分水岭划分算法，需要通过 <code>rcBuildDistanceField</code> 先建立紧密高度场对应的高度场，包括两个步骤：
 <ul>
@@ -2706,7 +2706,7 @@ static bool mergeRegions(rcRegion&amp; rega, rcRegion&amp; regb)
 <img src="/img/Algorithm/NavmeshNavigation/Watershed.gif?raw=true" alt=Watershed.gif>
 </li>
 </ul>
-<h6 id=单调划分>单调划分</h6>
+<h3 id=单调划分>单调划分</h3>
 <ul>
 <li>单调划分通过 <code>rcBuildRegionsMonotone</code> 方法进行，其实现如下：</li>
 </ul>
@@ -2918,7 +2918,7 @@ bool rcBuildRegionsMonotone(rcContext* ctx, rcCompactHeightfield&amp; chf,
 <img src="/img/Algorithm/NavmeshNavigation/Monotone.gif?raw=true" alt=Monotone.gif>
 </li>
 </ul>
-<h6 id=分层划分>分层划分</h6>
+<h3 id=分层划分>分层划分</h3>
 <ul>
 <li>分层划分通过 <code>rcBuildRegionsLayer</code> 方法进行，其实现和单调划分基本一致，唯一不同的，就是单调划分使用 <code>mergeAndFilterRegions</code> 方法进行合并和过滤，而分层划分使用 <code>mergeAndFilterLayerRegions</code> 方法，其实现如下：</li>
 </ul>
@@ -3195,7 +3195,7 @@ static bool mergeAndFilterLayerRegions(rcContext* ctx, int minRegionArea,
 <img src="/img/Algorithm/NavmeshNavigation/Layers.gif?raw=true" alt=Layers.gif>
 </li>
 </ul>
-<h6 id=算法对比>算法对比</h6>
+<h3 id=算法对比>算法对比</h3>
 <table>
 <thead>
 <tr>
@@ -3226,7 +3226,7 @@ static bool mergeAndFilterLayerRegions(rcContext* ctx, int minRegionArea,
 </tr>
 </tbody>
 </table>
-<h4 id=查找并简化地区轮廓>查找并简化地区轮廓</h4>
+<h1 id=五查找并简化地区轮廓>五、查找并简化地区轮廓</h1>
 <ul>
 <li>处理地区轮廓过程，引入了几个新的结构：
 <ul>
@@ -3259,12 +3259,12 @@ struct rcContourSet
 
 	rcContour* conts;	/// 轮廓列表
 	int nconts;			/// 轮廓数量
-	float bmin[3];  	/// 同 rcHeightfield
-	float bmax[3];		/// 同 rcHeightfield
+	float bmin[3];  	/// rcHeightfield.bmin + borderSize
+	float bmax[3];		/// rcHeightfield.bmax - borderSize
 	float cs;			/// 同 rcHeightfield
 	float ch;			/// 同 rcHeightfield
-	int width;			/// 同 rcHeightfield
-	int height;			/// 同 rcHeightfield
+	int width;			/// rcHeightfield.width - borderSize * 2
+	int height;			/// rcHeightfield.height - borderSize * 2
 	int borderSize;		/// 同 rcConfig::borderSize
 	float maxError;		/// 轮廓简化后的最大边缘误差
 	
@@ -3620,7 +3620,7 @@ bool rcBuildContours(rcContext* ctx, const rcCompactHeightfield&amp; chf,
 </li>
 <li>处理完成后，通常情况下，<code>cset.conts</code> 中只剩下多个不同 <code>region</code> 的 <code>outline</code> ，而 <code>holes</code> 则都会被合并到 <code>outline</code> 中。</li>
 </ul>
-<h5 id=寻找轮廓顶点>寻找轮廓顶点</h5>
+<h2 id=寻找轮廓顶点>寻找轮廓顶点</h2>
 <ul>
 <li>寻找轮廓顶点通过 <code>walkContour(RecastContour.cpp)</code> 方法实现，而前面分水岭算法中使用的是 <code>walkContour(RecastRegion.cpp)</code>，两者思路类似，具体实现如下：</li>
 </ul>
@@ -3843,7 +3843,7 @@ static int getCornerHeight(int x, int y, int i, int dir,
 </ul>
 </li>
 </ul>
-<h5 id=简化轮廓顶点>简化轮廓顶点</h5>
+<h2 id=简化轮廓顶点>简化轮廓顶点</h2>
 <ul>
 <li>简化轮廓顶点的方法 <code>simplifyContour</code> 实现如下：</li>
 </ul>
@@ -4113,7 +4113,7 @@ static void simplifyContour(rcTempVector&lt;int&gt;&amp; points, rcTempVector&lt
 </ul>
 </li>
 </ul>
-<h5 id=查找孔洞>查找孔洞</h5>
+<h2 id=查找孔洞>查找孔洞</h2>
 <ul>
 <li>通过 <code>calcAreaOfPolygon2D</code> 方法，在所有轮廓中识别出孔洞，其实现如下：</li>
 </ul>
@@ -4138,7 +4138,7 @@ static int calcAreaOfPolygon2D(const int* verts, const int nverts)
 <li>遍历每个顶点，根据原点和当前顶点的向量，以及原点到上一个顶点的向量，两者的叉积得到三个点组成的三角形的面积，而所有三角形面积之和即为多边形的面积。其中，叉积为正，表示从向量 1 到向量 2 为逆时针旋转。叉积为负，表示从向量 1 到向量 2 为顺时针旋转。</li>
 <li>如果最终多边形的面积为负，则表示该轮廓为逆时针方向，即为孔洞。相反，如果面积为正，则表示该轮廓为外轮廓。</li>
 </ul>
-<h5 id=合并孔洞>合并孔洞</h5>
+<h2 id=合并孔洞>合并孔洞</h2>
 <ul>
 <li>通过 <code>mergeRegionHoles</code> 方法，将孔洞合并到外轮廓中，其实现如下：</li>
 </ul>
@@ -4421,7 +4421,7 @@ static bool mergeContours(rcContour&amp; ca, rcContour&amp; cb, int ia, int ib)
 <img src="/img/Algorithm/NavmeshNavigation/Nav2_4.gif?raw=true" alt=Nav2_4.png>
 </li>
 </ul>
-<h4 id=建立多边形网格>建立多边形网格</h4>
+<h1 id=六建立多边形网格>六、建立多边形网格</h1>
 <ul>
 <li>建立多边形网格过程，使用 <code>rcPolyMesh</code> 结构保存多边形网格数据，其定义如下：</li>
 </ul>
@@ -4442,10 +4442,10 @@ struct rcPolyMesh
 	int npolys;				/// 多边形数量
 	int maxpolys;			/// 已申请的最大多边形数量
 	int nvp;				/// 每个多边形的最大顶点数量
-	float bmin[3];			/// 同 rcHeightfield
-	float bmax[3];			/// 同 rcHeightfield
-	float cs;				/// 同 rcHeightfield
-	float ch;				/// 同 rcHeightfield
+	float bmin[3];			/// 同 rcContourSet
+	float bmax[3];			/// 同 rcContourSet
+	float cs;				/// 同 rcContourSet
+	float ch;				/// 同 rcContourSet
 	int borderSize;			/// 同 rcConfig::borderSize
 	float maxEdgeError;		/// 同 rcContourSet::maxError
 	
@@ -4807,7 +4807,7 @@ bool rcBuildPolyMesh(rcContext* ctx, const rcContourSet&amp; cset, const int nvp
 </ul>
 </li>
 </ul>
-<h5 id=将轮廓点划分成三角形>将轮廓点划分成三角形</h5>
+<h2 id=将轮廓点划分成三角形>将轮廓点划分成三角形</h2>
 <ul>
 <li><code>triangulate</code> 方法的实现如下：</li>
 </ul>
@@ -4956,7 +4956,7 @@ static int triangulate(int n, const int* verts, int* indices, int* tris)
 </ul>
 </li>
 </ul>
-<h5 id=查找多边形公共边>查找多边形公共边</h5>
+<h2 id=查找多边形公共边>查找多边形公共边</h2>
 <ul>
 <li><code>getPolyMergeValue</code> 的实现如下：</li>
 </ul>
@@ -5043,7 +5043,7 @@ static int getPolyMergeValue(unsigned short* pa, unsigned short* pb,
 </ul>
 </li>
 </ul>
-<h5 id=移除边界顶点>移除边界顶点</h5>
+<h2 id=移除边界顶点>移除边界顶点</h2>
 <ul>
 <li>合并完成后，对于处在 <code>borderSize</code> 范围内的顶点，通过 <code>canRemoveVertex</code> 检查是否能移除，其实现如下：</li>
 </ul>
@@ -5500,7 +5500,7 @@ static bool removeVertex(rcContext* ctx, rcPolyMesh&amp; mesh, const unsigned sh
 </ul>
 </li>
 </ul>
-<h5 id=计算多边形邻居>计算多边形邻居</h5>
+<h2 id=计算多边形邻居>计算多边形邻居</h2>
 <ul>
 <li>计算多边形邻居时，使用了 <code>rcEdge</code> 记录边的信息，其结构如下：</li>
 </ul>
@@ -5641,9 +5641,685 @@ static bool buildMeshAdjacency(unsigned short* polys, const int npolys,
 </ul>
 </li>
 </ul>
-<h4 id=创建细节网格>创建细节网格</h4>
-<h4 id=创建导航数据>创建导航数据</h4>
-<h3 id=参考>参考</h3>
+<h1 id=七创建细节网格>七、创建细节网格</h1>
+<ul>
+<li>七、创建细节网格过程，使用 <code>rcPolyMeshDetail</code> 结构保存细节网格数据，其定义如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Include/Recast.h
+
+struct rcPolyMeshDetail
+{
+	...
+	
+	unsigned int* meshes;	/// 所有子网格数据，长度为 4 * nmeshes，每个多边形对应一个子网格，占 4 个数据，分别为：之前所有子网格的总顶点数、当前子网格顶点数、之前所有子网格的三角面总数、当前子网格的三角面数
+	float* verts;			/// 所有子网格顶点数据，长度为 3 * nverts
+	unsigned char* tris;	/// 所有子网格的三角面顶点索引，长度为 3 * ntris，每个三角面占 4 个数据，分别为：三个顶点的索引、三条边是否为初始网格边的标记
+	int nmeshes;			/// 子网格数量
+	int nverts;				/// 子网格总顶点数量
+	int ntris;				/// 子网格总三角面数量
+	
+	...
+};
+
+</code></pre><ul>
+<li>创建细节网格使用 <code>rcBuildPolyMeshDetail</code> 方法，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastMeshDetail.cpp
+
+...
+
+bool rcBuildPolyMeshDetail(rcContext* ctx, const rcPolyMesh&amp; mesh, const rcCompactHeightfield&amp; chf,
+						   const float sampleDist, const float sampleMaxError,
+						   rcPolyMeshDetail&amp; dmesh)
+{
+	rcAssert(ctx);
+	
+	rcScopedTimer timer(ctx, RC_TIMER_BUILD_POLYMESHDETAIL);
+	
+	if (mesh.nverts == 0 || mesh.npolys == 0)
+		return true;
+	
+	const int nvp = mesh.nvp;
+	const float cs = mesh.cs;
+	const float ch = mesh.ch;
+	const float* orig = mesh.bmin;
+	const int borderSize = mesh.borderSize;
+	const int heightSearchRadius = rcMax(1, (int)ceilf(mesh.maxEdgeError));
+	
+	rcTempVector&lt;int&gt; edges(64);
+	rcTempVector&lt;int&gt; tris(512);
+	rcTempVector&lt;int&gt; arr(512);
+	rcTempVector&lt;int&gt; samples(512);
+	float verts[256*3];
+	rcHeightPatch hp;
+	int nPolyVerts = 0;
+	int maxhw = 0, maxhh = 0;
+	
+	rcScopedDelete&lt;int&gt; bounds((int*)rcAlloc(sizeof(int)*mesh.npolys*4, RC_ALLOC_TEMP));
+	if (!bounds)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMeshDetail: Out of memory 'bounds' (%d).&quot;, mesh.npolys*4);
+		return false;
+	}
+	rcScopedDelete&lt;float&gt; poly((float*)rcAlloc(sizeof(float)*nvp*3, RC_ALLOC_TEMP));
+	if (!poly)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMeshDetail: Out of memory 'poly' (%d).&quot;, nvp*3);
+		return false;
+	}
+	
+	// Find max size for a polygon area.
+	for (int i = 0; i &lt; mesh.npolys; ++i)
+	{
+		const unsigned short* p = &amp;mesh.polys[i*nvp*2];
+		int&amp; xmin = bounds[i*4+0];
+		int&amp; xmax = bounds[i*4+1];
+		int&amp; ymin = bounds[i*4+2];
+		int&amp; ymax = bounds[i*4+3];
+		xmin = chf.width;
+		xmax = 0;
+		ymin = chf.height;
+		ymax = 0;
+		for (int j = 0; j &lt; nvp; ++j)
+		{
+			if(p[j] == RC_MESH_NULL_IDX) break;
+			const unsigned short* v = &amp;mesh.verts[p[j]*3];
+			xmin = rcMin(xmin, (int)v[0]);
+			xmax = rcMax(xmax, (int)v[0]);
+			ymin = rcMin(ymin, (int)v[2]);
+			ymax = rcMax(ymax, (int)v[2]);
+			nPolyVerts++;
+		}
+		xmin = rcMax(0,xmin-1);
+		xmax = rcMin(chf.width,xmax+1);
+		ymin = rcMax(0,ymin-1);
+		ymax = rcMin(chf.height,ymax+1);
+		if (xmin &gt;= xmax || ymin &gt;= ymax) continue;
+		maxhw = rcMax(maxhw, xmax-xmin);
+		maxhh = rcMax(maxhh, ymax-ymin);
+	}
+	
+	hp.data = (unsigned short*)rcAlloc(sizeof(unsigned short)*maxhw*maxhh, RC_ALLOC_TEMP);
+	if (!hp.data)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMeshDetail: Out of memory 'hp.data' (%d).&quot;, maxhw*maxhh);
+		return false;
+	}
+	
+	dmesh.nmeshes = mesh.npolys;
+	dmesh.nverts = 0;
+	dmesh.ntris = 0;
+	dmesh.meshes = (unsigned int*)rcAlloc(sizeof(unsigned int)*dmesh.nmeshes*4, RC_ALLOC_PERM);
+	if (!dmesh.meshes)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMeshDetail: Out of memory 'dmesh.meshes' (%d).&quot;, dmesh.nmeshes*4);
+		return false;
+	}
+	
+	int vcap = nPolyVerts+nPolyVerts/2;
+	int tcap = vcap*2;
+	
+	dmesh.nverts = 0;
+	dmesh.verts = (float*)rcAlloc(sizeof(float)*vcap*3, RC_ALLOC_PERM);
+	if (!dmesh.verts)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMeshDetail: Out of memory 'dmesh.verts' (%d).&quot;, vcap*3);
+		return false;
+	}
+	dmesh.ntris = 0;
+	dmesh.tris = (unsigned char*)rcAlloc(sizeof(unsigned char)*tcap*4, RC_ALLOC_PERM);
+	if (!dmesh.tris)
+	{
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMeshDetail: Out of memory 'dmesh.tris' (%d).&quot;, tcap*4);
+		return false;
+	}
+	
+	for (int i = 0; i &lt; mesh.npolys; ++i)
+	{
+		const unsigned short* p = &amp;mesh.polys[i*nvp*2];
+		
+		// Store polygon vertices for processing.
+		int npoly = 0;
+		for (int j = 0; j &lt; nvp; ++j)
+		{
+			if(p[j] == RC_MESH_NULL_IDX) break;
+			const unsigned short* v = &amp;mesh.verts[p[j]*3];
+			poly[j*3+0] = v[0]*cs;
+			poly[j*3+1] = v[1]*ch;
+			poly[j*3+2] = v[2]*cs;
+			npoly++;
+		}
+		
+		// Get the height data from the area of the polygon.
+		hp.xmin = bounds[i*4+0];
+		hp.ymin = bounds[i*4+2];
+		hp.width = bounds[i*4+1]-bounds[i*4+0];
+		hp.height = bounds[i*4+3]-bounds[i*4+2];
+		getHeightData(ctx, chf, p, npoly, mesh.verts, borderSize, hp, arr, mesh.regs[i]);
+		
+		// Build detail mesh.
+		int nverts = 0;
+		if (!buildPolyDetail(ctx, poly, npoly,
+							 sampleDist, sampleMaxError,
+							 heightSearchRadius, chf, hp,
+							 verts, nverts, tris,
+							 edges, samples))
+		{
+			return false;
+		}
+		
+		// Move detail verts to world space.
+		for (int j = 0; j &lt; nverts; ++j)
+		{
+			verts[j*3+0] += orig[0];
+			verts[j*3+1] += orig[1] + chf.ch; // Is this offset necessary?
+			verts[j*3+2] += orig[2];
+		}
+		// Offset poly too, will be used to flag checking.
+		for (int j = 0; j &lt; npoly; ++j)
+		{
+			poly[j*3+0] += orig[0];
+			poly[j*3+1] += orig[1];
+			poly[j*3+2] += orig[2];
+		}
+		
+		// Store detail submesh.
+		const int ntris = static_cast&lt;int&gt;(tris.size()) / 4;
+		
+		dmesh.meshes[i*4+0] = (unsigned int)dmesh.nverts;
+		dmesh.meshes[i*4+1] = (unsigned int)nverts;
+		dmesh.meshes[i*4+2] = (unsigned int)dmesh.ntris;
+		dmesh.meshes[i*4+3] = (unsigned int)ntris;
+		
+		// Store vertices, allocate more memory if necessary.
+		if (dmesh.nverts+nverts &gt; vcap)
+		{
+			while (dmesh.nverts+nverts &gt; vcap)
+				vcap += 256;
+			
+			float* newv = (float*)rcAlloc(sizeof(float)*vcap*3, RC_ALLOC_PERM);
+			if (!newv)
+			{
+				ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMeshDetail: Out of memory 'newv' (%d).&quot;, vcap*3);
+				return false;
+			}
+			if (dmesh.nverts)
+				memcpy(newv, dmesh.verts, sizeof(float)*3*dmesh.nverts);
+			rcFree(dmesh.verts);
+			dmesh.verts = newv;
+		}
+		for (int j = 0; j &lt; nverts; ++j)
+		{
+			dmesh.verts[dmesh.nverts*3+0] = verts[j*3+0];
+			dmesh.verts[dmesh.nverts*3+1] = verts[j*3+1];
+			dmesh.verts[dmesh.nverts*3+2] = verts[j*3+2];
+			dmesh.nverts++;
+		}
+		
+		// Store triangles, allocate more memory if necessary.
+		if (dmesh.ntris+ntris &gt; tcap)
+		{
+			while (dmesh.ntris+ntris &gt; tcap)
+				tcap += 256;
+			unsigned char* newt = (unsigned char*)rcAlloc(sizeof(unsigned char)*tcap*4, RC_ALLOC_PERM);
+			if (!newt)
+			{
+				ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMeshDetail: Out of memory 'newt' (%d).&quot;, tcap*4);
+				return false;
+			}
+			if (dmesh.ntris)
+				memcpy(newt, dmesh.tris, sizeof(unsigned char)*4*dmesh.ntris);
+			rcFree(dmesh.tris);
+			dmesh.tris = newt;
+		}
+		for (int j = 0; j &lt; ntris; ++j)
+		{
+			const int* t = &amp;tris[j*4];
+			dmesh.tris[dmesh.ntris*4+0] = (unsigned char)t[0];
+			dmesh.tris[dmesh.ntris*4+1] = (unsigned char)t[1];
+			dmesh.tris[dmesh.ntris*4+2] = (unsigned char)t[2];
+			dmesh.tris[dmesh.ntris*4+3] = (unsigned char)t[3];
+			dmesh.ntris++;
+		}
+	}
+	
+	return true;
+}
+
+...
+
+</code></pre><ul>
+<li>网格细节的数据存储在 <code>rcPolyMeshDetail</code> 结构的 <code>dmesh</code> ，创建细节网格的主要步骤如下：
+<ul>
+<li>使用 <code>rcPolyMesh</code> 网格初始化参数，包括单元格大小 <code>mesh.cs</code> 、单元格高度 <code>mesh.ch</code> 、包围盒最小值 <code>mesh.bmin</code> 、borderSize 大小 <code>mesh.borderSize</code> 等。</li>
+<li>遍历网格的每个多边形，找到其中的最大宽高尺寸。</li>
+<li>创建 <code>tris</code> 数组，用于记录细化后的三角面索引信息。</li>
+<li>创建 <code>verts</code> 数组，用于记录细化后的网格顶点坐标。</li>
+<li>创建 <code>poly</code> 数组，用于记录多边形的顶点坐标。</li>
+<li>遍历网格的每个多边形，对每个多边形进行处理。
+<ul>
+<li>遍历多边形的每个顶点，获取顶点的单元格坐标，并乘上单元格大小或单元格高度，转化成相对的世界坐标，存入 <code>poly</code> 中。
+<ul>
+<li>第二步光栅化后，得到的 <code>span</code> 坐标为偏移了高度场的 <code>bmin</code> 的坐标，而第五步得到轮廓后的顶点坐标，则是在此基础上加上了 <code>borderSize</code> 的偏移，即偏移了 <code>rcPolyMesh.bmin</code>（同 <code>rcContourSet.bmin</code>）。</li>
+</ul>
+</li>
+<li>通过 <code>getHeightData</code> 方法，获取多边形的高度信息。</li>
+<li>通过 <code>buildPolyDetail</code> 方法，构建多边形的细节网格，将数据存入 <code>tris</code> 和 <code>verts</code>。</li>
+<li>将 <code>verts</code> 的坐标转化成世界坐标，即加上 <code>mesh.bmin</code> 的偏移，其中 <code>y</code> 坐标额外加上 <code>chf.ch</code> ，即加上单元格的高度。</li>
+<li>将 <code>poly</code> 的坐标转化成世界坐标，即加上 <code>mesh.bmin</code> 的偏移。</li>
+<li>设置当前多边形的细节子网格信息。
+<ul>
+<li><code>dmesh.meshes[i*4+0]</code> 为之前所有多边形子网格的总顶点数。</li>
+<li><code>dmesh.meshes[i*4+1]</code> 为当前多边形子网格的顶点数。</li>
+<li><code>dmesh.meshes[i*4+2]</code> 为之前所有多边形子网格的总三角面数。</li>
+<li><code>dmesh.meshes[i*4+3]</code> 为当前多边形子网格的三角面数。</li>
+</ul>
+</li>
+<li>将 <code>verts</code> 加入到 <code>dmesh.verts</code> 中，并更新 <code>dmesh.nverts</code> 。</li>
+<li>将 <code>tris</code> 加入到 <code>dmesh.tris</code> 中，并更新 <code>dmesh.ntris</code> 。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h2 id=获取高度信息>获取高度信息</h2>
+<ul>
+<li>获取高度信息方法 <code>getHeightData</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastMeshDetail.cpp
+
+...
+
+static void getHeightData(rcContext* ctx, const rcCompactHeightfield&amp; chf,
+						  const unsigned short* poly, const int npoly,
+						  const unsigned short* verts, const int bs,
+						  rcHeightPatch&amp; hp, rcTempVector&lt;int&gt;&amp; queue,
+						  int region)
+{
+	// Note: Reads to the compact heightfield are offset by border size (bs)
+	// since border size offset is already removed from the polymesh vertices.
+	
+	queue.clear();
+	// Set all heights to RC_UNSET_HEIGHT.
+	memset(hp.data, 0xff, sizeof(unsigned short)*hp.width*hp.height);
+
+	bool empty = true;
+	
+	// We cannot sample from this poly if it was created from polys
+	// of different regions. If it was then it could potentially be overlapping
+	// with polys of that region and the heights sampled here could be wrong.
+	if (region != RC_MULTIPLE_REGS)
+	{
+		// Copy the height from the same region, and mark region borders
+		// as seed points to fill the rest.
+		for (int hy = 0; hy &lt; hp.height; hy++)
+		{
+			int y = hp.ymin + hy + bs;
+			for (int hx = 0; hx &lt; hp.width; hx++)
+			{
+				int x = hp.xmin + hx + bs;
+				const rcCompactCell&amp; c = chf.cells[x + y*chf.width];
+				for (int i = (int)c.index, ni = (int)(c.index + c.count); i &lt; ni; ++i)
+				{
+					const rcCompactSpan&amp; s = chf.spans[i];
+					if (s.reg == region)
+					{
+						// Store height
+						hp.data[hx + hy*hp.width] = s.y;
+						empty = false;
+
+						// If any of the neighbours is not in same region,
+						// add the current location as flood fill start
+						bool border = false;
+						for (int dir = 0; dir &lt; 4; ++dir)
+						{
+							if (rcGetCon(s, dir) != RC_NOT_CONNECTED)
+							{
+								const int ax = x + rcGetDirOffsetX(dir);
+								const int ay = y + rcGetDirOffsetY(dir);
+								const int ai = (int)chf.cells[ax + ay*chf.width].index + rcGetCon(s, dir);
+								const rcCompactSpan&amp; as = chf.spans[ai];
+								if (as.reg != region)
+								{
+									border = true;
+									break;
+								}
+							}
+						}
+						if (border)
+							push3(queue, x, y, i);
+						break;
+					}
+				}
+			}
+		}
+	}
+	
+	// if the polygon does not contain any points from the current region (rare, but happens)
+	// or if it could potentially be overlapping polygons of the same region,
+	// then use the center as the seed point.
+	if (empty)
+		seedArrayWithPolyCenter(ctx, chf, poly, npoly, verts, bs, hp, queue);
+	
+	static const int RETRACT_SIZE = 256;
+	int head = 0;
+	
+	// We assume the seed is centered in the polygon, so a BFS to collect
+	// height data will ensure we do not move onto overlapping polygons and
+	// sample wrong heights.
+	while (head*3 &lt; queue.size())
+	{
+		int cx = queue[head*3+0];
+		int cy = queue[head*3+1];
+		int ci = queue[head*3+2];
+		head++;
+		if (head &gt;= RETRACT_SIZE)
+		{
+			head = 0;
+			if (queue.size() &gt; RETRACT_SIZE*3)
+				memmove(&amp;queue[0], &amp;queue[RETRACT_SIZE*3], sizeof(int)*(queue.size()-RETRACT_SIZE*3));
+			queue.resize(queue.size()-RETRACT_SIZE*3);
+		}
+		
+		const rcCompactSpan&amp; cs = chf.spans[ci];
+		for (int dir = 0; dir &lt; 4; ++dir)
+		{
+			if (rcGetCon(cs, dir) == RC_NOT_CONNECTED) continue;
+			
+			const int ax = cx + rcGetDirOffsetX(dir);
+			const int ay = cy + rcGetDirOffsetY(dir);
+			const int hx = ax - hp.xmin - bs;
+			const int hy = ay - hp.ymin - bs;
+			
+			if ((unsigned int)hx &gt;= (unsigned int)hp.width || (unsigned int)hy &gt;= (unsigned int)hp.height)
+				continue;
+			
+			if (hp.data[hx + hy*hp.width] != RC_UNSET_HEIGHT)
+				continue;
+			
+			const int ai = (int)chf.cells[ax + ay*chf.width].index + rcGetCon(cs, dir);
+			const rcCompactSpan&amp; as = chf.spans[ai];
+			
+			hp.data[hx + hy*hp.width] = as.y;
+
+			
+			push3(queue, ax, ay, ai);
+		}
+	}
+}
+
+...
+</code></pre><ul>
+<li>获取高度信息的步骤如下：
+<ul>
+<li>如果当前 <code>region</code> 不与多个 <code>region</code> 相连，即不为 <code>RC_MULTIPLE_REGS</code>，则遍历当前多边形包围盒内每个 <code>cell</code> 的 <code>span</code>，对 <code>region</code> 和多边形 <code>region</code> 相同的 <code>span</code> 进行处理。
+<ul>
+<li>记录当前 <code>cell</code> 对应的高度为 <code>span.y</code>。</li>
+<li>遍历四个方向的邻居 <code>span</code>，如果邻居的 <code>region</code> 和当前 <code>region</code> 不同，则将当前 <code>cell</code> 以多边形包围盒最小点为原点的坐标和 <code>span</code> 索引加入到 <code>queue</code> 中。</li>
+</ul>
+</li>
+<li>如果所有 <code>span</code> 的 <code>region</code> 都和当前 <code>region</code> 不相同，则使用 <code>seedArrayWithPolyCenter</code> 方法将多边形的中心点加入到 <code>queue</code> 中。</li>
+<li>对 <code>queue</code> 中的每个 <code>span</code> 索引，检查其四个方向的邻居，如果为可行走，且不超过多边形包围盒，同时高度没有记录过，则记录该邻居高度 <code>span.y</code> ，并将邻居位置加入到 <code>queue</code> 中。即从当前 <code>region</code> 开始扩散，直到所有 <code>span</code> 都处理完，则得到当前多边形包围盒内的所有高度信息。</li>
+</ul>
+</li>
+</ul>
+<h2 id=建立多边形细节>建立多边形细节</h2>
+<ul>
+<li>建立多边形细节方法 <code>buildPolyDetail</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastMeshDetail.cpp
+
+static bool buildPolyDetail(rcContext* ctx, const float* in, const int nin,
+							const float sampleDist, const float sampleMaxError,
+							const int heightSearchRadius, const rcCompactHeightfield&amp; chf,
+							const rcHeightPatch&amp; hp, float* verts, int&amp; nverts,
+							rcTempVector&lt;int&gt;&amp; tris, rcTempVector&lt;int&gt;&amp; edges, rcTempVector&lt;int&gt;&amp; samples)
+{
+	static const int MAX_VERTS = 127;
+	static const int MAX_TRIS = 255;	// Max tris for delaunay is 2n-2-k (n=num verts, k=num hull verts).
+	static const int MAX_VERTS_PER_EDGE = 32;
+	float edge[(MAX_VERTS_PER_EDGE+1)*3];
+	int hull[MAX_VERTS];
+	int nhull = 0;
+	
+	nverts = nin;
+	
+	for (int i = 0; i &lt; nin; ++i)
+		rcVcopy(&amp;verts[i*3], &amp;in[i*3]);
+	
+	edges.clear();
+	tris.clear();
+	
+	const float cs = chf.cs;
+	const float ics = 1.0f/cs;
+	
+	// Calculate minimum extents of the polygon based on input data.
+	float minExtent = polyMinExtent(verts, nverts);
+	
+	// Tessellate outlines.
+	// This is done in separate pass in order to ensure
+	// seamless height values across the ply boundaries.
+	if (sampleDist &gt; 0)
+	{
+		for (int i = 0, j = nin-1; i &lt; nin; j=i++)
+		{
+			const float* vj = &amp;in[j*3];
+			const float* vi = &amp;in[i*3];
+			bool swapped = false;
+			// Make sure the segments are always handled in same order
+			// using lexological sort or else there will be seams.
+			if (fabsf(vj[0]-vi[0]) &lt; 1e-6f)
+			{
+				if (vj[2] &gt; vi[2])
+				{
+					rcSwap(vj,vi);
+					swapped = true;
+				}
+			}
+			else
+			{
+				if (vj[0] &gt; vi[0])
+				{
+					rcSwap(vj,vi);
+					swapped = true;
+				}
+			}
+			// Create samples along the edge.
+			float dx = vi[0] - vj[0];
+			float dy = vi[1] - vj[1];
+			float dz = vi[2] - vj[2];
+			float d = sqrtf(dx*dx + dz*dz);
+			int nn = 1 + (int)floorf(d/sampleDist);
+			if (nn &gt;= MAX_VERTS_PER_EDGE) nn = MAX_VERTS_PER_EDGE-1;
+			if (nverts+nn &gt;= MAX_VERTS)
+				nn = MAX_VERTS-1-nverts;
+			
+			for (int k = 0; k &lt;= nn; ++k)
+			{
+				float u = (float)k/(float)nn;
+				float* pos = &amp;edge[k*3];
+				pos[0] = vj[0] + dx*u;
+				pos[1] = vj[1] + dy*u;
+				pos[2] = vj[2] + dz*u;
+				pos[1] = getHeight(pos[0],pos[1],pos[2], cs, ics, chf.ch, heightSearchRadius, hp)*chf.ch;
+			}
+			// Simplify samples.
+			int idx[MAX_VERTS_PER_EDGE] = {0,nn};
+			int nidx = 2;
+			for (int k = 0; k &lt; nidx-1; )
+			{
+				const int a = idx[k];
+				const int b = idx[k+1];
+				const float* va = &amp;edge[a*3];
+				const float* vb = &amp;edge[b*3];
+				// Find maximum deviation along the segment.
+				float maxd = 0;
+				int maxi = -1;
+				for (int m = a+1; m &lt; b; ++m)
+				{
+					float dev = distancePtSeg(&amp;edge[m*3],va,vb);
+					if (dev &gt; maxd)
+					{
+						maxd = dev;
+						maxi = m;
+					}
+				}
+				// If the max deviation is larger than accepted error,
+				// add new point, else continue to next segment.
+				if (maxi != -1 &amp;&amp; maxd &gt; rcSqr(sampleMaxError))
+				{
+					for (int m = nidx; m &gt; k; --m)
+						idx[m] = idx[m-1];
+					idx[k+1] = maxi;
+					nidx++; 
+				}
+				else
+				{
+					++k;
+				}
+			}
+			
+			hull[nhull++] = j;
+			// Add new vertices.
+			if (swapped)
+			{
+				for (int k = nidx-2; k &gt; 0; --k)
+				{
+					rcVcopy(&amp;verts[nverts*3], &amp;edge[idx[k]*3]);
+					hull[nhull++] = nverts;
+					nverts++;
+				}
+			}
+			else
+			{
+				for (int k = 1; k &lt; nidx-1; ++k)
+				{
+					rcVcopy(&amp;verts[nverts*3], &amp;edge[idx[k]*3]);
+					hull[nhull++] = nverts;
+					nverts++;
+				}
+			}
+		}
+	}
+	
+	// If the polygon minimum extent is small (sliver or small triangle), do not try to add internal points.
+	if (minExtent &lt; sampleDist*2)
+	{
+		triangulateHull(nverts, verts, nhull, hull, nin, tris);
+		setTriFlags(tris, nhull, hull);
+		return true;
+	}
+	
+	// Tessellate the base mesh.
+	// We're using the triangulateHull instead of delaunayHull as it tends to
+	// create a bit better triangulation for long thin triangles when there
+	// are no internal points.
+	triangulateHull(nverts, verts, nhull, hull, nin, tris);
+	
+	if (tris.size() == 0)
+	{
+		// Could not triangulate the poly, make sure there is some valid data there.
+		ctx-&gt;log(RC_LOG_WARNING, &quot;buildPolyDetail: Could not triangulate polygon (%d verts).&quot;, nverts);
+		return true;
+	}
+	
+	if (sampleDist &gt; 0)
+	{
+		// Create sample locations in a grid.
+		float bmin[3], bmax[3];
+		rcVcopy(bmin, in);
+		rcVcopy(bmax, in);
+		for (int i = 1; i &lt; nin; ++i)
+		{
+			rcVmin(bmin, &amp;in[i*3]);
+			rcVmax(bmax, &amp;in[i*3]);
+		}
+		int x0 = (int)floorf(bmin[0]/sampleDist);
+		int x1 = (int)ceilf(bmax[0]/sampleDist);
+		int z0 = (int)floorf(bmin[2]/sampleDist);
+		int z1 = (int)ceilf(bmax[2]/sampleDist);
+		samples.clear();
+		for (int z = z0; z &lt; z1; ++z) 
+		{
+			for (int x = x0; x &lt; x1; ++x)
+			{
+				float pt[3];
+				pt[0] = x*sampleDist;
+				pt[1] = (bmax[1]+bmin[1])*0.5f;
+				pt[2] = z*sampleDist;
+				// Make sure the samples are not too close to the edges.
+				if (distToPoly(nin,in,pt) &gt; -sampleDist/2) continue;
+				samples.push_back(x);
+				samples.push_back(getHeight(pt[0], pt[1], pt[2], cs, ics, chf.ch, heightSearchRadius, hp));
+				samples.push_back(z);
+				samples.push_back(0); // Not added
+			}
+		}
+		
+		// Add the samples starting from the one that has the most
+		// error. The procedure stops when all samples are added
+		// or when the max error is within treshold.
+		const int nsamples = static_cast&lt;int&gt;(samples.size()) / 4;
+		for (int iter = 0; iter &lt; nsamples; ++iter)
+		{
+			if (nverts &gt;= MAX_VERTS)
+				break;
+			
+			// Find sample with most error.
+			float bestpt[3] = {0,0,0};
+			float bestd = 0;
+			int besti = -1;
+			for (int i = 0; i &lt; nsamples; ++i)
+			{
+				const int* s = &amp;samples[i*4];
+				if (s[3]) continue; // skip added.
+				float pt[3];
+				// The sample location is jittered to get rid of some bad triangulations
+				// which are cause by symmetrical data from the grid structure.
+				pt[0] = s[0]*sampleDist + getJitterX(i)*cs*0.1f;
+				pt[1] = s[1]*chf.ch;
+				pt[2] = s[2]*sampleDist + getJitterY(i)*cs*0.1f;
+				float d = distToTriMesh(pt, verts, nverts, &amp;tris[0], static_cast&lt;int&gt;(tris.size()) / 4);
+				if (d &lt; 0) continue; // did not hit the mesh.
+				if (d &gt; bestd)
+				{
+					bestd = d;
+					besti = i;
+					rcVcopy(bestpt,pt);
+				}
+			}
+			// If the max error is within accepted threshold, stop tesselating.
+			if (bestd &lt;= sampleMaxError || besti == -1)
+				break;
+			// Mark sample as added.
+			samples[besti*4+3] = 1;
+			// Add the new sample point.
+			rcVcopy(&amp;verts[nverts*3],bestpt);
+			nverts++;
+			
+			// Create new triangulation.
+			// TODO: Incremental add instead of full rebuild.
+			edges.clear();
+			tris.clear();
+			delaunayHull(ctx, nverts, verts, nhull, hull, tris, edges);
+		}
+	}
+	
+	const int ntris = static_cast&lt;int&gt;(tris.size()) / 4;
+	if (ntris &gt; MAX_TRIS)
+	{
+		tris.resize(MAX_TRIS*4);
+		ctx-&gt;log(RC_LOG_ERROR, &quot;rcBuildPolyMeshDetail: Shrinking triangle count from %d to max %d.&quot;, ntris, MAX_TRIS);
+	}
+
+	setTriFlags(tris, nhull, hull);
+	
+	return true;
+}
+
+...
+</code></pre><h1 id=八创建导航数据>八、创建导航数据</h1>
+<h1 id=参考>参考</h1>
 <ul>
 <li><a href=https://github.com/recastnavigation/recastnavigation>Github - Recast Navigation</a></li>
 </ul>
