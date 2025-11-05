@@ -4136,10 +4136,10 @@ static void simplifyContour(rcTempVector&lt;int&gt;&amp; points, rcTempVector&lt
 <li>如果轮廓中存在可行走的点，则依次遍历每个原轮廓点，如果当前点和下个点的 <code>region</code> 或 <code>area</code> 不同，则将当前点加入到简化轮廓列表 <code>simplified</code> 中。</li>
 <li>如果 <code>simplified</code> 为空，即没有找到 <code>region</code> 或 <code>area</code> 不同的点，则将轮廓的左下点和右上点加入到 <code>simplified</code> 中。</li>
 <li>遍历 <code>simplified</code> 组成的每一条边，找到所有 <code>region</code> 不为 0 或者是 <code>area</code> 边界的原轮廓点，通过 <code>distancePtSeg</code> 方法计算这些原轮廓点到这条边的距离，从中找到距离最大的原轮廓点，如果该距离大于 <code>maxError</code>，则将该原轮廓点插入到 <code>simplified</code> 中此边的中间，否则跳过此边。</li>
-<li>如果设置了 <code>maxEdgeLen</code> 且设置了需要进行细化，则依次遍历 <code>simplified</code> 组成的每一条边.
+<li>如果设置了 <code>maxEdgeLen</code> 且设置了需要进行细分，则依次遍历 <code>simplified</code> 组成的每一条边.
 <ul>
-<li>如果边的起点的下一个原始轮廓点的 <code>region</code> 不为 0 且设置了细化墙边（RC_CONTOUR_TESS_WALL_EDGES），或者下一个原始轮廓点为 <code>area</code> 边界且设置了细化区域边（RC_CONTOUR_TESS_AREA_EDGES），则此边需要进行细化处理。</li>
-<li>对于需要细化处理的边，如果边的长度大于 <code>maxEdgeLen</code>，且边上除端点外的原始轮廓点数量大于 1，则取中间的原始轮廓点，插入到 <code>simplified</code> 中此边的中间。</li>
+<li>如果边的起点的下一个原始轮廓点的 <code>region</code> 不为 0 且设置了细分墙边（RC_CONTOUR_TESS_WALL_EDGES），或者下一个原始轮廓点为 <code>area</code> 边界且设置了细分区域边（RC_CONTOUR_TESS_AREA_EDGES），则此边需要进行细分处理。</li>
+<li>对于需要细分处理的边，如果边的长度大于 <code>maxEdgeLen</code>，且边上除端点外的原始轮廓点数量大于 1，则取中间的原始轮廓点，插入到 <code>simplified</code> 中此边的中间。</li>
 </ul>
 </li>
 <li>遍历 <code>simplified</code> 的每个点，将索引信息替换为 <code>region</code> 信息。</li>
@@ -5926,8 +5926,8 @@ bool rcBuildPolyMeshDetail(rcContext* ctx, const rcPolyMesh&amp; mesh, const rcC
 <ul>
 <li>使用 <code>rcPolyMesh</code> 网格初始化参数，包括单元格大小 <code>mesh.cs</code> 、单元格高度 <code>mesh.ch</code> 、包围盒最小值 <code>mesh.bmin</code> 、borderSize 大小 <code>mesh.borderSize</code> 等。</li>
 <li>遍历网格的每个多边形，找到其中的最大宽高尺寸。</li>
-<li>创建 <code>tris</code> 数组，用于记录细化后的三角面索引信息。</li>
-<li>创建 <code>verts</code> 数组，用于记录细化后的网格顶点坐标。</li>
+<li>创建 <code>tris</code> 数组，用于记录细分后的三角面索引信息。</li>
+<li>创建 <code>verts</code> 数组，用于记录细分后的网格顶点坐标。</li>
 <li>创建 <code>poly</code> 数组，用于记录多边形的顶点坐标。</li>
 <li>遍历网格的每个多边形，对每个多边形进行处理。
 <ul>
@@ -5955,9 +5955,9 @@ bool rcBuildPolyMeshDetail(rcContext* ctx, const rcPolyMesh&amp; mesh, const rcC
 </ul>
 </li>
 </ul>
-<h2 id=获取高度信息>获取高度信息</h2>
+<h2 id=生成高度数据>生成高度数据</h2>
 <ul>
-<li>获取高度信息方法 <code>getHeightData</code> 的实现如下：</li>
+<li>生成高度数据方法 <code>getHeightData</code> 的实现如下：</li>
 </ul>
 <pre tabindex=0><code>// Recast/Source/RecastMeshDetail.cpp
 
@@ -6083,7 +6083,7 @@ static void getHeightData(rcContext* ctx, const rcCompactHeightfield&amp; chf,
 
 ...
 </code></pre><ul>
-<li>获取高度信息的步骤如下：
+<li>生成高度数据的步骤如下：
 <ul>
 <li>如果当前 <code>region</code> 不与多个 <code>region</code> 相连，即不为 <code>RC_MULTIPLE_REGS</code>，则遍历当前多边形包围盒内每个 <code>cell</code> 的 <code>span</code>，对 <code>region</code> 和多边形 <code>region</code> 相同的 <code>span</code> 进行处理。
 <ul>
@@ -6354,24 +6354,235 @@ static bool buildPolyDetail(rcContext* ctx, const float* in, const int nin,
 </code></pre><ul>
 <li>建立多边形细节的步骤如下：
 <ul>
-<li>通过 <code>polyMinExtent</code> 方法，计算多边形的最小延伸范围 <code>minExtent</code>，即多边形每个顶点到各个边最大距离，其中所有距离的最小值。</li>
-<li>如果采样距离 <code>sampleDist</code> 大于 0 ，则对外轮廓进行细节化处理。</li>
-<li>如果 <code>minExtent</code> 小于 <code>sampleDist * 2</code> ，则
+<li>将多边形的顶点存储到 <code>verts</code> 中。</li>
+<li>通过 <code>polyMinExtent</code> 方法，计算多边形的最小延伸范围 <code>minExtent</code>，即多边形每个顶点到各个边最大距离，其中所有距离的最小值则为最小延伸范围。</li>
+<li>如果采样距离 <code>sampleDist</code> 大于 0 ，则遍历多边形的每条边，增加边上的顶点。
 <ul>
-<li>使用 <code>triangulateHull</code> 方法进行三角划分。</li>
+<li>计算边在 <code>xz</code> 平面的长度，将边以 <code>sampleDist</code> 为步长，得到多个采样点，通过 <code>getHeight</code> 方法计算每个采样点的高度。</li>
+<li>通过 <code>distancePtSeg</code> 方法计算每个采样点（不含端点）到边的距离，取其中的最大值。
+<ul>
+<li>如果距离大于 <code>sampleMaxError</code>，则将采样点添加到该边上作为一个顶点，把当前边分为两条新边（即进行细分）。对细分后的第一条新边上的每个采样点，重新计算到新边的距离，迭代细分。</li>
+<li>如果距离不大于 <code>sampleMaxError</code> 或者不存在采样点，则该新边已细分完成，继续处理下一条细分后的新边。</li>
+</ul>
+</li>
+<li>将细分后得到的新顶点加入到 verts 中，细分后的所有顶点索引按顺序存储到 <code>hull</code> 中，即新增加的顶点会存储在原始顶点之后，而 <code>hull</code> 会记录细分后多边形的顶点索引顺序。</li>
+</ul>
+</li>
+<li>如果 <code>minExtent</code> 小于 <code>sampleDist * 2</code> ，即最小延伸范围较小，不适合再内部继续细分，则
+<ul>
+<li>使用 <code>triangulateHull</code> 方法进行三角划分，得到三角面索引 <code>tris</code>。</li>
 <li>通过 <code>setTriFlags</code> 方法标记三角形边是否为外围边。</li>
 </ul>
 </li>
-<li>如果 <code>minExtent</code> 不小于 <code>sampleDist * 2</code> ，则
+<li>如果 <code>minExtent</code> 不小于 <code>sampleDist * 2</code> ，即最小延伸范围足够，可以继续进行内部细分，则
 <ul>
-<li>使用 <code>triangulateHull</code> 方法进行三角划分。</li>
-<li>如果 <code>sampleDist</code> 大于 0 ，则需要增加</li>
+<li>使用 <code>triangulateHull</code> 方法进行三角划分，得到三角面索引 <code>tris</code>。</li>
+<li>如果 <code>sampleDist</code> 大于 0 ，则需要进一步增加内部顶点。
+<ul>
+<li>将 <code>xz</code> 平面使用 <code>sampleDist</code> 为步长划分成块。</li>
+<li>根据多边形的最大最小点，得到其所覆盖的块的范围。</li>
+<li>遍历所有块，检查块是否要加入采样点。
+<ul>
+<li>块的 <code>x</code> 和 <code>z</code> 坐标为块的索引乘上 <code>sampleDist</code> ，块的 <code>y</code> 坐标为多边形的最大最小高度的平均值。</li>
+<li>通过 <code>distToPoly</code> 方法，计算块坐标到多边形的最小距离，通过射线法检查坐标是否在多边形内，如果坐标在多边形内则距离取负值。</li>
+<li>如果块坐标在多边形外或者最小距离不小于 <code>sampleDist / 2</code>，则将该块的坐标加入采样点列表 <code>samples</code>，其中 <code>y</code> 坐标通过 <code>getHeight</code> 方法计算得到。</li>
+</ul>
+</li>
+<li>对每一个未处理过的采样点，将 <code>x</code> 和 <code>z</code> 坐标加上一个很小的随机偏移量，通过 <code>distToTriMesh</code> 方法，找到采样点投影到 <code>xz</code> 平面上所属的所有三角面，并计算到三角面的最小距离，作为该采样点到三角面的最终距离。</li>
+<li>从所有采样点到三角面的最终距离中，找到距离最大的采样点，如果距离大于 <code>sampleMaxError</code> ，则将该采样点加入到 <code>verts</code> 中，标记该采样点已处理，并通过 <code>delaunayHull</code> 方法进行 Delaunay 三角剖分。</li>
+</ul>
+</li>
+<li>通过 <code>setTriFlags</code> 方法标记三角形边是否为外围边。</li>
 </ul>
 </li>
 </ul>
 </li>
 </ul>
-<h1 id=八创建导航数据>八、创建导航数据</h1>
+<h3 id=获取高度>获取高度</h3>
+<ul>
+<li>计算高度方法 <code>getHeight</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastMeshDetail.cpp
+
+...
+
+static unsigned short getHeight(const float fx, const float fy, const float fz,
+								const float /*cs*/, const float ics, const float ch,
+								const int radius, const rcHeightPatch&amp; hp)
+{
+	int ix = (int)floorf(fx*ics + 0.01f);
+	int iz = (int)floorf(fz*ics + 0.01f);
+	ix = rcClamp(ix-hp.xmin, 0, hp.width - 1);
+	iz = rcClamp(iz-hp.ymin, 0, hp.height - 1);
+	unsigned short h = hp.data[ix+iz*hp.width];
+	if (h == RC_UNSET_HEIGHT)
+	{
+		// Special case when data might be bad.
+		// Walk adjacent cells in a spiral up to 'radius', and look
+		// for a pixel which has a valid height.
+		int x = 1, z = 0, dx = 1, dz = 0;
+		int maxSize = radius * 2 + 1;
+		int maxIter = maxSize * maxSize - 1;
+
+		int nextRingIterStart = 8;
+		int nextRingIters = 16;
+
+		float dmin = FLT_MAX;
+		for (int i = 0; i &lt; maxIter; i++)
+		{
+			const int nx = ix + x;
+			const int nz = iz + z;
+
+			if (nx &gt;= 0 &amp;&amp; nz &gt;= 0 &amp;&amp; nx &lt; hp.width &amp;&amp; nz &lt; hp.height)
+			{
+				const unsigned short nh = hp.data[nx + nz*hp.width];
+				if (nh != RC_UNSET_HEIGHT)
+				{
+					const float d = fabsf(nh*ch - fy);
+					if (d &lt; dmin)
+					{
+						h = nh;
+						dmin = d;
+					}
+				}
+			}
+
+			// We are searching in a grid which looks approximately like this:
+			//  __________
+			// |2 ______ 2|
+			// | |1 __ 1| |
+			// | | |__| | |
+			// | |______| |
+			// |__________|
+			// We want to find the best height as close to the center cell as possible. This means that
+			// if we find a height in one of the neighbor cells to the center, we don't want to
+			// expand further out than the 8 neighbors - we want to limit our search to the closest
+			// of these &quot;rings&quot;, but the best height in the ring.
+			// For example, the center is just 1 cell. We checked that at the entrance to the function.
+			// The next &quot;ring&quot; contains 8 cells (marked 1 above). Those are all the neighbors to the center cell.
+			// The next one again contains 16 cells (marked 2). In general each ring has 8 additional cells, which
+			// can be thought of as adding 2 cells around the &quot;center&quot; of each side when we expand the ring.
+			// Here we detect if we are about to enter the next ring, and if we are and we have found
+			// a height, we abort the search.
+			if (i + 1 == nextRingIterStart)
+			{
+				if (h != RC_UNSET_HEIGHT)
+					break;
+
+				nextRingIterStart += nextRingIters;
+				nextRingIters += 8;
+			}
+
+			if ((x == z) || ((x &lt; 0) &amp;&amp; (x == -z)) || ((x &gt; 0) &amp;&amp; (x == 1 - z)))
+			{
+				int tmp = dx;
+				dx = -dz;
+				dz = tmp;
+			}
+			x += dx;
+			z += dz;
+		}
+	}
+	return h;
+}
+
+...
+</code></pre><ul>
+<li>获取高度 <code>getHeight</code> 方法的步骤为：
+<ul>
+<li>根据传入的 <code>x</code> 和 <code>z</code> 世界坐标，换算成其在上一步生成的高度数据中的单元格索引 <code>ix</code> 和 <code>iz</code>。</li>
+<li>如果高度数据中已经存在此单元格的高度值，则直接返回此高度值。</li>
+<li>如果高度数据中不存在此单元格的高度值，则检查周围一圈 8 个单元格的高度值，取其中最小值返回。如果没有找到高度值，则继续检查向外一圈 16 个单元格的高度值，逐圈查找，直到找到高度值返回。返回的高度值所属的单元格和传入的坐标所属单元格越接近，则该高度值误差越小。</li>
+</ul>
+</li>
+</ul>
+<h3 id=三角划分>三角划分</h3>
+<ul>
+<li>三角划分方法 <code>triangulateHull</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastMeshDetail.cpp
+
+...
+
+static void triangulateHull(const int /*nverts*/, const float* verts, const int nhull, const int* hull, const int nin, rcTempVector&lt;int&gt;&amp; tris)
+{
+	int start = 0, left = 1, right = nhull-1;
+	
+	// Start from an ear with shortest perimeter.
+	// This tends to favor well formed triangles as starting point.
+	float dmin = FLT_MAX;
+	for (int i = 0; i &lt; nhull; i++)
+	{
+		if (hull[i] &gt;= nin) continue; // Ears are triangles with original vertices as middle vertex while others are actually line segments on edges
+		int pi = prev(i, nhull);
+		int ni = next(i, nhull);
+		const float* pv = &amp;verts[hull[pi]*3];
+		const float* cv = &amp;verts[hull[i]*3];
+		const float* nv = &amp;verts[hull[ni]*3];
+		const float d = vdist2(pv,cv) + vdist2(cv,nv) + vdist2(nv,pv);
+		if (d &lt; dmin)
+		{
+			start = i;
+			left = ni;
+			right = pi;
+			dmin = d;
+		}
+	}
+	
+	// Add first triangle
+	tris.push_back(hull[start]);
+	tris.push_back(hull[left]);
+	tris.push_back(hull[right]);
+	tris.push_back(0);
+	
+	// Triangulate the polygon by moving left or right,
+	// depending on which triangle has shorter perimeter.
+	// This heuristic was chose empirically, since it seems
+	// handle tessellated straight edges well.
+	while (next(left, nhull) != right)
+	{
+		// Check to see if se should advance left or right.
+		int nleft = next(left, nhull);
+		int nright = prev(right, nhull);
+		
+		const float* cvleft = &amp;verts[hull[left]*3];
+		const float* nvleft = &amp;verts[hull[nleft]*3];
+		const float* cvright = &amp;verts[hull[right]*3];
+		const float* nvright = &amp;verts[hull[nright]*3];
+		const float dleft = vdist2(cvleft, nvleft) + vdist2(nvleft, cvright);
+		const float dright = vdist2(cvright, nvright) + vdist2(cvleft, nvright);
+		
+		if (dleft &lt; dright)
+		{
+			tris.push_back(hull[left]);
+			tris.push_back(hull[nleft]);
+			tris.push_back(hull[right]);
+			tris.push_back(0);
+			left = nleft;
+		}
+		else
+		{
+			tris.push_back(hull[left]);
+			tris.push_back(hull[nright]);
+			tris.push_back(hull[right]);
+			tris.push_back(0);
+			right = nright;
+		}
+	}
+}
+
+...
+</code></pre><h3 id=计算点到三角面距离>计算点到三角面距离</h3>
+<ul>
+<li>计算点到三角面距离方法 <code>distToTriMesh</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>
+</code></pre><h3 id=delaunay-三角剖分>Delaunay 三角剖分</h3>
+<ul>
+<li>Delaunay 三角剖分方法 <code>delaunayHull</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>
+</code></pre><h1 id=八创建导航数据>八、创建导航数据</h1>
 <h1 id=参考>参考</h1>
 <ul>
 <li><a href=https://github.com/recastnavigation/recastnavigation>Github - Recast Navigation</a></li>
