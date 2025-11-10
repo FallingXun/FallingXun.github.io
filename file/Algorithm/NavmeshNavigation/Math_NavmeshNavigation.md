@@ -27,3 +27,26 @@ v_{pt'[0]} = \frac{v_{j[0]} - v_{i[0]}}{v_{j[2]} - v_{i[2]}} \cdot (v_{pt[2]} - 
 ```math
 |\bold{normal}|cos\theta = normal.y < cos {\theta}_{walkableSlopeAngle}
 ```
+
+- Math_6
+```math
+\overrightarrow{AP} = u\overrightarrow{AB} + v\overrightarrow{AC}
+```
+
+- Math_7
+```math
+\overrightarrow{AP} \cdot \overrightarrow{AB}= u(\overrightarrow{AB} \cdot \overrightarrow{AB}) + v(\overrightarrow{AB} \cdot \overrightarrow{AC})
+\\
+\
+\\
+\overrightarrow{AP} \cdot \overrightarrow{AC}= u(\overrightarrow{AB} \cdot \overrightarrow{AC}) + v(\overrightarrow{AC} \cdot \overrightarrow{AC})
+```
+
+- Math_8
+```math
+u = \frac{(\overrightarrow{AP} \cdot \overrightarrow{AB})(\overrightarrow{AC} \cdot \overrightarrow{AC}) - (\overrightarrow{AP} \cdot \overrightarrow{AC})(\overrightarrow{AC} \cdot \overrightarrow{AB})}{(\overrightarrow{AB} \cdot \overrightarrow{AB})(\overrightarrow{AC} \cdot \overrightarrow{AC}) - (\overrightarrow{AB} \cdot \overrightarrow{AC})(\overrightarrow{AB} \cdot \overrightarrow{AC})}
+\\
+\
+\\
+v = \frac{(\overrightarrow{AP} \cdot \overrightarrow{AC})(\overrightarrow{AB} \cdot \overrightarrow{AB}) - (\overrightarrow{AP} \cdot \overrightarrow{AB})(\overrightarrow{AB} \cdot \overrightarrow{AC})}{(\overrightarrow{AB} \cdot \overrightarrow{AB})(\overrightarrow{AC} \cdot \overrightarrow{AC}) - (\overrightarrow{AB} \cdot \overrightarrow{AC})(\overrightarrow{AB} \cdot \overrightarrow{AC})}
+```

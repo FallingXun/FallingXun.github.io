@@ -6572,12 +6572,74 @@ static void triangulateHull(const int /*nverts*/, const float* verts, const int 
 }
 
 ...
-</code></pre><h3 id=计算点到三角面距离>计算点到三角面距离</h3>
+</code></pre><ul>
+<li>三角划分 <code>triangulateHull</code> 方法的步骤为：
 <ul>
-<li>计算点到三角面距离方法 <code>distToTriMesh</code> 的实现如下：</li>
+<li>遍历多边形所有原本的顶点，计算原顶点和左右相邻的两个细化后顶点组成的三角形的周长，找到周长最小的原顶点，作为三角划分的起始点，将原顶点、左侧相邻顶点和右侧相邻顶点作为第一个三角形的三个顶点，将索引加入到 <code>tris</code> 中。</li>
+<li>计算左侧三角形周长（左侧顶点、左侧顶点的下一个顶点、右侧顶点）和右侧三角形周长（右侧顶点、右侧顶点的上一个顶点、左侧顶点），比较周长大小。
+<ul>
+<li>如果左侧三角形周长小，则将左侧顶点、左侧顶点的下一个顶点、右侧顶点作为下一个三角形的三个顶点，将索引加入到 <code>tris</code> 中，并将左侧顶点的下一个顶点作为新的左侧顶点。</li>
+<li>如果右侧三角形周长小或者两者周长相等，则将右侧顶点、右侧顶点的上一个顶点、左侧顶点作为下一个三角形的三个顶点，将索引加入到 <code>tris</code> 中，并将右侧顶点的上一个顶点作为新的右侧顶点。</li>
+<li>重复上述步骤，直到左侧顶点的下一个顶点为右侧顶点，则划分完成。
+<img src="/img/Algorithm/NavmeshNavigation/Nav_6.gif?raw=true" alt=Nav_6.gif>
+</li>
 </ul>
-<pre tabindex=0><code>
-</code></pre><h3 id=delaunay-三角剖分>Delaunay 三角剖分</h3>
+</li>
+</ul>
+</li>
+</ul>
+<h3 id=计算点到三角面距离>计算点到三角面距离</h3>
+<ul>
+<li>计算点到三角面距离方法 <code>distPtTri</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastMeshDetail.cpp
+
+...
+
+static float distPtTri(const float* p, const float* a, const float* b, const float* c)
+{
+	float v0[3], v1[3], v2[3];
+	rcVsub(v0, c,a);
+	rcVsub(v1, b,a);
+	rcVsub(v2, p,a);
+	
+	const float dot00 = vdot2(v0, v0);
+	const float dot01 = vdot2(v0, v1);
+	const float dot02 = vdot2(v0, v2);
+	const float dot11 = vdot2(v1, v1);
+	const float dot12 = vdot2(v1, v2);
+	
+	// Compute barycentric coordinates
+	const float invDenom = 1.0f / (dot00 * dot11 - dot01 * dot01);
+	const float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+	float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+	
+	// If point lies inside the triangle, return interpolated y-coord.
+	static const float EPS = 1e-4f;
+	if (u &gt;= -EPS &amp;&amp; v &gt;= -EPS &amp;&amp; (u+v) &lt;= 1+EPS)
+	{
+		const float y = a[1] + v0[1]*u + v1[1]*v;
+		return fabsf(y-p[1]);
+	}
+	return FLT_MAX;
+}
+
+...
+</code></pre><ul>
+<li>计算点 P 到三角面 ABC 距离，是通过先检查点 P 是否在三角形 <code>xz</code> 平面内，再进行插值计算得到。</li>
+<li>点 P 在 <code>xz</code> 平面可以表示为
+<img src="/img/Algorithm/NavmeshNavigation/Math_6.png?raw=true" alt=Math_6.png>
+</li>
+<li>两边分别乘上向量 AB 和 AC ，可以得到
+<img src="/img/Algorithm/NavmeshNavigation/Math_7.png?raw=true" alt=Math_7.png>
+解方程组可以得到
+<img src="/img/Algorithm/NavmeshNavigation/Math_8.png?raw=true" alt=Math_8.png>
+</li>
+<li>如果点 P 在三角形内，则点 P 为三角形的重心坐标，则 <code>u</code> 和 <code>v</code> 都大于 0，且 <code>u + v</code> 不超过 1。此时点 P 的高度则可以通过插值得到，即
+<img src="/img/Algorithm/NavmeshNavigation/Math_9.png?raw=true" alt=Math_9.png>
+</li>
+</ul>
+<h3 id=delaunay-三角剖分>Delaunay 三角剖分</h3>
 <ul>
 <li>Delaunay 三角剖分方法 <code>delaunayHull</code> 的实现如下：</li>
 </ul>
