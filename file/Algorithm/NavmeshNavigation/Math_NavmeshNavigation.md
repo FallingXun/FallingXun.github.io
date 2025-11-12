@@ -50,3 +50,75 @@ u = \frac{(\overrightarrow{AP} \cdot \overrightarrow{AB})(\overrightarrow{AC} \c
 \\
 v = \frac{(\overrightarrow{AP} \cdot \overrightarrow{AC})(\overrightarrow{AB} \cdot \overrightarrow{AB}) - (\overrightarrow{AP} \cdot \overrightarrow{AB})(\overrightarrow{AB} \cdot \overrightarrow{AC})}{(\overrightarrow{AB} \cdot \overrightarrow{AB})(\overrightarrow{AC} \cdot \overrightarrow{AC}) - (\overrightarrow{AB} \cdot \overrightarrow{AC})(\overrightarrow{AB} \cdot \overrightarrow{AC})}
 ```
+
+- Math_9
+```math
+y_P = y_A + u \cdot y_{\overrightarrow{AB}} + v \cdot y_{\overrightarrow{AC}}
+```
+
+- Math_10
+```math
+\begin{equation*}
+\left\{
+\begin{aligned}    
+& (c_x - p_{1x}) ^ 2 + (c_z - p_{1z}) ^ 2 = (c_x - p_{2x}) ^ 2 + (c_z - p_{2z}) ^ 2   \\   
+& (c_x - p_{1x}) ^ 2 + (c_z - p_{1z}) ^ 2 = (c_x - p_{3x}) ^ 2 + (c_z - p_{3z}) ^ 2
+\end{aligned}
+\right.
+\end{equation*}
+```
+
+- Math_11
+```math
+\begin{equation*}
+\left\{
+\begin{aligned}    
+& c_x(p_{2x} - p_{1x}) + c_z(p_{2z} - p_{1z}) = \frac{(p_{2x} ^ 2 + p_{2z} ^ 2) - (p_{1x} ^ 2 + p_{1z} ^ 2)}{2}
+\\
+& c_x(p_{3x} - p_{1x}) + c_z(p_{3z} - p_{1z}) = \frac{(p_{3x} ^ 2 + p_{3z} ^ 2) - (p_{1x} ^ 2 + p_{1z} ^ 2)}{2}
+\end{aligned}
+\right.
+\end{equation*}
+```
+
+- Math_12
+```math
+c_z = \frac{(p_{2x} ^ 2 + p_{2z} ^ 2) - (p_{1x} ^ 2 + p_{1z} ^ 2) - 2c_x(p_{2x} - p_{1x})}{2(p_{2z} - p_{1z})}
+```
+
+- Math_13
+```math
+c_x(p_{3x} - p_{1x}) + \frac{(p_{2x} ^ 2 + p_{2z} ^ 2) - (p_{1x} ^ 2 + p_{1z} ^ 2) - 2c_x(p_{2x} - p_{1x})}{2(p_{2z} - p_{1z})}(p_{3z} - p_{1z}) = \frac{(p_{3x} ^ 2 + p_{3z} ^ 2) - (p_{1x} ^ 2 + p_{1z} ^ 2)}{2}
+```
+
+- Math_14
+```math
+c_x = \frac{[(p_{3x} ^ 2 + p_{3z} ^ 2) - (p_{1x} ^ 2 + p_{1z} ^ 2)](p_{2z} - p_{1z}) - [(p_{2x} ^ 2 + p_{2z} ^ 2) - (p_{1x} ^ 2 + p_{1z} ^ 2)](p_{3z} - p_{1z})}{2[(p_{3x} - p_{1x})(p_{2z} - p_{1z}) - (p_{2x} - p_{1x})(p_{3z} - p_{1z})]}
+\\\
+\\\
+= \frac{(p_{2x} ^ 2 + p_{2z} ^ 2)(p_{3z} - p_{1z}) - (p_{3x} ^ 2 + p_{3z} ^ 2)(p_{2z} - p_{1z}) + (p_{1x} ^ 2 + p_{1z} ^ 2)(p_{2z} - p_{3z})}{2[(p_{2x} - p_{1x})(p_{3z} - p_{1z}) - (p_{3x} - p_{1x})(p_{2z} - p_{1z})]}
+```
+
+- Math_15
+```math
+p_{1Sq} = p_{1x} ^ 2 + p_{1z} ^ 2
+\\\
+\\
+p_{2Sq} = p_{2x} ^ 2 + p_{2z} ^ 2
+\\\
+\\
+p_{3Sq} = p_{3x} ^ 2 + p_{3z} ^ 2
+\\\
+\\
+S_{\Delta 123} = \frac{\overrightarrow {p_1 p_2} \times \overrightarrow {p_1 p_3}}{2} = \frac{(p_{2x} - p_{1x})(p_{3z} - p_{1z}) - (p_{3x} - p_{1x})(p_{2z} - p_{1z})}{2}
+```
+
+- Math_16
+``` math
+c_x = \frac{p_{1Sq}(p_{2z} - p_{3z}) + p_{2Sq}(p_{3z} - p_{1z}) + p_{3Sq}(p_{1z} - p_{2z})}{2S_{\Delta 123}}
+```
+
+- Math_17
+``` math
+c_z = \frac{p_{1Sq}(p_{3x} - p_{2x}) + p_{2Sq}(p_{1x} - p_{3x}) + p_{3Sq}(p_{2x} - p_{1x})}{2S_{\Delta 123}}
+```
