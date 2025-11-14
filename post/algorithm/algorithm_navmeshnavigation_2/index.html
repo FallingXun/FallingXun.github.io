@@ -6389,7 +6389,7 @@ static bool buildPolyDetail(rcContext* ctx, const float* in, const int nin,
 </ul>
 </li>
 <li>对每一个未处理过的采样点，将 <code>x</code> 和 <code>z</code> 坐标加上一个很小的随机偏移量，通过 <code>distToTriMesh</code> 方法，找到采样点投影到 <code>xz</code> 平面上所属的所有三角面，并计算到三角面的最小距离，作为该采样点到三角面的最终距离。</li>
-<li>从所有采样点到三角面的最终距离中，找到距离最大的采样点，如果距离大于 <code>sampleMaxError</code> ，则将该采样点加入到 <code>verts</code> 中，标记该采样点已处理，并通过 <code>delaunayHull</code> 方法进行 Delaunay 三角剖分。</li>
+<li>从所有采样点到三角面的最终距离中，找到距离最大的采样点，如果距离大于 <code>sampleMaxError</code> ，则将该采样点加入到 <code>verts</code> 中，标记该采样点已处理，并通过 <code>delaunayHull</code> 方法对整个多边形重新进行 Delaunay 三角剖分（舍弃 <code>triangulateHull</code> 和上一次 <code>delaunayHull</code> 的剖分结果）。</li>
 </ul>
 </li>
 <li>通过 <code>setTriFlags</code> 方法标记三角形边是否为外围边。</li>
@@ -6641,6 +6641,25 @@ static float distPtTri(const float* p, const float* a, const float* b, const flo
 </ul>
 <h3 id=delaunay-三角剖分>Delaunay 三角剖分</h3>
 <ul>
+<li>三角剖分算法的基础概念如下（引自百度百科）：
+<ul>
+<li>三角剖分
+假设 <code>V</code> 是二维实数域上的有限点集，边 <code>e</code> 是由点集中的点作为端点构成的封闭线段, <code>E</code>为 <code>e</code> 的集合。那么该点集 <code>V</code> 的一个三角剖分 <code>T=(V,E)</code> 是一个平面图 <code>G</code>，该平面图满足条件：
+- 除了端点，平面图中的边不包含点集中的任何点。
+- 没有相交边。
+- 平面图中所有的面都是三角面，且所有三角面的合集是散点集<code>V</code> 的凸包。</li>
+<li>Delaunay 边
+<ul>
+<li>假设 <code>E</code> 中的一条边 <code>e</code>（两个端点为 <code>a</code>、<code>b</code>），<code>e</code> 若满足下列条件，则称之为 Delaunay 边：存在一个圆经过 <code>a</code>、<code>b</code> 两点，圆内（注意是圆内，圆上最多三点共圆）不含点集 <code>V</code> 中任何其他的点，这一特性又称空圆特性。</li>
+</ul>
+</li>
+<li>Delaunay三角剖分
+<ul>
+<li>如果点集 <code>V</code> 的一个三角剖分 <code>T</code> 只包含 Delaunay 边，那么该三角剖分称为 Delaunay 三角剖分。</li>
+</ul>
+</li>
+</ul>
+</li>
 <li>Delaunay 三角剖分方法 <code>delaunayHull</code> 的实现如下：</li>
 </ul>
 <pre tabindex=0><code>// Recast/Source/RecastMeshDetail.cpp
@@ -6724,7 +6743,24 @@ static void delaunayHull(rcContext* ctx, const int npts, const float* pts,
 }
 
 ...
-</code></pre><h4 id=计算三角形外接圆>计算三角形外接圆</h4>
+</code></pre><ul>
+<li><code>delaunayHull</code> 方法进行三角剖分的步骤为：
+<ul>
+<li>遍历细化后的多边形的每条边，加入到 <code>edge</code> 中，并标记边的逆时针方向为 <code>EV_HULL</code> ，即逆时针方向归属于外轮廓的某个三角形索引，顺时针方向为 <code>EV_UNDEF</code> ，顺时针方向暂无归属。
+<ul>
+<li>三角形的每条边最多能与另一个三角形共用，此时逆时针方向的边归属于一个三角形，顺时针方向的边归属于另一个三角形。</li>
+</ul>
+</li>
+<li>通过 <code>completeFacet</code> 方法，对 <code>edge</code> 中的每一条边，找到一个点，使得该点和边的两个顶点组成三角形的外接圆半径最小，将该三角形不在 <code>edge</code> 中的新边加入到 <code>edge</code> 中，并设置三条边方向归属的三角形索引。</li>
+<li>遍历 <code>edge</code> 中的每一条边，根据边方向归属的三角形索引，将顶点索引加入到 <code>tris</code> 中。
+<ul>
+<li>源码中使用 <code>e[3]</code> 处理逆时针方向的边，<code>e[2]</code> 处理顺时针方向的边，和 <code>addEdge</code> 、<code>completeFacet</code> 方法中处理的顺序相反，可能有误。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id=计算三角形外接圆>计算三角形外接圆</h4>
 <ul>
 <li>计算三角形外接圆圆心和半径方法 <code>circumCircle</code> 的实现如下：</li>
 </ul>
@@ -6782,10 +6818,131 @@ static bool circumCircle(const float* p1, const float* p2, const float* p3,
 </li>
 <li><code>circumCircle</code> 方法先将三角形的三个顶点都偏移了 <code>p1</code> 的位置，再通过 <code>vcross2</code> 方法检查三点是否共线，非共线再进行计算，最终得到的圆心坐标再加上 <code>p1</code> 即为三角形的外接圆圆心 <code>c</code>。</li>
 </ul>
+<h4 id=查找-delaunay-边空圆特性>查找 Delaunay 边（空圆特性）</h4>
+<ul>
+<li>查找 Delaunay 边是通过 <code>completeFacet</code> 方法进行的，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Recast/Source/RecastMeshDetail.cpp
+
+...
+
+static void completeFacet(rcContext* ctx, const float* pts, int npts, int* edges, int&amp; nedges, const int maxEdges, int&amp; nfaces, int e)
+{
+	static const float EPS = 1e-5f;
+	
+	int* edge = &amp;edges[e*4];
+	
+	// Cache s and t.
+	int s,t;
+	if (edge[2] == EV_UNDEF)
+	{
+		s = edge[0];
+		t = edge[1];
+	}
+	else if (edge[3] == EV_UNDEF)
+	{
+		s = edge[1];
+		t = edge[0];
+	}
+	else
+	{
+	    // Edge already completed.
+	    return;
+	}
+    
+	// Find best point on left of edge.
+	int pt = npts;
+	float c[3] = {0,0,0};
+	float r = -1;
+	for (int u = 0; u &lt; npts; ++u)
+	{
+		if (u == s || u == t) continue;
+		if (vcross2(&amp;pts[s*3], &amp;pts[t*3], &amp;pts[u*3]) &gt; EPS)
+		{
+			if (r &lt; 0)
+			{
+				// The circle is not updated yet, do it now.
+				pt = u;
+				circumCircle(&amp;pts[s*3], &amp;pts[t*3], &amp;pts[u*3], c, r);
+				continue;
+			}
+			const float d = vdist2(c, &amp;pts[u*3]);
+			const float tol = 0.001f;
+			if (d &gt; r*(1+tol))
+			{
+				// Outside current circumcircle, skip.
+				continue;
+			}
+			else if (d &lt; r*(1-tol))
+			{
+				// Inside safe circumcircle, update circle.
+				pt = u;
+				circumCircle(&amp;pts[s*3], &amp;pts[t*3], &amp;pts[u*3], c, r);
+			}
+			else
+			{
+				// Inside epsilon circum circle, do extra tests to make sure the edge is valid.
+				// s-u and t-u cannot overlap with s-pt nor t-pt if they exists.
+				if (overlapEdges(pts, edges, nedges, s,u))
+					continue;
+				if (overlapEdges(pts, edges, nedges, t,u))
+					continue;
+				// Edge is valid.
+				pt = u;
+				circumCircle(&amp;pts[s*3], &amp;pts[t*3], &amp;pts[u*3], c, r);
+			}
+		}
+	}
+	
+	// Add new triangle or update edge info if s-t is on hull.
+	if (pt &lt; npts)
+	{
+		// Update face information of edge being completed.
+		updateLeftFace(&amp;edges[e*4], s, t, nfaces);
+		
+		// Add new edge or update face info of old edge.
+		e = findEdge(edges, nedges, pt, s);
+		if (e == EV_UNDEF)
+		    addEdge(ctx, edges, nedges, maxEdges, pt, s, nfaces, EV_UNDEF);
+		else
+		    updateLeftFace(&amp;edges[e*4], pt, s, nfaces);
+		
+		// Add new edge or update face info of old edge.
+		e = findEdge(edges, nedges, t, pt);
+		if (e == EV_UNDEF)
+		    addEdge(ctx, edges, nedges, maxEdges, t, pt, nfaces, EV_UNDEF);
+		else
+		    updateLeftFace(&amp;edges[e*4], t, pt, nfaces);
+		
+		nfaces++;
+	}
+	else
+	{
+		updateLeftFace(&amp;edges[e*4], s, t, EV_HULL);
+	}
+}
+
+...
+
+</code></pre><ul>
+<li><code>completeFacet</code> 方法的实现思路为：
+<ul>
+<li>对于一条边，计算多边形的每个顶点和该边组成的三角形的外接圆。</li>
+<li>根据其他顶点到外接圆圆心距离进行处理：
+<ul>
+<li>如果距离大于外接圆半径，则该顶点在外接圆外，跳过该顶点。</li>
+<li>如果距离小于外接圆半径，则该顶点在外接圆内，使用该顶点和当前边组成的三角形，更新外接圆。</li>
+<li>如果距离等于外接圆半径，则该顶点在外接圆上，检查该顶点和当前边组成的三角形的另外两条边，是否和当前边交叉，如果都没有交叉，则使用</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
 <h1 id=八创建导航数据>八、创建导航数据</h1>
 <h1 id=参考>参考</h1>
 <ul>
 <li><a href=https://github.com/recastnavigation/recastnavigation>Github - Recast Navigation</a></li>
+<li><a href=https://baike.baidu.com/item/Delaunay%E4%B8%89%E8%A7%92%E5%89%96%E5%88%86%E7%AE%97%E6%B3%95/3779918>百度百科 - Delaunay三角剖分算法</a></li>
 </ul>
 <hr>
 <ul class=pager>
