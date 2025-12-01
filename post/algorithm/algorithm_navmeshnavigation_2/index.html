@@ -229,17 +229,17 @@ struct rcConfig
 </li>
 <li><code>walkableHeight</code>
 <ul>
-<li>行走时地面到天花板的最小距离（>= 3）。</li>
+<li>行走时地面到天花板的最小格子距离（>= 3）。</li>
 </ul>
 </li>
 <li><code>walkableClimb</code>
 <ul>
-<li>可跨越的最大高度。</li>
+<li>可跨越的最大格子高度。</li>
 </ul>
 </li>
 <li><code>walkableRadius</code>
 <ul>
-<li>在生成可行走区域时，需要从障碍物边缘向内收缩（侵蚀）的距离。</li>
+<li>在生成可行走区域时，需要从障碍物边缘向内收缩（侵蚀）的格子距离。</li>
 </ul>
 </li>
 <li><code>maxEdgeLen</code>
@@ -4488,7 +4488,10 @@ struct rcPolyMesh
 </code></pre><ul>
 <li>建立过程通过 <code>rcBuildPolyMesh</code> 方法实现，其代码如下：</li>
 </ul>
-<pre tabindex=0><code>
+<pre tabindex=0><code>// Recast/Source/RecastMesh.cpp
+
+...
+
 bool rcBuildPolyMesh(rcContext* ctx, const rcContourSet&amp; cset, const int nvp, rcPolyMesh&amp; mesh)
 {
 	rcAssert(ctx);
@@ -4811,7 +4814,7 @@ bool rcBuildPolyMesh(rcContext* ctx, const rcContourSet&amp; cset, const int nvp
 </code></pre><ul>
 <li><code>rcBuildPolyMesh</code> 的主要步骤如下：
 <ul>
-<li>初始化 <code>rcPolyMesh</code> 结构 <code>mesh</code> 对象，用于存储网格信息。</li>
+<li>初始化 <code>rcPolyMesh</code> 结构 <code>mesh</code> 对象，用于存储网格信息，其中 <code>mesh.polys</code> 的值初始化为 <code>0xff</code>（后续判断有效的点是判断值是否为 <code>RC_MESH_NULL_IDX</code>，即 <code>0xffff</code>，所以这里应该初始化需要设置成 <code>0xffff</code>？）。</li>
 <li>遍历 <code>cset</code> 中的轮廓处理。
 <ul>
 <li>初始化顶点索引 <code>indices</code>，通过 <code>triangulate</code> 方法将轮廓划分成三角形，存储到 <code>tris</code> 中。</li>
@@ -4828,12 +4831,12 @@ bool rcBuildPolyMesh(rcContext* ctx, const rcContourSet&amp; cset, const int nvp
 </li>
 <li>遍历 <code>mesh.verts</code> 中的每个顶点，如果该顶点标记在 <code>vflags</code> 中，则通过 <code>canRemoveVertex</code> 方法检查该顶点能否移除，如果能移除则通过 <code>removeVertex</code> 方法移除。</li>
 <li>通过 <code>buildMeshAdjacency</code> 方法，计算并记录多边形的邻居信息。</li>
-<li>如果 <code>borderSize</code> 大于 0，则检查所有多边形的非共享边，根据边的 x 、z 坐标，将边界信息记录到 <code>mesh.polys[nvp + j]</code> 中（j 为边的起始点索引）。
+<li>如果 <code>borderSize</code> 大于 0，则检查所有多边形的非共享边，根据边的 x 、z 坐标，将入口边界信息记录到 <code>mesh.polys[nvp + j]</code> 中（j 为边的起始点索引）。
 <ul>
-<li>如果边的 x 坐标都为 0 ，即为左边界，则 <code>mesh.polys[nvp + j] = 0x8001</code>。</li>
-<li>如果边的 z 坐标都为 <code>cset.height</code> ，即为上边界，则 <code>mesh.polys[nvp + j] = 0x8002</code>。</li>
-<li>如果边的 x 坐标都为 <code>cset.width</code> ，即为右边界，则 <code>mesh.polys[nvp + j] = 0x8003</code>。</li>
-<li>如果边的 z 坐标都为 0 ，即为下边界，则 <code>mesh.polys[nvp + j] = 0x8004</code>。</li>
+<li>如果边的 x 坐标都为 0 ，即为左入口边界，则 <code>mesh.polys[nvp + j] = 0x8000</code>。</li>
+<li>如果边的 z 坐标都为 <code>cset.height</code> ，即为上入口边界，则 <code>mesh.polys[nvp + j] = 0x8001</code>。</li>
+<li>如果边的 x 坐标都为 <code>cset.width</code> ，即为右入口边界，则 <code>mesh.polys[nvp + j] = 0x8002</code>。</li>
+<li>如果边的 z 坐标都为 0 ，即为下入口边界，则 <code>mesh.polys[nvp + j] = 0x8003</code>。</li>
 </ul>
 </li>
 <li>初始化 <code>mesh.flags</code> 数组，大小为 <code>mesh.npolys</code>，用于后续标记使用。</li>
@@ -5676,7 +5679,7 @@ static bool buildMeshAdjacency(unsigned short* polys, const int npolys,
 </ul>
 <h1 id=七创建细节网格>七、创建细节网格</h1>
 <ul>
-<li>七、创建细节网格过程，使用 <code>rcPolyMeshDetail</code> 结构保存细节网格数据，其定义如下：</li>
+<li>创建细节网格过程，使用 <code>rcPolyMeshDetail</code> 结构保存细节网格数据，其定义如下：</li>
 </ul>
 <pre tabindex=0><code>// Recast/Include/Recast.h
 
@@ -5933,7 +5936,7 @@ bool rcBuildPolyMeshDetail(rcContext* ctx, const rcPolyMesh&amp; mesh, const rcC
 <ul>
 <li>遍历多边形的每个顶点，获取顶点的单元格坐标，并乘上单元格大小或单元格高度，转化成相对的世界坐标，存入 <code>poly</code> 中。
 <ul>
-<li>第二步光栅化后，得到的 <code>span</code> 坐标为偏移了高度场的 <code>bmin</code> 的坐标，而第五步得到轮廓后的顶点坐标，则是在此基础上加上了 <code>borderSize</code> 的偏移，即偏移了 <code>rcPolyMesh.bmin</code>（同 <code>rcContourSet.bmin</code>）。</li>
+<li>第二步光栅化后，得到的 <code>span</code> 坐标为偏移了高度场的 <code>bmin</code> 的坐标，而第五步得到轮廓后的顶点坐标，则是在此基础上加上了 <code>borderSize</code> 的偏移，即最终顶点坐标偏移了 <code>rcPolyMesh.bmin</code>（同 <code>rcContourSet.bmin</code>）。</li>
 </ul>
 </li>
 <li>通过 <code>getHeightData</code> 方法，获取多边形的高度信息。</li>
@@ -5942,9 +5945,9 @@ bool rcBuildPolyMeshDetail(rcContext* ctx, const rcPolyMesh&amp; mesh, const rcC
 <li>将 <code>poly</code> 的坐标转化成世界坐标，即加上 <code>mesh.bmin</code> 的偏移。</li>
 <li>设置当前多边形的细节子网格信息。
 <ul>
-<li><code>dmesh.meshes[i*4+0]</code> 为之前所有多边形子网格的总顶点数。</li>
+<li><code>dmesh.meshes[i*4+0]</code> 为之前所有多边形子网格的总顶点数，即当前子网格首个顶点的索引。</li>
 <li><code>dmesh.meshes[i*4+1]</code> 为当前多边形子网格的顶点数。</li>
-<li><code>dmesh.meshes[i*4+2]</code> 为之前所有多边形子网格的总三角面数。</li>
+<li><code>dmesh.meshes[i*4+2]</code> 为之前所有多边形子网格的总三角面数，即当前子网格首个三角面的索引。</li>
 <li><code>dmesh.meshes[i*4+3]</code> 为当前多边形子网格的三角面数。</li>
 </ul>
 </li>
@@ -6857,7 +6860,799 @@ static bool circumCircle(const float* p1, const float* p2, const float* p3,
 </ul>
 </li>
 </ul>
-<h1 id=八创建导航数据>八、创建导航数据</h1>
+<h1 id=八生成导航数据>八、生成导航数据</h1>
+<ul>
+<li>生成导航数据的主要步骤为：
+<ul>
+<li>通过 <code>dtCreateNavMeshData</code> 方法创建导航网格数据，数据包括：
+<ul>
+<li>头部信息。</li>
+<li>顶点坐标。</li>
+<li>多边形信息 <code>dtPoly</code>。</li>
+<li>链接信息（仅预留空间，在加载时创建）。</li>
+<li>细节多边形（网格 <code>dtPolyDetail</code>、顶点坐标、三角面索引）。</li>
+<li>BVH 树 <code>dtBVNode</code> 。</li>
+<li>离网连接信息 <code>dtOffMeshConnection</code> 。</li>
+</ul>
+</li>
+<li>初始化导航网格。</li>
+<li>初始化导航网格查询。</li>
+</ul>
+</li>
+</ul>
+<h2 id=创建导航网格数据>创建导航网格数据</h2>
+<h3 id=头部信息>头部信息</h3>
+<ul>
+<li>头部信息的结构为 <code>dtMeshHeader</code>，其内容如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Include/DetourNavMesh.h
+...
+
+struct dtMeshHeader
+{
+	int magic;				/// 用于检测导航图块数据兼容性的标识值（DT_NAVMESH_MAGIC）
+	int version;			/// 用于检测导航图块数据兼容性的版本号（这里使用 DT_NAVMESH_VERSION）
+	int x;					/// 瓦片网格中的 x 坐标（未设置）
+	int y;					/// 瓦片网格中的 y 坐标（未设置）
+	int layer;				/// 瓦片网格中的层 id（未设置）
+	unsigned int userId;	/// 用户定义的 id（未设置）
+	int polyCount;			/// 多边形数量（细化前的多边形数量 + 离网连接数量）
+	int vertCount;			/// 顶点数量（细化前的顶点数量 + 离网连接数量的 2 倍）
+	int maxLinkCount;		/// 已分配的链接数量（多边形的边数量 + 边界边数量 * 2 + 离网连接的链接数量 * 2）
+	int detailMeshCount;	/// 细节网格中的子网格数量（细节多边形的数量）
+	
+	/// 细节网格中的顶点数量（内部细化增加的顶点数量）
+	int detailVertCount;
+	
+	int detailTriCount;			/// 细节网格的三角面数量（没有细节网格则为多边形的三角面数量）
+	int bvNodeCount;			/// BVH 树节点数量（细节多边形数量 * 2）
+	int offMeshConCount;		/// 离网连接数量
+	int offMeshBase;			/// 首个离网连接在导航网格数据顶点中的存储索引
+	float walkableHeight;		/// 可行走高度（真实距离，非格子）
+	float walkableRadius;		/// 可行走半径（真实距离，非格子）
+	float walkableClimb;		/// 可跨越高度（真实距离，非格子）
+	float bmin[3];				/// 细节网格的 AABB 包围盒的最小值坐标（真实距离，非格子）
+	float bmax[3];				/// 细节网格的 AABB 包围盒的最大值坐标（真实距离，非格子）
+	
+	/// 边界体积量化因子（1 / 单元格尺寸）
+	float bvQuantFactor;
+};
+
+...
+</code></pre><ul>
+<li>在初始化的 <code>rcConfig</code> 配置中，<code>walkableHeight</code> 、<code>walkableRadius</code> 、<code>walkableClimb</code> 都转换成了格子距离，而在最终生成的导航网格数据中，则转换成了真实距离。</li>
+</ul>
+<h3 id=顶点坐标>顶点坐标</h3>
+<ul>
+<li>顶点坐标的设置如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshBuilder.cpp
+
+...
+
+bool dtCreateNavMeshData(dtNavMeshCreateParams* params, unsigned char** outData, int* outDataSize)
+{
+	...
+
+	const int offMeshVertsBase = params-&gt;vertCount;
+	const int offMeshPolyBase = params-&gt;polyCount;
+	
+	// Store vertices
+	// Mesh vertices
+	for (int i = 0; i &lt; params-&gt;vertCount; ++i)
+	{
+		const unsigned short* iv = &amp;params-&gt;verts[i*3];
+		float* v = &amp;navVerts[i*3];
+		v[0] = params-&gt;bmin[0] + iv[0] * params-&gt;cs;
+		v[1] = params-&gt;bmin[1] + iv[1] * params-&gt;ch;
+		v[2] = params-&gt;bmin[2] + iv[2] * params-&gt;cs;
+	}
+	// Off-mesh link vertices.
+	int n = 0;
+	for (int i = 0; i &lt; params-&gt;offMeshConCount; ++i)
+	{
+		// Only store connections which start from this tile.
+		if (offMeshConClass[i*2+0] == 0xff)
+		{
+			const float* linkv = &amp;params-&gt;offMeshConVerts[i*2*3];
+			float* v = &amp;navVerts[(offMeshVertsBase + n*2)*3];
+			dtVcopy(&amp;v[0], &amp;linkv[0]);
+			dtVcopy(&amp;v[3], &amp;linkv[3]);
+			n++;
+		}
+	}
+
+	...
+
+}
+...
+
+</code></pre><ul>
+<li>顶点坐标包括直接连接和离网连接两种，对于直接连接，则将细化前的顶点坐标转换为真实世界坐标系下的坐标，存入到 <code>navVerts</code> 中，对于离网连接，则将离网连接的起始坐标和结束坐标存入到 <code>navVerts</code> 中。</li>
+</ul>
+<h3 id=多边形信息>多边形信息</h3>
+<ul>
+<li>多边形信息使用 ``dtPoly` 结构存储，其内容如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Include/DetourNavMesh.h	
+...
+
+struct dtPoly
+{
+	/// 多边形的第一个链接索引
+	unsigned int firstLink;
+
+	/// 多边形的顶点索引
+	unsigned short verts[DT_VERTS_PER_POLYGON];
+
+	/// 多边形顶点的邻居多边形索引 + 1
+	unsigned short neis[DT_VERTS_PER_POLYGON];
+
+	/// 多边形用户自定义标记  rcPolyMesh.flags
+	unsigned short flags;
+
+	/// 每个多边形的顶点数量
+	unsigned char vertCount;
+
+	/// 多边形区域和类型标记，低 6 位为区域，高 2 位为类型
+	unsigned char areaAndtype;
+
+	/// 设置区域方法
+	inline void setArea(unsigned char a) { areaAndtype = (areaAndtype &amp; 0xc0) | (a &amp; 0x3f); }
+
+	/// 设置类型方法
+	inline void setType(unsigned char t) { areaAndtype = (areaAndtype &amp; 0x3f) | (t &lt;&lt; 6); }
+
+	/// 获取区域方法
+	inline unsigned char getArea() const { return areaAndtype &amp; 0x3f; }
+
+	/// 获取类型方法
+	inline unsigned char getType() const { return areaAndtype &gt;&gt; 6; }
+};
+
+...
+</code></pre><ul>
+<li>多边形信息的设置如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshBuilder.cpp
+
+...
+
+bool dtCreateNavMeshData(dtNavMeshCreateParams* params, unsigned char** outData, int* outDataSize)
+{
+	...
+
+	const unsigned short* src = params-&gt;polys;
+	for (int i = 0; i &lt; params-&gt;polyCount; ++i)
+	{
+		dtPoly* p = &amp;navPolys[i];
+		p-&gt;vertCount = 0;
+		p-&gt;flags = params-&gt;polyFlags[i];
+		p-&gt;setArea(params-&gt;polyAreas[i]);
+		p-&gt;setType(DT_POLYTYPE_GROUND);
+		for (int j = 0; j &lt; nvp; ++j)
+		{
+			if (src[j] == MESH_NULL_IDX) break;
+			p-&gt;verts[j] = src[j];
+			if (src[nvp+j] &amp; 0x8000)
+			{
+				// Border or portal edge.
+				unsigned short dir = src[nvp+j] &amp; 0xf;
+				if (dir == 0xf) // Border
+					p-&gt;neis[j] = 0;
+				else if (dir == 0) // Portal x-
+					p-&gt;neis[j] = DT_EXT_LINK | 4;
+				else if (dir == 1) // Portal z+
+					p-&gt;neis[j] = DT_EXT_LINK | 2;
+				else if (dir == 2) // Portal x+
+					p-&gt;neis[j] = DT_EXT_LINK | 0;
+				else if (dir == 3) // Portal z-
+					p-&gt;neis[j] = DT_EXT_LINK | 6;
+			}
+			else
+			{
+				// Normal connection
+				p-&gt;neis[j] = src[nvp+j]+1;
+			}
+			
+			p-&gt;vertCount++;
+		}
+		src += nvp*2;
+	}
+	// Off-mesh connection vertices.
+	n = 0;
+	for (int i = 0; i &lt; params-&gt;offMeshConCount; ++i)
+	{
+		// Only store connections which start from this tile.
+		if (offMeshConClass[i*2+0] == 0xff)
+		{
+			dtPoly* p = &amp;navPolys[offMeshPolyBase+n];
+			p-&gt;vertCount = 2;
+			p-&gt;verts[0] = (unsigned short)(offMeshVertsBase + n*2+0);
+			p-&gt;verts[1] = (unsigned short)(offMeshVertsBase + n*2+1);
+			p-&gt;flags = params-&gt;offMeshConFlags[i];
+			p-&gt;setArea(params-&gt;offMeshConAreas[i]);
+			p-&gt;setType(DT_POLYTYPE_OFFMESH_CONNECTION);
+			n++;
+		}
+	}
+
+	...
+
+}
+...
+</code></pre><ul>
+<li>多边形信息的设置主要为 <code>dtPoly</code> 结构的设置，根据记录在 <code>polys[i * nvp * 2 + nvp + j]</code> 中（<code>i</code> 为多边形索引，<code>j</code> 为顶点索引）的邻居信息进行设置，其中顶点的邻居 <code>neis</code> 设置分为入口边界和内部两种情况。
+<ul>
+<li>对于入口边界邻居，在建立多边形网格步骤的 <code>rcBuildPolyMesh</code> 方法中，对于 <code>borderSize</code> 大于 0 的多边形，<code>polys</code> 对应的邻居信息为边界标记信息，左入口边界为 <code>0x8000</code>，上入口边界为 <code>0x8001</code>，右入口边界为 <code>0x8002</code>，下入口边界为 <code>0x8003</code>，根据 <code>polys</code> 中的值重新设置 <code>neis</code> 的值。</li>
+<li>对于内部邻居，则 <code>neis</code> 为 <code>polys</code> 对应的邻居信息（多边形索引） <code>+ 1</code>。其中 <code>+ 1</code> 是用于将 <code>0</code> 作为无邻居的处理，和多边形索引 <code>0</code> 区分开。</li>
+</ul>
+</li>
+<li><code>firstLink</code> 的设置这里未进行，会在后续初始化过程中进行设置。</li>
+</ul>
+<h3 id=链接信息>链接信息</h3>
+<ul>
+<li>链接信息使用 <code>dtLink</code> 结构存储，其内容如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Include/DetourNavMesh.h	
+
+...
+
+struct dtLink
+{
+	dtPolyRef ref;					/// 邻居多边形索引
+	unsigned int next;				/// 下一个链接索引
+	unsigned char edge;				/// 当前链接对应的多边形边的索引
+	unsigned char side;				/// 如果为包围盒链接，则表示对应的方向（左、上、右、下）
+	unsigned char bmin;				/// 如果为包围盒链接，则表示最小的子边区域。
+	unsigned char bmax;				/// 如果为包围盒链接，则表示最大的子边区域。
+};
+
+...
+</code></pre><ul>
+<li>此处并未进行链接信息的设置，仅预留了空间，后续在初始化过程进行设置。</li>
+</ul>
+<h3 id=细节多边形>细节多边形</h3>
+<ul>
+<li>如果存在细节多边形，则需要对网格参数、顶点坐标、三角面索引进行设置，其代码如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshBuilder.cpp
+
+...
+
+bool dtCreateNavMeshData(dtNavMeshCreateParams* params, unsigned char** outData, int* outDataSize)
+{
+	...
+
+	if (params-&gt;detailMeshes)
+	{
+		unsigned short vbase = 0;
+		for (int i = 0; i &lt; params-&gt;polyCount; ++i)
+		{
+			dtPolyDetail&amp; dtl = navDMeshes[i];
+			const int vb = (int)params-&gt;detailMeshes[i*4+0];
+			const int ndv = (int)params-&gt;detailMeshes[i*4+1];
+			const int nv = navPolys[i].vertCount;
+			dtl.vertBase = (unsigned int)vbase;
+			dtl.vertCount = (unsigned char)(ndv-nv);
+			dtl.triBase = (unsigned int)params-&gt;detailMeshes[i*4+2];
+			dtl.triCount = (unsigned char)params-&gt;detailMeshes[i*4+3];
+			// Copy vertices except the first 'nv' verts which are equal to nav poly verts.
+			if (ndv-nv)
+			{
+				memcpy(&amp;navDVerts[vbase*3], &amp;params-&gt;detailVerts[(vb+nv)*3], sizeof(float)*3*(ndv-nv));
+				vbase += (unsigned short)(ndv-nv);
+			}
+		}
+		// Store triangles.
+		memcpy(navDTris, params-&gt;detailTris, sizeof(unsigned char)*4*params-&gt;detailTriCount);
+	}
+	else
+	{
+		// Create dummy detail mesh by triangulating polys.
+		int tbase = 0;
+		for (int i = 0; i &lt; params-&gt;polyCount; ++i)
+		{
+			dtPolyDetail&amp; dtl = navDMeshes[i];
+			const int nv = navPolys[i].vertCount;
+			dtl.vertBase = 0;
+			dtl.vertCount = 0;
+			dtl.triBase = (unsigned int)tbase;
+			dtl.triCount = (unsigned char)(nv-2);
+			// Triangulate polygon (local indices).
+			for (int j = 2; j &lt; nv; ++j)
+			{
+				unsigned char* t = &amp;navDTris[tbase*4];
+				t[0] = 0;
+				t[1] = (unsigned char)(j-1);
+				t[2] = (unsigned char)j;
+				// Bit for each edge that belongs to poly boundary.
+				t[3] = (1&lt;&lt;2);
+				if (j == 2) t[3] |= (1&lt;&lt;0);
+				if (j == nv-1) t[3] |= (1&lt;&lt;4);
+				tbase++;
+			}
+		}
+	}
+
+	...
+}
+
+...
+</code></pre><ul>
+<li>细节多边形存储的顶点信息，都是相对于原始多边形的，即相对于 <code>navPolys</code> 数组中的多边形中增加的顶点，三角面则为三角剖分后的三角面，网格信息使用 <code>dtPolyDetail</code> 结构存储，其内容如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Include/DetourNavMesh.h
+
+...
+
+struct dtPolyDetail
+{
+	unsigned int vertBase;			/// 细化后增加的首个顶点，在所有细化顶点中的索引
+	unsigned int triBase;			/// 细化后的首个三角面，在所有三角面中的索引
+	unsigned char vertCount;		/// 细化后增加的顶点数量
+	unsigned char triCount;			/// 细化后的三角面数量
+};
+
+...
+</code></pre><ul>
+<li>对于没有细节多边形的情况，则自行划分三角面，以第一个顶点和除该顶点外的每一条边划分三角面，并设置三角面的外围边标记（<code>tris[3]</code>）。</li>
+</ul>
+<h3 id=bvh-树>BVH 树</h3>
+<ul>
+<li>BVH 树通过 <code>createBVTree</code> 方法进行构建，其代码如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshBuilder.cpp
+
+...
+
+static int createBVTree(dtNavMeshCreateParams* params, dtBVNode* nodes, int /*nnodes*/)
+{
+	// Build tree
+	float quantFactor = 1 / params-&gt;cs;
+	BVItem* items = (BVItem*)dtAlloc(sizeof(BVItem)*params-&gt;polyCount, DT_ALLOC_TEMP);
+	for (int i = 0; i &lt; params-&gt;polyCount; i++)
+	{
+		BVItem&amp; it = items[i];
+		it.i = i;
+		// Calc polygon bounds. Use detail meshes if available.
+		if (params-&gt;detailMeshes)
+		{
+			int vb = (int)params-&gt;detailMeshes[i*4+0];
+			int ndv = (int)params-&gt;detailMeshes[i*4+1];
+			float bmin[3];
+			float bmax[3];
+
+			const float* dv = &amp;params-&gt;detailVerts[vb*3];
+			dtVcopy(bmin, dv);
+			dtVcopy(bmax, dv);
+
+			for (int j = 1; j &lt; ndv; j++)
+			{
+				dtVmin(bmin, &amp;dv[j * 3]);
+				dtVmax(bmax, &amp;dv[j * 3]);
+			}
+
+			// BV-tree uses cs for all dimensions
+			it.bmin[0] = (unsigned short)dtClamp((int)((bmin[0] - params-&gt;bmin[0])*quantFactor), 0, 0xffff);
+			it.bmin[1] = (unsigned short)dtClamp((int)((bmin[1] - params-&gt;bmin[1])*quantFactor), 0, 0xffff);
+			it.bmin[2] = (unsigned short)dtClamp((int)((bmin[2] - params-&gt;bmin[2])*quantFactor), 0, 0xffff);
+
+			it.bmax[0] = (unsigned short)dtClamp((int)((bmax[0] - params-&gt;bmin[0])*quantFactor), 0, 0xffff);
+			it.bmax[1] = (unsigned short)dtClamp((int)((bmax[1] - params-&gt;bmin[1])*quantFactor), 0, 0xffff);
+			it.bmax[2] = (unsigned short)dtClamp((int)((bmax[2] - params-&gt;bmin[2])*quantFactor), 0, 0xffff);
+		}
+		else
+		{
+			const unsigned short* p = &amp;params-&gt;polys[i*params-&gt;nvp * 2];
+			it.bmin[0] = it.bmax[0] = params-&gt;verts[p[0] * 3 + 0];
+			it.bmin[1] = it.bmax[1] = params-&gt;verts[p[0] * 3 + 1];
+			it.bmin[2] = it.bmax[2] = params-&gt;verts[p[0] * 3 + 2];
+
+			for (int j = 1; j &lt; params-&gt;nvp; ++j)
+			{
+				if (p[j] == MESH_NULL_IDX) break;
+				unsigned short x = params-&gt;verts[p[j] * 3 + 0];
+				unsigned short y = params-&gt;verts[p[j] * 3 + 1];
+				unsigned short z = params-&gt;verts[p[j] * 3 + 2];
+
+				if (x &lt; it.bmin[0]) it.bmin[0] = x;
+				if (y &lt; it.bmin[1]) it.bmin[1] = y;
+				if (z &lt; it.bmin[2]) it.bmin[2] = z;
+
+				if (x &gt; it.bmax[0]) it.bmax[0] = x;
+				if (y &gt; it.bmax[1]) it.bmax[1] = y;
+				if (z &gt; it.bmax[2]) it.bmax[2] = z;
+			}
+			// Remap y
+			it.bmin[1] = (unsigned short)dtMathFloorf((float)it.bmin[1] * params-&gt;ch / params-&gt;cs);
+			it.bmax[1] = (unsigned short)dtMathCeilf((float)it.bmax[1] * params-&gt;ch / params-&gt;cs);
+		}
+	}
+	
+	int curNode = 0;
+	subdivide(items, params-&gt;polyCount, 0, params-&gt;polyCount, curNode, nodes);
+	
+	dtFree(items);
+	
+	return curNode;
+}
+
+...
+</code></pre><ul>
+<li>构建 BVH 树时，会将每个多边形的包围盒信息存储在 <code>BVItem</code> 结构中，作为树的节点，通过 <code>subdivide</code> 方法，每次选择所有子节点的整体包围盒最长的轴，将子节点进行划分，最终得到 BVH 树。</li>
+</ul>
+<h3 id=离网连接信息>离网连接信息</h3>
+<ul>
+<li>离网连接信息使用 <code>dtOffMeshConnection</code> 结构存储，其内容为：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Include/DetourNavMesh.h
+
+...
+
+struct dtOffMeshConnection
+{
+	/// 连接的起始点和终点坐标
+	float pos[6];
+
+	/// 连接点的半径
+	float rad;		
+
+	/// 连接多边形引用
+	unsigned short poly;
+
+	/// 内部链接标记
+	unsigned char flags;
+
+	/// 结束点边
+	unsigned char side;
+
+	/// 用户定义的 id
+	unsigned int userId;
+};
+
+...
+</code></pre><h2 id=初始化导航网格>初始化导航网格</h2>
+<ul>
+<li>初始化导航网格过程，即创建 <code>dtNavMesh</code> 对象，通过其 <code>init</code> 方法，对数据完成初始化后，通过 <code>addTile</code> 方法创建 <code>dtMeshTile</code> 对象，其结构如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Include/DetourNavMesh.h
+
+...
+
+struct dtMeshTile
+{
+	unsigned int salt;					/// 修改计数器，初始化为 1
+
+	unsigned int linksFreeList;			///&lt; Index to the next free link.
+	dtMeshHeader* header;				///&lt; The tile header.
+	dtPoly* polys;						/// 导航网格数据的多边形信息
+	float* verts;						/// 导航网格数据的顶点坐标
+	dtLink* links;						/// 导航网格数据的链接信息，初始化时无数据
+	dtPolyDetail* detailMeshes;			/// 导航网格数据的细节多边形网格
+	
+	///  导航网格数据的细节多边形顶点坐标
+	float* detailVerts;	
+
+	/// 导航网格数据的细节多边形三角面索引
+	unsigned char* detailTris;	
+
+	/// 导航网格数据的 BVH 树
+	dtBVNode* bvTree;
+
+	dtOffMeshConnection* offMeshCons;		/// 导航网格数据的离网连接信息
+		
+	unsigned char* data;					/// 导航网格数据的原始数据
+	int dataSize;							/// 导航网格数据的原始数据大小
+	int flags;								/// 标记信息，初始化为 dtTileFlags.DT_TILE_FREE_DATA
+	dtMeshTile* next;						/// 下一个空闲 tile，初始化为 0
+
+	...
+};
+
+...
+</code></pre><ul>
+<li>数据初始化 <code>init</code> 方法的代码如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMesh.cpp
+...
+
+dtStatus dtNavMesh::init(const dtNavMeshParams* params)
+{
+	memcpy(&amp;m_params, params, sizeof(dtNavMeshParams));
+	dtVcopy(m_orig, params-&gt;orig);
+	m_tileWidth = params-&gt;tileWidth;
+	m_tileHeight = params-&gt;tileHeight;
+	
+	// Init tiles
+	m_maxTiles = params-&gt;maxTiles;
+	m_tileLutSize = dtNextPow2(params-&gt;maxTiles/4);
+	if (!m_tileLutSize) m_tileLutSize = 1;
+	m_tileLutMask = m_tileLutSize-1;
+	
+	m_tiles = (dtMeshTile*)dtAlloc(sizeof(dtMeshTile)*m_maxTiles, DT_ALLOC_PERM);
+	if (!m_tiles)
+		return DT_FAILURE | DT_OUT_OF_MEMORY;
+	m_posLookup = (dtMeshTile**)dtAlloc(sizeof(dtMeshTile*)*m_tileLutSize, DT_ALLOC_PERM);
+	if (!m_posLookup)
+		return DT_FAILURE | DT_OUT_OF_MEMORY;
+	memset(m_tiles, 0, sizeof(dtMeshTile)*m_maxTiles);
+	memset(m_posLookup, 0, sizeof(dtMeshTile*)*m_tileLutSize);
+	m_nextFree = 0;
+	for (int i = m_maxTiles-1; i &gt;= 0; --i)
+	{
+		m_tiles[i].salt = 1;
+		m_tiles[i].next = m_nextFree;
+		m_nextFree = &amp;m_tiles[i];
+	}
+	
+	// Init ID generator values.
+#ifndef DT_POLYREF64
+	m_tileBits = dtIlog2(dtNextPow2((unsigned int)params-&gt;maxTiles));
+	m_polyBits = dtIlog2(dtNextPow2((unsigned int)params-&gt;maxPolys));
+
+    // Ensure that the bits of poly ref do not overflow.
+    dtAssert(m_tileBits + m_polyBits &lt;= 31);
+
+	// Only allow 31 salt bits, since the salt mask is calculated using 32bit uint and it will overflow.
+	m_saltBits = dtMin((unsigned int)31, 32 - m_tileBits - m_polyBits);
+
+	if (m_saltBits &lt; 10)
+		return DT_FAILURE | DT_INVALID_PARAM;
+#endif
+	
+	return DT_SUCCESS;
+}
+
+...
+</code></pre><ul>
+<li>其中，单瓦片网格在初始化的时候只会调用一次 <code>addTile</code> 方法创建一个 <code>dtMeshTile</code> 对象，存入到 <code>m_nextFree</code> 中，所以 <code>params->maxTiles</code> 为 <code>1</code>，则 <code>m_tileLutSize</code> 为 <code>1</code> ，<code>m_tileLutMask</code> 为 <code>0</code> 。各结构的概念如图：
+<img src="/img/Algorithm/NavmeshNavigation/Nav_8.png?raw=true" alt=Nav_8.png>
+</li>
+<li><code>addTile</code> 方法的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMesh.cpp
+...
+
+dtStatus dtNavMesh::addTile(unsigned char* data, int dataSize, int flags,
+							dtTileRef lastRef, dtTileRef* result)
+{
+	// Make sure the data is in right format.
+	dtMeshHeader* header = (dtMeshHeader*)data;
+	if (header-&gt;magic != DT_NAVMESH_MAGIC)
+		return DT_FAILURE | DT_WRONG_MAGIC;
+	if (header-&gt;version != DT_NAVMESH_VERSION)
+		return DT_FAILURE | DT_WRONG_VERSION;
+
+#ifndef DT_POLYREF64
+	// Do not allow adding more polygons than specified in the NavMesh's maxPolys constraint.
+	// Otherwise, the poly ID cannot be represented with the given number of bits.
+	if (m_polyBits &lt; dtIlog2(dtNextPow2((unsigned int)header-&gt;polyCount)))
+		return DT_FAILURE | DT_INVALID_PARAM;
+#endif
+		
+	// Make sure the location is free.
+	if (getTileAt(header-&gt;x, header-&gt;y, header-&gt;layer))
+		return DT_FAILURE | DT_ALREADY_OCCUPIED;
+		
+	// Allocate a tile.
+	dtMeshTile* tile = 0;
+	if (!lastRef)
+	{
+		if (m_nextFree)
+		{
+			tile = m_nextFree;
+			m_nextFree = tile-&gt;next;
+			tile-&gt;next = 0;
+		}
+	}
+	else
+	{
+		// Try to relocate the tile to specific index with same salt.
+		int tileIndex = (int)decodePolyIdTile((dtPolyRef)lastRef);
+		if (tileIndex &gt;= m_maxTiles)
+			return DT_FAILURE | DT_OUT_OF_MEMORY;
+		// Try to find the specific tile id from the free list.
+		dtMeshTile* target = &amp;m_tiles[tileIndex];
+		dtMeshTile* prev = 0;
+		tile = m_nextFree;
+		while (tile &amp;&amp; tile != target)
+		{
+			prev = tile;
+			tile = tile-&gt;next;
+		}
+		// Could not find the correct location.
+		if (tile != target)
+			return DT_FAILURE | DT_OUT_OF_MEMORY;
+		// Remove from freelist
+		if (!prev)
+			m_nextFree = tile-&gt;next;
+		else
+			prev-&gt;next = tile-&gt;next;
+
+		// Restore salt.
+		tile-&gt;salt = decodePolyIdSalt((dtPolyRef)lastRef);
+	}
+
+	// Make sure we could allocate a tile.
+	if (!tile)
+		return DT_FAILURE | DT_OUT_OF_MEMORY;
+	
+	// Insert tile into the position lut.
+	int h = computeTileHash(header-&gt;x, header-&gt;y, m_tileLutMask);
+	tile-&gt;next = m_posLookup[h];
+	m_posLookup[h] = tile;
+	
+	// Patch header pointers.
+	const int headerSize = dtAlign4(sizeof(dtMeshHeader));
+	const int vertsSize = dtAlign4(sizeof(float)*3*header-&gt;vertCount);
+	const int polysSize = dtAlign4(sizeof(dtPoly)*header-&gt;polyCount);
+	const int linksSize = dtAlign4(sizeof(dtLink)*(header-&gt;maxLinkCount));
+	const int detailMeshesSize = dtAlign4(sizeof(dtPolyDetail)*header-&gt;detailMeshCount);
+	const int detailVertsSize = dtAlign4(sizeof(float)*3*header-&gt;detailVertCount);
+	const int detailTrisSize = dtAlign4(sizeof(unsigned char)*4*header-&gt;detailTriCount);
+	const int bvtreeSize = dtAlign4(sizeof(dtBVNode)*header-&gt;bvNodeCount);
+	const int offMeshLinksSize = dtAlign4(sizeof(dtOffMeshConnection)*header-&gt;offMeshConCount);
+	
+	unsigned char* d = data + headerSize;
+	tile-&gt;verts = dtGetThenAdvanceBufferPointer&lt;float&gt;(d, vertsSize);
+	tile-&gt;polys = dtGetThenAdvanceBufferPointer&lt;dtPoly&gt;(d, polysSize);
+	tile-&gt;links = dtGetThenAdvanceBufferPointer&lt;dtLink&gt;(d, linksSize);
+	tile-&gt;detailMeshes = dtGetThenAdvanceBufferPointer&lt;dtPolyDetail&gt;(d, detailMeshesSize);
+	tile-&gt;detailVerts = dtGetThenAdvanceBufferPointer&lt;float&gt;(d, detailVertsSize);
+	tile-&gt;detailTris = dtGetThenAdvanceBufferPointer&lt;unsigned char&gt;(d, detailTrisSize);
+	tile-&gt;bvTree = dtGetThenAdvanceBufferPointer&lt;dtBVNode&gt;(d, bvtreeSize);
+	tile-&gt;offMeshCons = dtGetThenAdvanceBufferPointer&lt;dtOffMeshConnection&gt;(d, offMeshLinksSize);
+
+	// If there are no items in the bvtree, reset the tree pointer.
+	if (!bvtreeSize)
+		tile-&gt;bvTree = 0;
+
+	// Build links freelist
+	tile-&gt;linksFreeList = 0;
+	tile-&gt;links[header-&gt;maxLinkCount-1].next = DT_NULL_LINK;
+	for (int i = 0; i &lt; header-&gt;maxLinkCount-1; ++i)
+		tile-&gt;links[i].next = i+1;
+
+	// Init tile.
+	tile-&gt;header = header;
+	tile-&gt;data = data;
+	tile-&gt;dataSize = dataSize;
+	tile-&gt;flags = flags;
+
+	connectIntLinks(tile);
+
+	// Base off-mesh connections to their starting polygons and connect connections inside the tile.
+	baseOffMeshLinks(tile);
+	connectExtOffMeshLinks(tile, tile, -1);
+
+	// Create connections with neighbour tiles.
+	static const int MAX_NEIS = 32;
+	dtMeshTile* neis[MAX_NEIS];
+	int nneis;
+	
+	// Connect with layers in current tile.
+	nneis = getTilesAt(header-&gt;x, header-&gt;y, neis, MAX_NEIS);
+	for (int j = 0; j &lt; nneis; ++j)
+	{
+		if (neis[j] == tile)
+			continue;
+	
+		connectExtLinks(tile, neis[j], -1);
+		connectExtLinks(neis[j], tile, -1);
+		connectExtOffMeshLinks(tile, neis[j], -1);
+		connectExtOffMeshLinks(neis[j], tile, -1);
+	}
+	
+	// Connect with neighbour tiles.
+	for (int i = 0; i &lt; 8; ++i)
+	{
+		nneis = getNeighbourTilesAt(header-&gt;x, header-&gt;y, i, neis, MAX_NEIS);
+		for (int j = 0; j &lt; nneis; ++j)
+		{
+			connectExtLinks(tile, neis[j], i);
+			connectExtLinks(neis[j], tile, dtOppositeTile(i));
+			connectExtOffMeshLinks(tile, neis[j], i);
+			connectExtOffMeshLinks(neis[j], tile, dtOppositeTile(i));
+		}
+	}
+	
+	if (result)
+		*result = getTileRef(tile);
+	
+	return DT_SUCCESS;
+}
+
+...
+</code></pre><ul>
+<li><code>addTile</code> 的主要步骤为：
+<ul>
+<li>根据 <code>dtMeshHeader</code> 中的 <code>x</code> 、 <code>y</code> 、 <code>layer</code> 以及 <code>m_tileLutMask</code>，在 <code>m_posLookup</code> 中查找对应的 <code>dtMeshTile</code> 对象，如果没有找到则取 <code>m_nextFree</code>，并将导航网格数据存入 <code>dtMeshTile</code> 对象中。</li>
+<li>将 <code>tile->links[i].next</code> 初始化为 <code>i + 1</code>。</li>
+<li>通过 <code>connectIntLinks</code> 方法，将每个多边形的顶点对应的邻居多边形信息，添加到 <code>tile->links</code> 中，并将首个 <code>dtLink</code> 存入到 <code>tile->polys[i]->firstLink</code> 中。</li>
+<li>通过 <code>baseOffMeshLinks</code> 方法，找到每个离网连接起始顶点的最近多边形，将最近多边形创建链接 <code>dtLink</code> 插入到离网连接起始顶点 <code>firstLink</code> 的头部，同时将离网连接起始顶点创建链接 <code>dtLink</code> 插入到最近多边形的 <code>firstLink</code> 的头部。</li>
+<li>通过 <code>connectExtOffMeshLinks</code> 方法，找到每个离网连接结束顶点的最近多边形，将最近多边形创建链接 <code>dtLink</code> 插入到离网连接结束顶点 <code>firstLink</code> 的头部，同时将离网连接结束顶点创建链接 <code>dtLink</code> 插入到最近多边形的 <code>firstLink</code> 的头部。</li>
+<li>如果是多瓦片模式，则需要通过 <code>connectExtLinks</code> 和 <code>connectExtOffMeshLinks</code> 方法，设置当前瓦片和邻居瓦片（其他层的同位置、相同层的邻居位置）的双向链接关系。</li>
+</ul>
+</li>
+<li>初始化完成后，每个多边形的 <code>firstLink</code> 则建立了一个 <code>dtLink</code> 链表，记录了所有邻居多边形的信息。</li>
+</ul>
+<h2 id=初始化导航网格查询>初始化导航网格查询</h2>
+<ul>
+<li>导航网格查询对象 <code>dtNavMeshQuery</code> 的初始化方法如下：</li>
+</ul>
+<pre tabindex=0><code>// Detour/Source/DetourNavMeshQuery.cpp
+...
+
+dtStatus dtNavMeshQuery::init(const dtNavMesh* nav, const int maxNodes)
+{
+	if (maxNodes &gt; DT_NULL_IDX || maxNodes &gt; (1 &lt;&lt; DT_NODE_PARENT_BITS) - 1)
+		return DT_FAILURE | DT_INVALID_PARAM;
+
+	m_nav = nav;
+	
+	if (!m_nodePool || m_nodePool-&gt;getMaxNodes() &lt; maxNodes)
+	{
+		if (m_nodePool)
+		{
+			m_nodePool-&gt;~dtNodePool();
+			dtFree(m_nodePool);
+			m_nodePool = 0;
+		}
+		m_nodePool = new (dtAlloc(sizeof(dtNodePool), DT_ALLOC_PERM)) dtNodePool(maxNodes, dtNextPow2(maxNodes/4));
+		if (!m_nodePool)
+			return DT_FAILURE | DT_OUT_OF_MEMORY;
+	}
+	else
+	{
+		m_nodePool-&gt;clear();
+	}
+	
+	if (!m_tinyNodePool)
+	{
+		m_tinyNodePool = new (dtAlloc(sizeof(dtNodePool), DT_ALLOC_PERM)) dtNodePool(64, 32);
+		if (!m_tinyNodePool)
+			return DT_FAILURE | DT_OUT_OF_MEMORY;
+	}
+	else
+	{
+		m_tinyNodePool-&gt;clear();
+	}
+	
+	if (!m_openList || m_openList-&gt;getCapacity() &lt; maxNodes)
+	{
+		if (m_openList)
+		{
+			m_openList-&gt;~dtNodeQueue();
+			dtFree(m_openList);
+			m_openList = 0;
+		}
+		m_openList = new (dtAlloc(sizeof(dtNodeQueue), DT_ALLOC_PERM)) dtNodeQueue(maxNodes);
+		if (!m_openList)
+			return DT_FAILURE | DT_OUT_OF_MEMORY;
+	}
+	else
+	{
+		m_openList-&gt;clear();
+	}
+	
+	return DT_SUCCESS;
+}
+
+...
+</code></pre><ul>
+<li>导航网格查询的初始化方法，主要就是对数据结构进行初始化，如节点对象池、开放列表等。初始化完成后，即可根据多边形的链接关系 （<code>dtPoly->firstLink</code> 和 <code>dtLink->next</code>）使用查询对象进行寻路，即：
+<ul>
+<li><code>dtNavMeshQuery::findNearestPoly</code> 查询点所在多边形。</li>
+<li><code>dtNavMeshQuery::findPath</code> 寻找最短多边形路径。</li>
+<li><code>dtNavMeshQuery::findStraightPath</code> 寻找最短路径。</li>
+</ul>
+</li>
+</ul>
+<h1 id=总结>总结</h1>
+<ul>
+<li>相比与寻路，导航网格的构建过程显得比较复杂，一个简单的瓦片网格需要经过八个步骤才能得到最终可以用于寻路的导航网格。通过了解导航网格的构建过程，在进行寻路处理时，能更加清楚其中的数据获取逻辑，进一步加深对寻路的理解。</li>
+</ul>
 <h1 id=参考>参考</h1>
 <ul>
 <li><a href=https://github.com/recastnavigation/recastnavigation>Github - Recast Navigation</a></li>

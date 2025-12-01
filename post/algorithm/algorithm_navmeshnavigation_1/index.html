@@ -532,8 +532,8 @@ void dtNavMesh::closestPointOnPoly(dtPolyRef ref, const float* pos, float* close
 <li>查找多边形最近的点，主要分几类：
 <ul>
 <li>查询点在多边形的 <code>xz</code> 投影平面区域，通过 <code>getPolyHeight</code> 计算。</li>
-<li>查询点不在多边形的 <code>xz</code> 投影平面区域的网格外连接（Off-mesh connections，即不直接连接的区域），通过 <code>dtDistancePtSegSqr2D</code> 计算距离，再插值得到最近点。</li>
-<li>查询点不在多边形的 <code>xz</code> 投影平面区域的非网格外连接，通过 <code>closestPointOnDetailEdges</code> 计算。</li>
+<li>查询点不在多边形的 <code>xz</code> 投影平面区域的离网连接（Off-mesh connections，即不直接连接的区域），通过 <code>dtDistancePtSegSqr2D</code> 计算距离，再插值得到最近点。</li>
+<li>查询点不在多边形的 <code>xz</code> 投影平面区域的直接连接，通过 <code>closestPointOnDetailEdges</code> 计算。</li>
 </ul>
 </li>
 </ul>
@@ -1047,7 +1047,7 @@ dtStatus dtNavMeshQuery::getEdgeMidPoint(dtPolyRef from, const dtPoly* fromPoly,
 
 ...
 </code></pre><ul>
-<li>通过 <code>getPortalPoints</code> 方法，计算两个多边形共享边的左右顶点，根据左右顶点计算共享边的中点。</li>
+<li>通过 <code>getPortalPoints</code> 方法，计算两个多边形共享边的左右顶点，根据左右顶点计算共享边（即入口边）的中点。</li>
 </ul>
 <h4 id=dtnavmeshquerygetportalpoints>dtNavMeshQuery::getPortalPoints</h4>
 <ul>
@@ -1132,8 +1132,8 @@ dtStatus dtNavMeshQuery::getPortalPoints(dtPolyRef from, const dtPoly* fromPoly,
 }
 ...
 </code></pre><ul>
-<li>对于网格外连接，则遍历多边形的所有连接，找到连接多边形的边，其左右顶点都为该顶点。</li>
-<li>对于非网格外连接，则连接边的首顶点为左顶点，尾顶点为右顶点。</li>
+<li>对于离网连接，则遍历多边形的所有连接，找到连接多边形的边，其左右顶点都为该顶点。</li>
+<li>对于直接连接，则连接边的首顶点为左顶点，尾顶点为右顶点。</li>
 </ul>
 <h4 id=dtqueryfiltergetcost>dtQueryFilter::getCost</h4>
 <ul>
