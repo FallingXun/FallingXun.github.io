@@ -554,8 +554,8 @@ static bool rasterizeTri(const float* v0, const float* v1, const float* v2,
 <li>将 x' 最小值限制为 [-1, heightfield.width - 1] , 最大值限制为 [0, heightfield.width - 1] 。</li>
 <li>遍历 x' 坐标最小值到最大值区间，通过 <code>dividePoly</code> 方法，将多边形按 <code>cell</code> 的 x' 坐标再切分成多个子多边形。</li>
 <li>对每个子多边形，计算顶点的 y 坐标最大最小值，以高度场包围盒 y 坐标最小值为基准。</li>
-<li>将顶点 y 坐标最大最小值，转换成 <code>cell</code> 索引 y' 表示，最小值为 [0, <code>RC_SPAN_MAX_HEIGHT</code>] ，最大值为 [最小值 + 1, <code>RC_SPAN_MAX_HEIGHT</code>] 。</li>
-<li>调用 <code>addSpan</code> 方法，将当前 x' 、z' 对应的 <code>cell</code> 的 y' 索引区间，加入到高度场中。</li>
+<li>将顶点 y 坐标最大最小值，转换成 <code>cell</code> 的索引 ymax' 、ymin' 表示，最小值为 [0, <code>RC_SPAN_MAX_HEIGHT</code>] ，最大值为 [最小值 + 1, <code>RC_SPAN_MAX_HEIGHT</code>] 。</li>
+<li>调用 <code>addSpan</code> 方法，将当前 x' 、z' 对应的 <code>cell</code> 的 ymax' 、ymin' 索引区间，加入到高度场中。</li>
 </ul>
 </li>
 <li>分割多边形方法 <code>dividePoly</code> 的实现如下：</li>
@@ -654,97 +654,97 @@ static void dividePoly(const float* inVerts, int inVertsCount,
 </ul>
 <pre tabindex=0><code>// Recast/Source/RecastRasterization.cpp
 
+...
 
-
-
-                   const int x, const int z,
-                   const unsigned short min, const unsigned short max,
-                   const unsigned char areaID, const int flagMergeThreshold)
+static bool addSpan(rcHeightfield&amp; heightfield,
+                    const int x, const int z,
+                    const unsigned short min, const unsigned short max,
+                    const unsigned char areaID, const int flagMergeThreshold)
 {
-   // Create the new span.
-   rcSpan* newSpan = allocSpan(heightfield);
-   if (newSpan == NULL)
-   {
-   	return false;
-   }
-   newSpan-&gt;smin = min;
-   newSpan-&gt;smax = max;
-   newSpan-&gt;area = areaID;
-   newSpan-&gt;next = NULL;
-   
-   const int columnIndex = x + z * heightfield.width;
-   rcSpan* previousSpan = NULL;
-   rcSpan* currentSpan = heightfield.spans[columnIndex];
-   
-   // Insert the new span, possibly merging it with existing spans.
-   while (currentSpan != NULL)
-   {
-   	if (currentSpan-&gt;smin &gt; newSpan-&gt;smax)
-   	{
-   		// Current span is completely after the new span, break.
-   		break;
-   	}
-   	
-   	if (currentSpan-&gt;smax &lt; newSpan-&gt;smin)
-   	{
-   		// Current span is completely before the new span.  Keep going.
-   		previousSpan = currentSpan;
-   		currentSpan = currentSpan-&gt;next;
-   	}
-   	else
-   	{
-   		// The new span overlaps with an existing span.  Merge them.
-   		if (currentSpan-&gt;smin &lt; newSpan-&gt;smin)
-   		{
-   			newSpan-&gt;smin = currentSpan-&gt;smin;
-   		}
-   		if (currentSpan-&gt;smax &gt; newSpan-&gt;smax)
-   		{
-   			newSpan-&gt;smax = currentSpan-&gt;smax;
-   		}
-   		
-   		// Merge flags.
-   		if (rcAbs((int)newSpan-&gt;smax - (int)currentSpan-&gt;smax) &lt;= flagMergeThreshold)
-   		{
-   			// Higher area ID numbers indicate higher resolution priority.
-   			newSpan-&gt;area = rcMax(newSpan-&gt;area, currentSpan-&gt;area);
-   		}
-   		
-   		// Remove the current span since it's now merged with newSpan.
-   		// Keep going because there might be other overlapping spans that also need to be merged.
-   		rcSpan* next = currentSpan-&gt;next;
-   		freeSpan(heightfield, currentSpan);
-   		if (previousSpan)
-   		{
-   			previousSpan-&gt;next = next;
-   		}
-   		else
-   		{
-   			heightfield.spans[columnIndex] = next;
-   		}
-   		currentSpan = next;
-   	}
-   }
-   
-   // Insert new span after prev
-   if (previousSpan != NULL)
-   {
-   	newSpan-&gt;next = previousSpan-&gt;next;
-   	previousSpan-&gt;next = newSpan;
-   }
-   else
-   {
-   	// This span should go before the others in the list
-   	newSpan-&gt;next = heightfield.spans[columnIndex];
-   	heightfield.spans[columnIndex] = newSpan;
-   }
+	// Create the new span.
+	rcSpan* newSpan = allocSpan(heightfield);
+	if (newSpan == NULL)
+	{
+		return false;
+	}
+	newSpan-&gt;smin = min;
+	newSpan-&gt;smax = max;
+	newSpan-&gt;area = areaID;
+	newSpan-&gt;next = NULL;
+	
+	const int columnIndex = x + z * heightfield.width;
+	rcSpan* previousSpan = NULL;
+	rcSpan* currentSpan = heightfield.spans[columnIndex];
+	
+	// Insert the new span, possibly merging it with existing spans.
+	while (currentSpan != NULL)
+	{
+		if (currentSpan-&gt;smin &gt; newSpan-&gt;smax)
+		{
+			// Current span is completely after the new span, break.
+			break;
+		}
+		
+		if (currentSpan-&gt;smax &lt; newSpan-&gt;smin)
+		{
+			// Current span is completely before the new span.  Keep going.
+			previousSpan = currentSpan;
+			currentSpan = currentSpan-&gt;next;
+		}
+		else
+		{
+			// The new span overlaps with an existing span.  Merge them.
+			if (currentSpan-&gt;smin &lt; newSpan-&gt;smin)
+			{
+				newSpan-&gt;smin = currentSpan-&gt;smin;
+			}
+			if (currentSpan-&gt;smax &gt; newSpan-&gt;smax)
+			{
+				newSpan-&gt;smax = currentSpan-&gt;smax;
+			}
+			
+			// Merge flags.
+			if (rcAbs((int)newSpan-&gt;smax - (int)currentSpan-&gt;smax) &lt;= flagMergeThreshold)
+			{
+				// Higher area ID numbers indicate higher resolution priority.
+				newSpan-&gt;area = rcMax(newSpan-&gt;area, currentSpan-&gt;area);
+			}
+			
+			// Remove the current span since it's now merged with newSpan.
+			// Keep going because there might be other overlapping spans that also need to be merged.
+			rcSpan* next = currentSpan-&gt;next;
+			freeSpan(heightfield, currentSpan);
+			if (previousSpan)
+			{
+				previousSpan-&gt;next = next;
+			}
+			else
+			{
+				heightfield.spans[columnIndex] = next;
+			}
+			currentSpan = next;
+		}
+	}
+	
+	// Insert new span after prev
+	if (previousSpan != NULL)
+	{
+		newSpan-&gt;next = previousSpan-&gt;next;
+		previousSpan-&gt;next = newSpan;
+	}
+	else
+	{
+		// This span should go before the others in the list
+		newSpan-&gt;next = heightfield.spans[columnIndex];
+		heightfield.spans[columnIndex] = newSpan;
+	}
 
-
+	return true;
 }
 
-
+...
 </code></pre><ul>
-<li><code>span</code> 信息即多边形的 y' 单元格坐标 <code>span</code>，在高度场中，<code>span</code> 信息通过链表存储，记录了每一个 <code>cell</code> 的所有 <code>span</code> 区间，区间按坐标从小到大顺序存储。插入新区间时，同样需要保持从小到大的顺序，找到插入位置。如果新区间和原有区间有相交，则会将两个区间进行合并。</li>
+<li><code>span</code> 为一个跨度区间，包含 ymax' 、ymin'。在高度场中，<code>span</code> 信息通过链表存储，记录了每一个 <code>cell</code> 的所有 <code>span</code> 区间，区间按坐标从小到大顺序存储。插入新区间时，同样需要保持从小到大的顺序，找到插入位置。如果新区间和原有区间有相交，则会将两个区间进行合并。</li>
 </ul>
 <h1 id=三过滤可行走表面>三、过滤可行走表面</h1>
 <ul>
