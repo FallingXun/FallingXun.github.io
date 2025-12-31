@@ -1840,7 +1840,120 @@ static float4x4 unity_MatrixITMV = transpose(mul(unity_WorldToObject, unity_Matr
 
 #endif
 
-</code></pre>
+</code></pre><h2 id=urp-shader>URP Shader</h2>
+<h3 id=shader-示例>Shader 示例</h3>
+<pre tabindex=0><code>Shader &quot;Custom/UnlitShader&quot;
+{
+    Properties
+    {
+        _BaseMap(&quot;Base Map&quot;, 2D) = &quot;white&quot; {}   // 需要访问 main texture 时，可在前面加上 [MainTexture]
+        _Color(&quot;Color&quot;, Color) = (1,1,1,1)      // 需要访问 main color 时，可在前面加上 [MainColor]
+    }
+
+    SubShader
+    {
+        // SRP 需要的 tag ：UniversalPipeline
+        Tags { &quot;RenderType&quot; = &quot;Opaque&quot; &quot;RenderPipeline&quot; = &quot;UniversalPipeline&quot; }
+
+        Pass
+        {
+            HLSLPROGRAM // 使用 HLSL 编写 Shader 代码，替换 CGPROGRAM
+
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include &quot;Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl&quot;  // 包含 SRP 核心库、变量、矩阵定义、变换，不包含光照函数和默认结构。
+
+            // 顶点着色器输入结构，替换 appdata 结构
+            struct Attributes
+            {
+                float4 positionOS   : POSITION;
+                float2 uv: TEXCOORD0;
+            };
+
+            // 顶点着色器输出结构，替换 v2f 结构
+            struct Varyings
+            {
+                float4 positionCS  : SV_POSITION;
+                float2 uv: TEXCOORD0;
+            };
+
+            TEXTURE2D(_BaseMap);
+            SAMPLER(sampler_BaseMap);
+
+            // 所有属性都需要定义在 CBUFFER 中，才能使用 SRP 合批
+            CBUFFER_START(UnityPerMaterial)
+            float4 _Color;
+            float4 _BaseMap_ST;
+            CBUFFER_END
+
+            Varyings vert(Attributes IN)
+            {
+                Varyings OUT;
+
+                OUT.positionCS = TransformObjectToHClip(IN.positionOS.xyz);   // 替换 UnityObjectToClipPos
+                OUT.uv = TRANSFORM_TEX(IN.uv, _BaseMap);
+
+                return OUT;
+            }
+
+            half4 frag(Varyings IN) : SV_Target
+            {
+                float4 texel = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.uv);
+                return texel * _Color;
+            }
+            ENDHLSL // 结束 HLSL 代码，替换 ENDCG
+        }
+    }
+}
+</code></pre><h3 id=lightmode>LightMode</h3>
+<ul>
+<li>UniversalForward
+<ul>
+<li>前向渲染路径，渲染几何对象并评估所有光照贡献。</li>
+</ul>
+</li>
+<li>UniversalGBuffer
+<ul>
+<li>延迟渲染路径，渲染几何对象，不带光照贡献。</li>
+</ul>
+</li>
+<li>UniversalForwardOnly
+<ul>
+<li>和 UniversalForward 类似，该 Pass 能用于前向渲染或延迟渲染。</li>
+</ul>
+</li>
+<li>DepthNormalsOnly
+<ul>
+<li>深度纹理和法线纹理。</li>
+</ul>
+</li>
+<li>Universal2D
+<ul>
+<li>渲染对象并评估 2D 光照贡献。</li>
+</ul>
+</li>
+<li>ShadowCaster
+<ul>
+<li>将对象深度从光的角度，渲染到阴影贴图或深度纹理中。</li>
+</ul>
+</li>
+<li>DepthOnly
+<ul>
+<li>从相机视角将对象深度信息渲染到深度纹理中。</li>
+</ul>
+</li>
+<li>Meta
+<ul>
+<li>在Unity编辑器中烘焙光照贴图时执行，运行时会从着色器中删除此 Pass。</li>
+</ul>
+</li>
+<li>SRPDefaultUnlit
+<ul>
+<li>在渲染对象时绘制额外的 Pass，如：绘制对象轮廓。对正向和延迟渲染路径都有效。</li>
+</ul>
+</li>
+</ul>
 <hr>
 <ul class=pager>
 <li class=previous>
