@@ -1,0 +1,225 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="图形学篇 — 环境光遮蔽（AO）">
+<meta property="og:title" content="图形学篇 — 环境光遮蔽（AO）">
+<meta property="twitter:title" content="图形学篇 — 环境光遮蔽（AO）">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>图形学篇 — 环境光遮蔽（AO）-</title>
+<link rel=canonical href=/post/render/graphics/graphics_ambientocclusion/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+<li>
+<a href=/categories/googleplay%E7%B3%BB%E5%88%97>googleplay系列</a>
+</li>
+<li>
+<a href=/categories/lua%E7%B3%BB%E5%88%97>lua系列</a>
+</li>
+<li>
+<a href=/categories/tmp%E7%B3%BB%E5%88%97>tmp系列</a>
+</li>
+<li>
+<a href=/categories/unity%E7%B3%BB%E5%88%97>unity系列</a>
+</li>
+<li>
+<a href=/categories/%E5%9B%BE%E5%BD%A2%E5%AD%A6%E7%B3%BB%E5%88%97>图形学系列</a>
+</li>
+<li>
+<a href=/categories/%E6%B8%B2%E6%9F%93%E7%B3%BB%E5%88%97>渲染系列</a>
+</li>
+<li>
+<a href=/categories/%E7%AE%97%E6%B3%95%E7%B3%BB%E5%88%97>算法系列</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/graphics title=Graphics>
+Graphics
+</a>
+<a class=tag href=/tags/ao title=AO>
+AO
+</a>
+<a class=tag href=/tags/ssao title=SSAO>
+SSAO
+</a>
+</div>
+<h1>图形学篇 — 环境光遮蔽（AO）</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Monday, January 1, 0001
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<p>环境光遮蔽（AO）技术，用于模拟场景中的光照，使场景中的物体看起来更加真实。</p>
+<h1 id=简介>简介</h1>
+<ul>
+<li>随着设备的更新换代，现代游戏玩家对画面质量的要求越来越高，全局光照成为提升游戏视觉效果的关键技术。全局光照技术基于物理光学原理，通过计算光线在场景中的反射、折射和散射等过程，模拟真实世界的光照效果，使得游戏场景看起来更加逼真。然而，这种真实带来的代价就是计算成本过高，离线生成一个静态场景的效果可能需要花上几个小时，并不适用于实时渲染。因此，需要通过简单但在视觉上仍然令人信服的解决方案的进行替代，一种基本的全局照明效果是环境光遮蔽（Ambient Occlusion）。</li>
+</ul>
+<h1 id=基础概念>基础概念</h1>
+<h2 id=立体角solid-angle>立体角（Solid Angle）</h2>
+<ul>
+<li>平面角定义为角所对的弧长 <code>s</code> 与半径 <code>r</code> 的比值，用 <code>ω</code> 表示。
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_1.png?raw=true" alt=Math_AmbientOcclusion_1.png>
+</li>
+<li>立体角（Solid Angle）则是在三维空间下的角度，其所对的面积 <code>A</code> 与半径 <code>r</code> 的平方的比值，用 <code>Ω</code> 表示。
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_2.png?raw=true" alt=Math_AmbientOcclusion_2.png>
+</li>
+<li>立体角通过 <code>θ</code> 和 <code>φ</code> 两个角度来表示，其中 <code>θ</code> 是与 <code>z</code> 轴的夹角，<code>φ</code> 是与 <code>x</code> 轴或 <code>y</code> 轴的夹角。
+<img src="/img/Render/Graphics/AmbientOcclusion/AmbientOcclusion_1.png?raw=true" alt=AmbientOcclusion_1.png>
+<img src="/img/Render/Graphics/AmbientOcclusion/AmbientOcclusion_2.png?raw=true" alt=AmbientOcclusion_2.png>
+</li>
+<li>如图所示，对于单位立体角 <code>dΩ</code>（即 <code>dθ</code> 和 <code>dφ</code>），其所对的面积 <code>A</code> 即为矩形 ABCD（近似）的面积，即
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_3.png?raw=true" alt=Math_AmbientOcclusion_3.png>
+其中，AB 为 <code>dθ</code> 对应的弧长，CD 为 <code>dφ</code> 对应的弧长，则有
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_4.png?raw=true" alt=Math_AmbientOcclusion_4.png>
+因此
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_5.png?raw=true" alt=Math_AmbientOcclusion_5.png>
+</li>
+</ul>
+<h2 id=辐射能量radiant-energy>辐射能量（Radiant Energy）</h2>
+<ul>
+<li>辐射能量（Radiant Energy）是指电磁辐射的能量，用 <code>Q</code> 表示。</li>
+</ul>
+<h2 id=辐射通量radiant-flux>辐射通量（Radiant Flux）</h2>
+<ul>
+<li>辐射通量（Radiant Flux）是指单位时间内的辐射能量，用 <code>Φ</code> 表示。
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_6.png?raw=true" alt=Math_AmbientOcclusion_6.png>
+其中，<code>Q</code> 是辐射能量，<code>t</code> 是时间。</li>
+</ul>
+<h2 id=辐射强度radiant-intensity>辐射强度（Radiant Intensity）</h2>
+<ul>
+<li>辐射强度（Intensity）是指单位立体角内的辐射通量（所有面积光总和），用 <code>I</code> 表示。
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_7.png?raw=true" alt=Math_AmbientOcclusion_7.png>
+其中，<code>Φ</code> 是总辐射通量，<code>Ω</code> 是立体角。</li>
+</ul>
+<h2 id=辐照度irradiance>辐照度（Irradiance）</h2>
+<ul>
+<li>辐照度（Irradiance）是指单位面积上接收到的辐射通量（所有立体角方向总和），用 <code>E</code> 表示。
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_8.png?raw=true" alt=Math_AmbientOcclusion_8.png>
+其中，<code>Φ</code> 是总辐射通量，<code>A</code> 是接收面积。</li>
+</ul>
+<h2 id=辐射率radiance>辐射率（Radiance）</h2>
+<ul>
+<li>辐射率（Radiance）是指单位立体角，在单位面积上辐射通量，用 <code>L</code> 表示。
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_9.png?raw=true" alt=Math_AmbientOcclusion_9.png>
+其中，<code>Φ</code> 是总辐射通量，<code>Ω</code> 是立体角，<code>A</code> 是接收或光源面积，对应入射或出射辐射率。基于理想漫反射表面（Lambert 表面），只有垂直于光的投影面积，才是真正的辐射面积，所以辐射率最终需要对面积进行修正，即 <code>A cosθ</code>。</li>
+<li>由于总辐射通量是所有面积所有方向的辐射通量总和，所以需要对立体角和面积进行二次微分。</li>
+</ul>
+<h2 id=渲染方程rendering-equation>渲染方程（Rendering Equation）</h2>
+<ul>
+<li>渲染方程（Rendering Equation）是全局光照模型中的基本方程，用于描述光在场景中的传播和反射。渲染方程的基本形式为：
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_10.png?raw=true" alt=Math_AmbientOcclusion_10.png>
+其中，<code>p</code> 为观察的物体表面位置，<code>v</code> 为观察方向，<code>l</code> 为光的入射方向，<code>n</code> 为物体表面法线，<code>n · l</code> 表示入射光被物体表面接收（和投影面垂直）的比例，<code>f</code> 为物体表面反射率（接收到的光反射到观察方向的比例）。</li>
+</ul>
+<h1 id=环境光遮蔽ao>环境光遮蔽（AO）</h1>
+<ul>
+<li>为了实现全局光照模型效果，则需要按渲染方程进行计算。</li>
+</ul>
+<h1 id=屏幕空间环境光遮蔽ssao>屏幕空间环境光遮蔽（SSAO）</h1>
+<hr>
+<ul class=pager>
+<li class=next>
+<a href=/post/tmp/textmeshprogcoptimize/ data-toggle=tooltip data-placement=top title="TMP(TextMeshPro)优化篇 — (1) 堆内存">Next
+Post &rarr;</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2026
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>
