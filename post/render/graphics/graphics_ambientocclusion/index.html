@@ -168,11 +168,43 @@ post-container">
 <img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_10.png?raw=true" alt=Math_AmbientOcclusion_10.png>
 其中，<code>p</code> 为观察的物体表面位置，<code>v</code> 为观察方向，<code>l</code> 为光的入射方向，<code>n</code> 为物体表面法线，<code>n · l</code> 表示入射光被物体表面接收（和投影面垂直）的比例，<code>f</code> 为物体表面反射率（接收到的光反射到观察方向的比例）。</li>
 </ul>
-<h1 id=环境光遮蔽ao>环境光遮蔽（AO）</h1>
+<h1 id=环境光遮蔽ambient-occlusion>环境光遮蔽（Ambient Occlusion）</h1>
 <ul>
-<li>为了实现全局光照模型效果，则需要按渲染方程进行计算。</li>
+<li>为了实现全局光照模型效果，则需要求解渲染方程，常用的方法有两种，即有限元方法和蒙特卡洛方法。其中，光能传递是基于有限元方法的算法，各种形式的光线追踪则是使用蒙特卡洛方法。然而，这些方法虽然可以产生较好的效果，但生成一帧图像可能需要花费数个小时，并不适用与动态场景。</li>
+<li>为了将全局光照效果应用到计算生成的场景中，需要使用一些简化的模型方法，一种基本的方法是环境光遮蔽（Ambient Occlusion，AO）。为了简化，假设两个条件：
+<ul>
+<li>物体表面为 Lambert 表面。</li>
+<li>入射辐射率在各个方向上都为相同的常量 <code>L'</code> 。</li>
 </ul>
-<h1 id=屏幕空间环境光遮蔽ssao>屏幕空间环境光遮蔽（SSAO）</h1>
+</li>
+<li>根据前面的辐射率公式，可以得到辐照度 <code>E</code> 为
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_11.png?raw=true" alt=Math_AmbientOcclusion_11.png>
+</li>
+<li>然而，当前辐照度并未考虑可见性，即某些方向的光可能被场景中其他物体或自身某些部分阻挡，则这些方向的入射辐射度不为 <code>L'</code>。假设来自被遮挡方向的入射辐射度为 0 ，未被遮挡方向的入射辐射度为 1，则
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_12.png?raw=true" alt=Math_AmbientOcclusion_12.png>
+其中，<code>v</code> 为可见性函数，<code>L'</code> 后的积分部分为环境光遮蔽因子，用 <code>k</code> 表示，即
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_13.png?raw=true" alt=Math_AmbientOcclusion_13.png>
+</li>
+<li>当所有方向都没有遮挡时，<code>v</code> 为 1 ，此时 <code>k</code> 有最大值。当所有方向都被遮挡时，<code>v</code> 为 0 ，此时 <code>k</code> 有最小值。
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_14.png?raw=true" alt=Math_AmbientOcclusion_14.png>
+</li>
+<li>因此，归一化的环境光遮蔽因子 <code>k'</code> 为
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_15.png?raw=true" alt=Math_AmbientOcclusion_15.png>
+辐照度 <code>E</code> 为
+<img src="/img/Render/Graphics/AmbientOcclusion/Math_AmbientOcclusion_16.png?raw=true" alt=Math_AmbientOcclusion_16.png>
+</li>
+<li>通过环境光遮蔽方法计算全局光照效果，最终会转换为通过计算环境遮挡因子实现。计算环境遮挡因子可能很耗时，通常需要执行在渲染之前离线进行。预先计算任何与光照相关的过程，包括环境遮挡在内的信息，通常被称为烘焙。预计算环境光遮挡最常见的方法是通过蒙特卡洛方法，即在法线周围的半球面上，均匀地随机取 N 个方向，并沿着这些方向追踪光线，检查这些方向最终是否可见，对结果求平均值，即为 <code>k'</code> 的估算值，则能计算出对应的辐照度。</li>
+</ul>
+<h1 id=屏幕空间环境光遮蔽screen-space-ambient-occlusion>屏幕空间环境光遮蔽（Screen Space Ambient Occlusion）</h1>
+<ul>
+<li>计算环境遮挡因子的离线方法，能得到较好的表现效果，但需要进行光线追踪计算，计算成本较高，且仅适用于静态场景。对于实时动态场景，需要使用更加简化的模型，避免大部分此类计算。对于动态场景，可以通过将物体进行分组后，再用简化模型替代每一组，之后计算每一个简化模型的 SDF 信息，就能通过锥体追踪得到光线的遮挡信息。</li>
+<li>然而，在物体空间下进行计算的方法，随着场景复杂度的提升，计算量会越来越大，造成新的性能压力。事实上，关于遮挡的一些信息可以完全从屏幕空间数据中推断出来，如：深度、法线，这些数据在渲染过程中已经生成。屏幕空间下计算的方法，不受场景复杂度的影响，而是仅和渲染过程使用的分辨率相关，因此具有恒定的计算成本。</li>
+<li>屏幕空间下的环境光遮蔽（Screen Space Ambient Occlusion，SSAO），通过使用 z-buffer 深度缓冲区作为唯一输入，来估算每个像素的环境遮挡因子。在以像素位置为圆心的球面上，随机取一组采样点，进行深度测试，最终通过深度测试的样本数量占比即为环境遮挡因子。
+<img src="/img/Render/Graphics/AmbientOcclusion/AmbientOcclusion_3.png?raw=true" alt=AmbientOcclusion_3.png>
+</li>
+<li>如图所示，相机在正上方，黄色点为当前计算的像素位置点，其余点为采样点，分布在以黄色点为圆心的球面上。其中，红色点在物体内部，即未通过深度测试，而蓝色点虽然在物体外部，但在相机方向上被遮挡，即同样未通过深度测试，仅绿色点能通过深度测试，因此环境遮挡因子 <code>k'</code> 为 0.2 。</li>
+<li>其中，样本的选取，不是只考虑位于表面上方半球内的位置，而是包括了物体内部的位置。在这种采样方式下，会出现一个平坦的表面会变暗，且边缘比周围更亮的情况。尽管如此，这种表现结果通常在视觉上依然能令人满意。</li>
+</ul>
 <hr>
 <ul class=pager>
 <li class=next>

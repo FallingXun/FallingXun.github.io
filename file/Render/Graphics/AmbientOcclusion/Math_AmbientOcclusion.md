@@ -51,9 +51,41 @@ L = \frac{dE}{d\Omega \space cos\theta}= \frac{dI}{dA \space cos\theta} = \frac{
 
 ```
 
-
 - Math_AmbientOcclusion_10
 ```math
-L_o(\bold p, \bold v) =  L_e(\bold p, \bold v) + \int_{l\in\Omega} f(\bold l, \bold v)L_i(\bold p, \bold l)(\bold n \cdot \bold l)d\bold l
+L_o(\bold p, \bold v) =  L_e(\bold p, \bold v) + \int_{\bold l\in\Omega} f(\bold l, \bold v)L_i(\bold p, \bold l)(\bold n \cdot \bold l)d\bold l
 
 ```
+
+- Math_AmbientOcclusion_11
+```math
+E = \int_{\Omega} L \space cos\theta \space d \Omega =\int_0^{2\pi}  \int_0^{\frac{\pi}{2}} L' cos\theta sin\theta \space d{\theta} d{\phi} =  \pi L'
+
+```
+
+- Math_AmbientOcclusion_12
+```math
+E =  L' \int_{\Omega}\space v cos\theta \space d \Omega
+
+```
+
+- Math_AmbientOcclusion_13
+```math
+k =  \int_{\Omega}\space v cos\theta \space d \Omega
+```
+
+- Math_AmbientOcclusion_14
+```math
+k_{max} = \int_{\Omega}\space 1 \cdot cos\theta \space d \Omega = \pi
+\\\
+\\\
+k_{min} = \int_{\Omega}\space 0 \cdot cos\theta \space d \Omega = 0
+```
+
+- Math_AmbientOcclusion_15
+```math
+k' = \frac{1}{\pi} \int_{\Omega}\space v cos\theta \space d \Omega
+```
+
+
+
