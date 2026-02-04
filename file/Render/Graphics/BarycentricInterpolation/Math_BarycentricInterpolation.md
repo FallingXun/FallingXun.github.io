@@ -165,7 +165,7 @@ y_P = \alpha y_A + \beta y_B + \gamma y_C
 
 - Math_BarycentricInterpolation_33
 ```math
-\frac{1}{z_{P'}} = \frac{1}{z_{A'}}\alpha + \frac{1}{z_{B'}}\beta + \frac{1}{z_{C'}}
+\frac{1}{z_{P'}} = \frac{1}{z_{A'}}\alpha + \frac{1}{z_{B'}}\beta + \frac{1}{z_{C'}} \gamma
 ```
 
 - Math_BarycentricInterpolation_34

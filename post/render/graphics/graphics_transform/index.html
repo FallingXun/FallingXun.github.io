@@ -110,8 +110,8 @@ post-container">
 <ul>
 <li>可以保留矢量加和标量乘的变换，即
 <ul>
-<li>f(x) + f(y) = f(x + y)</li>
-<li>kf(x) = f(kx)</li>
+<li><code>f(x) + f(y) = f(x + y)</code></li>
+<li><code>kf(x) = f(kx)</code></li>
 </ul>
 </li>
 <li>缩放（scale）、旋转（rotation）、错切（shear）、镜像（mirroring）、正交投影（orthography projection）等</li>
@@ -140,21 +140,21 @@ post-container">
 </ul>
 </li>
 <li>对于复合变换，需要按照先缩放，再旋转，最后平移的顺序，才能保证最后得到正确的效果。</li>
-<li>在 Unity 中，坐标系是按照 y-x-z 的逐级组合的，如果绕世界坐标系下的固定坐标轴旋转，需要按照 zxy 的顺序。如果绕自身坐标系旋转，由于旋转时自身坐标系也会发生改变，根据坐标系的次序，需要按照 yxz 的顺序进行旋转，即
+<li>在 Unity 中，坐标系是按照 <code>y-x-z</code> 的逐级组合的，如果绕世界坐标系下的固定坐标轴旋转，需要按照 zxy 的顺序。如果绕自身坐标系旋转，由于旋转时自身坐标系也会发生改变，根据坐标系的次序，需要按照 yxz 的顺序进行旋转，即
 <img src="/img/Render/Graphics/Transform/Math_Transform_6.png?raw=true" alt=Math_Transform_6.png>
 </li>
-<li>在图形学计算中，从CPU传入的顶点坐标，需要从模型空间，变换到世界空间，再变换到视图空间，再变换到裁剪空间，最后变换到屏幕空间。从模型空间变换到裁剪空间，就是常说的 MVP 变换。</li>
+<li>在图形学计算中，从CPU传入的顶点坐标，需要从模型空间，变换到世界空间，再变换到观察空间，再变换到裁剪空间，最后变换到屏幕空间。从模型空间变换到裁剪空间，就是常说的 MVP 变换。</li>
 </ul>
 <h3 id=模型变换>模型变换</h3>
 <ul>
-<li>模型变换，即将坐标从模型空间变换到世界空间。在 Unity 中，如果一个 GameObject 没有父节点，那么其坐标即为世界空间下的坐标。如果存在父节点，则其自身坐标即为模型空间下的坐标，需要进行变换。变换为复合变换，将所有父节点的信息累计起来，进行平移、缩放和旋转。假设父节点的坐标为（x，y，z），角度为（θ，0, 0），则最终模型变换的变换矩阵即为
+<li>模型变换，即将坐标从模型空间变换到世界空间。在 Unity 中，如果一个 GameObject 没有父节点，那么其坐标即为世界空间下的坐标。如果存在父节点，则其自身坐标即为模型空间下的坐标，需要进行变换。变换为复合变换，将所有父节点的信息累计起来，进行平移、缩放和旋转。假设父节点的坐标为<code>（x，y，z）</code>，角度为<code>（θ，0, 0）</code>，则最终模型变换的变换矩阵即为
 <img src="/img/Render/Graphics/Transform/Math_Transform_7.png?raw=true" alt=Math_Transform_7.png>
 </li>
 </ul>
-<h3 id=视图变换>视图变换</h3>
+<h3 id=观察变换>观察变换</h3>
 <ul>
-<li>相机决定了渲染使用的视角，在视图空间下，相机的坐标为原点坐标，x轴正向为右方，y轴正向为上方，z轴正向为相机后方。尽管 Unity 在模型空间和世界空间下使用的都是左手坐标系，但在观察空间下， Unity 和 OpenGL 一样，使用右手坐标系，因此，相机的正前方为 -z 。</li>
-<li>为了将物体变换到视图空间下，需要对应的变换矩阵。若将相机变换到世界坐标下的原点，并旋转到与坐标轴重合，再将相机的 z 方向取反，此时对应物体经过同样的变换后，在世界空间下的信息即为在视图空间下的信息。假设相机在世界空间下的坐标为（x，y，z），角度为（θ，0, 0），则视图变换矩阵为
+<li>相机决定了渲染使用的视角，在观察空间下，相机的坐标为原点坐标，x轴正向为右方，y轴正向为上方，<code>z</code> 轴正向为相机后方。尽管 Unity 在模型空间和世界空间下使用的都是左手坐标系，但在观察空间下， Unity 和 OpenGL 一样，使用右手坐标系，因此，相机的正前方为 <code>-z</code> 。</li>
+<li>为了将物体变换到观察空间下，需要对应的变换矩阵。若将相机变换到世界坐标下的原点，并旋转到与坐标轴重合，再将相机的 z 方向取反，此时对应物体经过同样的变换后，在世界空间下的信息即为在观察空间下的信息。假设相机在世界空间下的坐标为<code>（x，y，z）</code>，角度为<code>（θ，0, 0）</code>，则观察变换矩阵为
 <img src="/img/Render/Graphics/Transform/Math_Transform_8.png?raw=true" alt=Math_Transform_8.png>
 </li>
 </ul>
@@ -163,21 +163,21 @@ post-container">
 <li>相机最终渲染的范围为其视锥体范围，在视锥体内的正常渲染，视锥体外的则剔除，与视锥体相交的则会被裁剪，只保留视锥体内的部分。对于正交投影，视锥体是一个长方体，计算对象是否在其范围相对比较简单，而透视投影是一个锥体，计算难度则相对较大。另外，由于每个相机都有各自的参数，所以各自的视锥体都不一样，因此计算起来也更加复杂。为了能统一到一个通用、简单的结构下进行计算，则需要进行投影变换。</li>
 <li>视锥体的一些表示
 <ul>
-<li>l ：近裁剪平面的左边</li>
-<li>r ：近裁剪平面的右边</li>
-<li>t ：近裁剪平面的上边</li>
-<li>b ：近裁剪平面的下边</li>
-<li>n ：近裁剪平面的距离（正）</li>
-<li>f ：远裁剪平面的距离（正）</li>
+<li><code>l</code> ：近裁剪平面的左边</li>
+<li><code>r</code> ：近裁剪平面的右边</li>
+<li><code>t</code> ：近裁剪平面的上边</li>
+<li><code>b</code> ：近裁剪平面的下边</li>
+<li><code>n</code> ：近裁剪平面的距离（正）</li>
+<li><code>f</code> ：远裁剪平面的距离（正）</li>
 </ul>
 </li>
 </ul>
 <h4 id=正交投影>正交投影</h4>
 <ul>
-<li>正交模式下，视锥体是一个长方体，要将长方体视锥体变换到以 (0, 0) 为中心， [-1, 1] 范围的正方体内，因此需要执行两个步骤
+<li>正交模式下，视锥体是一个长方体，要将长方体视锥体变换到以 <code>(0, 0)</code> 为中心， <code>[-1, 1]</code> 范围的正方体内，因此需要执行两个步骤
 <ul>
 <li>将视锥体中心移动到坐标原点</li>
-<li>将视锥体进行缩放，形成 [-1, 1] 的正方体</li>
+<li>将视锥体进行缩放，形成 <code>[-1, 1]</code> 的正方体</li>
 </ul>
 </li>
 <li>所以正交投影矩阵为
@@ -193,7 +193,7 @@ post-container">
 <li>按照正交投影进行投影变换</li>
 </ul>
 </li>
-<li>为了将视锥体变换为长方体，首先需要将视锥体的 x、y 坐标投影到近裁剪平面对应的坐标值。
+<li>为了将视锥体变换为长方体，首先需要将视锥体的 <code>x</code> 、<code>y</code> 坐标投影到近裁剪平面对应的坐标值。
 <img src="/img/Render/Graphics/Transform/Transform_1.png?raw=true" alt=Transform_1.png>
 </li>
 <li>可以看到，视锥体上的点的关系为
@@ -206,13 +206,13 @@ post-container">
 <li>可以推出变换矩阵
 <img src="/img/Render/Graphics/Transform/Math_Transform_14.png?raw=true" alt=Math_Transform_14.png>
 </li>
-<li>由于远近裁剪平面经过变换后，还是保持不变，对于近裁剪平面上的点，z = z' = -n ，则有
+<li>由于远近裁剪平面经过变换后，还是保持不变，对于近裁剪平面上的点，<code>z = z' = -n</code> ，则有
 <img src="/img/Render/Graphics/Transform/Math_Transform_15.png?raw=true" alt=Math_Transform_15.png>
 </li>
 <li>因此可以得到，变换矩阵为
 <img src="/img/Render/Graphics/Transform/Math_Transform_16.png?raw=true" alt=Math_Transform_16.png>
 </li>
-<li>同样，对于远裁剪平面上的点，z = z' = -f ，则有
+<li>同样，对于远裁剪平面上的点，<code>z = z' = -f</code> ，则有
 <img src="/img/Render/Graphics/Transform/Math_Transform_17.png?raw=true" alt=Math_Transform_17.png>
 </li>
 <li>可以得到
@@ -229,15 +229,80 @@ post-container">
 </ul>
 <h3 id=齐次除法透视除法>齐次除法（透视除法）</h3>
 <ul>
-<li>经过投影变换后，得到的视锥体，需要投影到屏幕空间中。然而可以发现，正交投影和透视投影得到的视锥体并不是统一的，所以需要统一转换到 NDC（Normalized Device Coordinates）中，即将 x、y、z、w 都除以 w 分量。</li>
+<li>经过投影变换后，得到的视锥体，需要投影到屏幕空间中。然而可以发现，正交投影和透视投影得到的视锥体并不是统一的，所以需要统一转换到 NDC（Normalized Device Coordinates）中，即将 <code>x</code> 、<code>y</code> 、<code>z</code> 、<code>w</code> 都除以 <code>w</code> 分量。</li>
 <li>正交投影变换为
 <img src="/img/Render/Graphics/Transform/Math_Transform_23.png?raw=true" alt=Math_Transform_23.png>
-由于 w 分量为 1，因此齐次除法后保持不变。</li>
+由于 <code>w</code> 分量为 <code>1</code>，因此齐次除法后保持不变。</li>
 <li>透视投影变换为
 <img src="/img/Render/Graphics/Transform/Math_Transform_24.png?raw=true" alt=Math_Transform_24.png>
-由于 w 分量为 -z，所以 x、y、z 都要除以 -z，从而将视锥体转换到 [-1, 1] 范围里。</li>
+由于 <code>w</code> 分量为 <code>-z</code>，所以 <code>x</code> 、<code>y</code> 、<code>z</code> 都要除以 <code>-z</code>，从而将视锥体转换到 <code>[-1, 1]</code> 范围里，即
+<img src="/img/Render/Graphics/Transform/Math_Transform_31.png?raw=true" alt=Math_Transform_31.png>
+</li>
 </ul>
-<h3 id=总结>总结</h3>
+<h3 id=深度值>深度值</h3>
+<ul>
+<li>透视投影经过齐次除法后，<code>z_NDC</code> 的值为
+<img src="/img/Render/Graphics/Transform/Math_Transform_25.png?raw=true" alt=Math_Transform_25.png>
+</li>
+<li>在像素着色器中，每一个像素的坐标都需要通过插值计算得到，在透视投影下，需要使用<a href=https://fallingxun.github.io/post/render/graphics/graphics_barycentricinterpolation/>透视校正插值</a>。此时，如果深度图使用观察空间下的 <code>z_view</code> ，则在插值过程需要对属性 <code>I</code> 除以 <code>z_view</code> 计算，因此深度图使用 <code>z_NDC</code> 可以减少计算复杂度。</li>
+<li>由于深度图的范围为 <code>[0, 1]</code> ，因此深度图中的 <code>z_depth</code> 值为
+<img src="/img/Render/Graphics/Transform/Math_Transform_26.png?raw=true" alt=Math_Transform_26.png>
+</li>
+<li>可以看到，齐次除法后的 <code>z_NDC</code> 值已经不为观察空间下 <code>z_view</code> 值的线性变换，因此使用深度图的深度信息时，需要变换观察空间下才能进行其他计算，即
+<img src="/img/Render/Graphics/Transform/Math_Transform_27.png?raw=true" alt=Math_Transform_27.png>
+</li>
+<li>由于 OpenGL 中观察空间为右手坐标系，而裁剪空间下是左手坐标系，所以观察空间下的 <code>z_view</code> 值需要取反，才为左手坐标系下的线性 <code>z_eye</code> 值，即
+<img src="/img/Render/Graphics/Transform/Math_Transform_28.png?raw=true" alt=Math_Transform_28.png>
+</li>
+<li>当相机位置为 0 ，远裁剪平面为 1 时，即在左手坐标系下整体缩小 <code>f</code> ，则深度值 <code>z_linear01</code> 为
+<img src="/img/Render/Graphics/Transform/Math_Transform_29.png?raw=true" alt=Math_Transform_29.png>
+</li>
+<li>当近裁剪平面为 0 ，原裁剪平面为 1 时，即在左手坐标系下先移动 <code>-n</code> ，再整体缩小 <code>f</code> ，则深度值 <code>z_linear01FromNear</code> 为
+<img src="/img/Render/Graphics/Transform/Math_Transform_30.png?raw=true" alt=Math_Transform_30.png>
+</li>
+<li>因此，用于在 shader 中计算深度的 <code>_ZBufferParams</code> 参数值为
+<img src="/img/Render/Graphics/Transform/Math_Transform_32.png?raw=true" alt=Math_Transform_32.png>
+在 <code>com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl</code> 中，获取线性深度的方法为</li>
+</ul>
+<pre tabindex=0><code>// Common.hlsl
+...
+
+// Z buffer to linear 0..1 depth (0 at near plane, 1 at far plane).
+// Does NOT correctly handle oblique view frustums.
+// Does NOT work with orthographic projection.
+// zBufferParam (UNITY_REVERSED_Z) = { f/n - 1,   1, (1/n - 1/f), 1/f }
+// zBufferParam                    = { 1 - f/n, f/n, (1/f - 1/n), 1/n }
+float Linear01DepthFromNear(float depth, float4 zBufferParam)
+{
+    #if UNITY_REVERSED_Z
+    return (1.0 - depth) / (zBufferParam.x * depth + zBufferParam.y);
+    #else
+    return depth / (zBufferParam.x * depth + zBufferParam.y);
+    #endif
+}
+
+// Z buffer to linear 0..1 depth (0 at camera position, 1 at far plane).
+// Does NOT work with orthographic projections.
+// Does NOT correctly handle oblique view frustums.
+// zBufferParam (UNITY_REVERSED_Z) = { f/n - 1,   1, (1/n - 1/f), 1/f }
+// zBufferParam                    = { 1 - f/n, f/n, (1/f - 1/n), 1/n }
+float Linear01Depth(float depth, float4 zBufferParam)
+{
+    return 1.0 / (zBufferParam.x * depth + zBufferParam.y);
+}
+
+// Z buffer to linear view space (eye) depth.
+// Does NOT correctly handle oblique view frustums.
+// Does NOT work with orthographic projection.
+// zBufferParam (UNITY_REVERSED_Z) = { f/n - 1,   1, (1/n - 1/f), 1/f }
+// zBufferParam                    = { 1 - f/n, f/n, (1/f - 1/n), 1/n }
+float LinearEyeDepth(float depth, float4 zBufferParam)
+{
+    return 1.0 / (zBufferParam.z * depth + zBufferParam.w);
+}
+
+...
+</code></pre><h3 id=总结>总结</h3>
 <ul>
 <li>计算机图形学中，变换的应用非常多，渲染时基本上离不开坐标变换，理解各个过程的变换矩阵，也有助于理解整个渲染的过程。</li>
 </ul>
