@@ -65,7 +65,7 @@ M \begin{bmatrix} x\\y\\z\\1 \end{bmatrix} = \begin{bmatrix} -\frac{nx}{z}\\-\fr
 
 - Math_Transform_14
 ```math
-M  = \begin{bmatrix}n&0&0&0 \\0&n&0&0 \\A&B&C&D \\0&0&1&0 \end{bmatrix}
+M  = \begin{bmatrix}n&0&0&0 \\0&n&0&0 \\A&B&C&D \\0&0&-1&0 \end{bmatrix}
 ```
 
 - Math_Transform_15
