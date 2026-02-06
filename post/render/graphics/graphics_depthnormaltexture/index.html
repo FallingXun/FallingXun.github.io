@@ -1,0 +1,235 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content="图形学篇 — 深度法线纹理">
+<meta property="og:title" content="图形学篇 — 深度法线纹理">
+<meta property="twitter:title" content="图形学篇 — 深度法线纹理">
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title>图形学篇 — 深度法线纹理-</title>
+<link rel=canonical href=/post/render/graphics/graphics_depthnormaltexture/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+<li>
+<a href=/categories/googleplay%E7%B3%BB%E5%88%97>googleplay系列</a>
+</li>
+<li>
+<a href=/categories/lua%E7%B3%BB%E5%88%97>lua系列</a>
+</li>
+<li>
+<a href=/categories/tmp%E7%B3%BB%E5%88%97>tmp系列</a>
+</li>
+<li>
+<a href=/categories/unity%E7%B3%BB%E5%88%97>unity系列</a>
+</li>
+<li>
+<a href=/categories/%E5%9B%BE%E5%BD%A2%E5%AD%A6%E7%B3%BB%E5%88%97>图形学系列</a>
+</li>
+<li>
+<a href=/categories/%E6%B8%B2%E6%9F%93%E7%B3%BB%E5%88%97>渲染系列</a>
+</li>
+<li>
+<a href=/categories/%E7%AE%97%E6%B3%95%E7%B3%BB%E5%88%97>算法系列</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+<a class=tag href=/tags/graphics title=Graphics>
+Graphics
+</a>
+</div>
+<h1>图形学篇 — 深度法线纹理</h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun
+on
+Monday, January 26, 2026
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<h3 id=简介>简介</h3>
+<h4 id=深度值>深度值</h4>
+<ul>
+<li>透视投影经过齐次除法后，<code>z_NDC</code> 的值为
+<img src="/img/Render/Graphics/DepthNormalTexture/Math_DepthNormalTexture_1.png?raw=true" alt=Math_DepthNormalTexture_1.png>
+</li>
+<li>在像素着色器中，每一个像素的坐标都需要通过插值计算得到，在透视投影下，需要使用<a href=https://fallingxun.github.io/post/render/graphics/graphics_barycentricinterpolation/>透视校正插值</a>。此时，如果深度图使用观察空间下的 <code>z_view</code> ，则在插值过程需要对属性 <code>I</code> 除以 <code>z_view</code> 计算，因此深度图使用 <code>z_NDC</code> 可以减少计算复杂度。</li>
+<li>由于深度图的范围为 <code>[0, 1]</code> ，因此深度图中的 <code>z_depth</code> 值为
+<img src="/img/Render/Graphics/DepthNormalTexture/Math_DepthNormalTexture_2.png?raw=true" alt=Math_DepthNormalTexture_2.png>
+</li>
+<li>可以看到，齐次除法后的 <code>z_NDC</code> 值已经不为观察空间下 <code>z_view</code> 值的线性变换，因此使用深度图的深度信息时，需要变换观察空间下才能进行其他计算，即
+<img src="/img/Render/Graphics/DepthNormalTexture/Math_DepthNormalTexture_3.png?raw=true" alt=Math_DepthNormalTexture_3.png>
+</li>
+<li>由于 OpenGL 中观察空间为右手坐标系，而裁剪空间下是左手坐标系，所以观察空间下的 <code>z_view</code> 值需要取反，才为左手坐标系下的线性 <code>z_eye</code> 值，即
+<img src="/img/Render/Graphics/DepthNormalTexture/Math_DepthNormalTexture_4.png?raw=true" alt=Math_DepthNormalTexture_4.png>
+</li>
+<li>当相机位置为 0 ，远裁剪平面为 1 时，即在左手坐标系下整体缩小 <code>f</code> ，则深度值 <code>z_linear01</code> 为
+<img src="/img/Render/Graphics/DepthNormalTexture/Math_DepthNormalTexture_5.png?raw=true" alt=Math_DepthNormalTexture_5.png>
+</li>
+<li>当近裁剪平面为 0 ，原裁剪平面为 1 时，即在左手坐标系下先移动 <code>-n</code> ，再整体缩小 <code>f</code> ，则深度值 <code>z_linear01FromNear</code> 为
+<img src="/img/Render/Graphics/DepthNormalTexture/Math_DepthNormalTexture_6.png?raw=true" alt=Math_DepthNormalTexture_6.png>
+</li>
+<li>因此，用于在 shader 中计算深度的 <code>_ZBufferParams</code> 参数值为
+<img src="/img/Render/Graphics/DepthNormalTexture/Math_DepthNormalTexture_7.png?raw=true" alt=Math_DepthNormalTexture_7.png>
+在 <code>com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl</code> 中，获取线性深度的方法为</li>
+</ul>
+<pre tabindex=0><code>// Common.hlsl
+...
+
+// Z buffer to linear 0..1 depth (0 at near plane, 1 at far plane).
+// Does NOT correctly handle oblique view frustums.
+// Does NOT work with orthographic projection.
+// zBufferParam (UNITY_REVERSED_Z) = { f/n - 1,   1, (1/n - 1/f), 1/f }
+// zBufferParam                    = { 1 - f/n, f/n, (1/f - 1/n), 1/n }
+float Linear01DepthFromNear(float depth, float4 zBufferParam)
+{
+    #if UNITY_REVERSED_Z
+    return (1.0 - depth) / (zBufferParam.x * depth + zBufferParam.y);
+    #else
+    return depth / (zBufferParam.x * depth + zBufferParam.y);
+    #endif
+}
+
+// Z buffer to linear 0..1 depth (0 at camera position, 1 at far plane).
+// Does NOT work with orthographic projections.
+// Does NOT correctly handle oblique view frustums.
+// zBufferParam (UNITY_REVERSED_Z) = { f/n - 1,   1, (1/n - 1/f), 1/f }
+// zBufferParam                    = { 1 - f/n, f/n, (1/f - 1/n), 1/n }
+float Linear01Depth(float depth, float4 zBufferParam)
+{
+    return 1.0 / (zBufferParam.x * depth + zBufferParam.y);
+}
+
+// Z buffer to linear view space (eye) depth.
+// Does NOT correctly handle oblique view frustums.
+// Does NOT work with orthographic projection.
+// zBufferParam (UNITY_REVERSED_Z) = { f/n - 1,   1, (1/n - 1/f), 1/f }
+// zBufferParam                    = { 1 - f/n, f/n, (1/f - 1/n), 1/n }
+float LinearEyeDepth(float depth, float4 zBufferParam)
+{
+    return 1.0 / (zBufferParam.z * depth + zBufferParam.w);
+}
+
+...
+</code></pre><h4 id=reversed-z-优化>Reversed-Z 优化</h4>
+<ul>
+<li>由于 <code>z_NDC</code> 是按 <code>1/z_view</code> 关系分布的，因此，<code>z_NDC</code> 区间的绝大部分值，都映射到接近近裁剪平面附近，精度较高，而靠近远裁剪平面部分，<code>z_NDC</code> 的变化很小，精度较低，即在较大区间范围内的所有 <code>z_view</code> 都对应同一个 <code>z_NDC</code> 值，因此容易出现 z-fighting 问题。而在近裁剪平面附近，通常也不需要这么高的精度。</li>
+<li>在 D3D 中，<code>z_NDC</code> 的范围为 <code>[0, 1]</code> ，对应 <code>z_view</code> 的 <code>[near, far]</code> ，而深度值通常使用 4 bit 来存储浮点数。根据<a href=https://fallingxun.github.io/post/algorithm/algorithm_scalarquantization/>浮点数的量化规则</a>，当浮点数越接近 0 时，同样位数的存储能有更大的精度，即能表示更小的浮点数，但这些值对应的 <code>z_view</code> 变化范围非常小。如果将深度值按 <code>1 - z_NDC</code> 存储，即远裁剪平面对应 <code>z_NDC</code> 为 0，利用浮点数的特点，可以在靠近远裁剪平面获得更大的精度，一定程度上抵消非线性深度的问题，这种方式称为 <code>Reversed-Z</code>。</li>
+<li>然而，在 OpenGL 中，由于 <code>z_NDC</code> 的范围为 <code>[-1, 1]</code> ，浮点数的高精度部分集中在中间区域，远裁剪平面无法通过使用 <code>Reversed-Z</code> 优化。尽管 <code>z_NDC</code> 在后续会将值映射到 <code>[0, 1]</code> 存入深度图，但由于初始映射到 <code>[-1, 1]</code> 的过程已经破坏了远裁剪平面部分的精度，所以 <code>Reversed-Z</code> 作用不大。</li>
+</ul>
+<h4 id=计算观察坐标>计算观察坐标</h4>
+<ul>
+<li></li>
+</ul>
+<h3 id=总结>总结</h3>
+<ul>
+<li>计算机图形学中，变换的应用非常多，渲染时基本上离不开坐标变换，理解各个过程的变换矩阵，也有助于理解整个渲染的过程。此外，由于变换过程中对深度产生影响，了解其中的原理，也能更好地理解深度图相关的各个参数和公式的含义。</li>
+</ul>
+<h3 id=参考>参考</h3>
+<ul>
+<li><a href=https://developer.nvidia.com/content/depth-precision-visualized>Depth Precision Visualized</a></li>
+</ul>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/algorithm/algorithm_navmeshnavigation_2/ data-toggle=tooltip data-placement=top title="算法篇 — NavMesh 导航 — （2）生成导航网格">&larr;
+Previous Post</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2026
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>
