@@ -87,5 +87,9 @@ k_{min} = \int_{\Omega}\space 0 \cdot cos\theta \space d \Omega = 0
 k' = \frac{1}{\pi} \int_{\Omega}\space v cos\theta \space d \Omega
 ```
 
+- Math_AmbientOcclusion_16
+```math
+E =  k' \pi L'
 
+```
 
