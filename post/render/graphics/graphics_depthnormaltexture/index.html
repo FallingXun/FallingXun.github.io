@@ -228,9 +228,46 @@ float LinearEyeDepth(float depth, float4 zBufferParam)
 </figure>
 </li>
 </ul>
-<h3 id=计算观察坐标>计算观察坐标</h3>
+<h3 id=观察坐标重构>观察坐标重构</h3>
 <ul>
-<li>根据近裁剪平面上的顶点坐标信息，加上深度纹理的 <code>uv</code> 坐标和深度信息，可以计算出目标点在观察空间下的坐标。</li>
+<li>根据近裁剪平面上的顶点坐标信息，加上深度纹理的 <code>uv</code> 坐标和深度信息，可以计算出目标点在观察空间下的坐标（参考 <code>SSAO.hlsl</code> 中的 <code>ReconstructViewPos</code> 方法）。</li>
+</ul>
+<pre tabindex=0><code>// ./ShaderLibrary/SSAO.hlsl
+
+...
+
+half3 ReconstructViewPos(float2 uv, float linearDepth)
+{
+    #if defined(SUPPORTS_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
+    UNITY_BRANCH if (_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
+    {
+        uv = RemapFoveatedRenderingNonUniformToLinear(uv);
+    }
+    #endif
+
+    // Screen is y-inverted.
+    uv.y = 1.0 - uv.y;
+
+    // view pos in world space
+    #if defined(_ORTHOGRAPHIC)
+        float zScale = linearDepth * _ProjectionParams.w; // divide by far plane
+        float3 viewPos = _CameraViewTopLeftCorner[unity_eyeIndex].xyz
+                            + _CameraViewXExtent[unity_eyeIndex].xyz * uv.x
+                            + _CameraViewYExtent[unity_eyeIndex].xyz * uv.y
+                            + _CameraViewZExtent[unity_eyeIndex].xyz * zScale;
+    #else
+        float zScale = linearDepth * _ProjectionParams2.x; // divide by near plane
+        float3 viewPos = _CameraViewTopLeftCorner[unity_eyeIndex].xyz
+                            + _CameraViewXExtent[unity_eyeIndex].xyz * uv.x
+                            + _CameraViewYExtent[unity_eyeIndex].xyz * uv.y;
+        viewPos *= zScale;
+    #endif
+
+    return half3(viewPos);
+}
+
+...
+</code></pre><ul>
 <li>对于正交投影，目标点观察空间下的 <code>x</code> 、<code>y</code> 坐标，可由近裁剪平面的左上顶点的 <code>x</code> 、<code>y</code> 坐标，加上 <code>uv</code> 偏移得到，<code>z</code> 坐标则可由近裁剪平面的 <code>z</code> 坐标，加上当前和近裁剪平面的距离得到，即
 <img src="/img/Render/Graphics/DepthNormalTexture/Math_DepthNormalTexture_11.png?raw=true" alt=Math_DepthNormalTexture_11.png>
 </li>
@@ -238,6 +275,95 @@ float LinearEyeDepth(float depth, float4 zBufferParam)
 <img src="/img/Render/Graphics/DepthNormalTexture/Math_DepthNormalTexture_12.png?raw=true" alt=Math_DepthNormalTexture_12.png>
 同样使用近裁剪平面的左上顶点和 <code>uv</code> 偏移，则有
 <img src="/img/Render/Graphics/DepthNormalTexture/Math_DepthNormalTexture_13.png?raw=true" alt=Math_DepthNormalTexture_13.png>
+</li>
+</ul>
+<h3 id=法线重构>法线重构</h3>
+<ul>
+<li>根据顶点坐标信息，加上深度纹理的 <code>uv</code> 坐标和深度信息，可以计算出目标点在观察空间下的法线（参考 <code>SSAO.hlsl</code> 中的 <code>ReconstructNormal</code> 方法）。</li>
+</ul>
+<pre tabindex=0><code>// ./ShaderLibrary/SSAO.hlsl
+
+...
+
+half3 ReconstructNormal(float2 uv, float linearDepth, float3 vpos, float2 pixelDensity)
+{
+    #if defined(_SOURCE_DEPTH_LOW)
+        return half3(normalize(cross(ddy(vpos), ddx(vpos))));
+    #else
+        float2 delta = float2(_SourceSize.zw * 2.0);
+
+        pixelDensity = rcp(pixelDensity);
+
+        // Sample the neighbour fragments
+        float2 lUV = float2(-delta.x, 0.0) * pixelDensity;
+        float2 rUV = float2(delta.x, 0.0) * pixelDensity;
+        float2 uUV = float2(0.0, delta.y) * pixelDensity;
+        float2 dUV = float2(0.0, -delta.y) * pixelDensity;
+
+        float3 l1 = float3(uv + lUV, 0.0); l1.z = SampleAndGetLinearEyeDepth(l1.xy); // Left1
+        float3 r1 = float3(uv + rUV, 0.0); r1.z = SampleAndGetLinearEyeDepth(r1.xy); // Right1
+        float3 u1 = float3(uv + uUV, 0.0); u1.z = SampleAndGetLinearEyeDepth(u1.xy); // Up1
+        float3 d1 = float3(uv + dUV, 0.0); d1.z = SampleAndGetLinearEyeDepth(d1.xy); // Down1
+
+        // Determine the closest horizontal and vertical pixels...
+        // horizontal: left = 0.0 right = 1.0
+        // vertical  : down = 0.0    up = 1.0
+        #if defined(_SOURCE_DEPTH_MEDIUM)
+             uint closest_horizontal = l1.z &gt; r1.z ? 0 : 1;
+             uint closest_vertical   = d1.z &gt; u1.z ? 0 : 1;
+        #else
+            float3 l2 = float3(uv + lUV * 2.0, 0.0); l2.z = SampleAndGetLinearEyeDepth(l2.xy); // Left2
+            float3 r2 = float3(uv + rUV * 2.0, 0.0); r2.z = SampleAndGetLinearEyeDepth(r2.xy); // Right2
+            float3 u2 = float3(uv + uUV * 2.0, 0.0); u2.z = SampleAndGetLinearEyeDepth(u2.xy); // Up2
+            float3 d2 = float3(uv + dUV * 2.0, 0.0); d2.z = SampleAndGetLinearEyeDepth(d2.xy); // Down2
+
+            const uint closest_horizontal = abs( (2.0 * l1.z - l2.z) - linearDepth) &lt; abs( (2.0 * r1.z - r2.z) - linearDepth) ? 0 : 1;
+            const uint closest_vertical   = abs( (2.0 * d1.z - d2.z) - linearDepth) &lt; abs( (2.0 * u1.z - u2.z) - linearDepth) ? 0 : 1;
+        #endif
+
+        // Calculate the triangle, in a counter-clockwize order, to
+        // use based on the closest horizontal and vertical depths.
+        // h == 0.0 &amp;&amp; v == 0.0: p1 = left,  p2 = down
+        // h == 1.0 &amp;&amp; v == 0.0: p1 = down,  p2 = right
+        // h == 1.0 &amp;&amp; v == 1.0: p1 = right, p2 = up
+        // h == 0.0 &amp;&amp; v == 1.0: p1 = up,    p2 = left
+        // Calculate the view space positions for the three points...
+        half3 P1;
+        half3 P2;
+        if (closest_vertical == 0)
+        {
+            P1 = half3(closest_horizontal == 0 ? l1 : d1);
+            P2 = half3(closest_horizontal == 0 ? d1 : r1);
+        }
+        else
+        {
+            P1 = half3(closest_horizontal == 0 ? u1 : r1);
+            P2 = half3(closest_horizontal == 0 ? l1 : u1);
+        }
+
+        // Use the cross product to calculate the normal...
+        return half3(normalize(cross(ReconstructViewPos(P2.xy, P2.z) - vpos, ReconstructViewPos(P1.xy, P1.z) - vpos)));
+    #endif
+}
+
+...
+</code></pre><ul>
+<li>初级版本，计算相对简单，仅对当前坐标点计算了 <code>ddx</code> 和 <code>ddy</code> ，得到当前坐标点到水平、垂直方向相邻点的向量，再进行叉乘计算，即得到当前点、水平相邻点、垂直相邻点组成的三角面的法线。
+<ul>
+<li>其中相邻点为 GPU 执行时的 2 x 2 单元块。</li>
+<li>尽管计算简单，但在深度不连续的边缘处，偏导跨越了不同表面，法线会扭曲。</li>
+</ul>
+</li>
+<li>中级版本，取上下左右距离当前点两个像素的 4 个点，采样计算其线性深度，分别取水平和垂直方向中线性深度较大的两个点，和当前点组成的三角面，以三角面的法线为当前点的法线。
+<ul>
+<li>取线性深度大（即距离相机远）的点，是因为当采样点的线性深度越大，越不容易出现在当前点的前方。而在当前点前方的点，越容易为其他物体，因此计算得到的法线错误率更高。而在当前点后方的采样点，如果为其他物体，则两点之间存在边缘，此时计算得到的法线也能相对接近实际法线。</li>
+<li>相比初级版本，需要进行深度图的多次采样，性能开销上会增大。</li>
+</ul>
+</li>
+<li>高级版本，则是在中级版本上对采样点最改进，上下左右取了 8 个点，如果某一侧连续的三个点的深度差为越小，则越接近同一平面，计算得到的法线则越接近真实结果。
+<ul>
+<li>相比中级版本，采样点翻了一倍，所以性能开销上会更大，但相对地能得到一个更加准确的结果。</li>
+</ul>
 </li>
 </ul>
 <h2 id=法线纹理>法线纹理</h2>
@@ -272,6 +398,7 @@ inline float2 EncodeViewNormalStereo( float3 n )
 <h2 id=参考>参考</h2>
 <ul>
 <li><a href=https://developer.nvidia.com/content/depth-precision-visualized>Depth Precision Visualized</a></li>
+<li><a href=https://atyuwen.github.io/posts/normal-reconstruction/>Accurate Normal Reconstruction from Depth Buffer</a></li>
 </ul>
 <hr>
 <ul class=pager>
