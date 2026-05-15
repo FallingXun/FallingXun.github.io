@@ -205,7 +205,363 @@ post-container">
 <li>如图所示，相机在正上方，黄色点为当前计算的像素位置点，其余点为采样点，分布在以黄色点为圆心的球面上。其中，红色点在物体内部，即未通过深度测试，而蓝色点虽然在物体外部，但在相机方向上被遮挡，即同样未通过深度测试，仅绿色点能通过深度测试，因此环境遮挡因子 <code>k'</code> 为 0.2 。</li>
 <li>其中，样本的选取，不是只考虑位于表面上方半球内的位置，而是包括了物体内部的位置。在这种采样方式下，会出现一个平坦的表面会变暗，且边缘比周围更亮的情况。尽管如此，这种表现结果通常在视觉上依然能令人满意。</li>
 </ul>
-<p>未完成：补充unity的算法</p>
+<h1 id=unity-中的-ssao-实现>Unity 中的 SSAO 实现</h1>
+<ul>
+<li>URP（14.0.12）中的 <code>SSAO</code> 实现在 <code>ScreenSpaceAmbientOcclusion.cs</code> 中，主要代码如下：</li>
+</ul>
+<pre tabindex=0><code>// ./Runtime/RenderFeatures/ScreenSpaceAmbientOcclusion.cs
+
+...
+
+            public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
+            {
+                if (m_Material == null)
+                {
+                    Debug.LogErrorFormat(&quot;{0}.Execute(): Missing material. ScreenSpaceAmbientOcclusion pass will not execute. Check for missing reference in the renderer resources.&quot;, GetType().Name);
+                    return;
+                }
+
+                var cmd = renderingData.commandBuffer;
+                using (new ProfilingScope(cmd, m_ProfilingSampler))
+                {
+                    ...
+
+                    GetPassOrder(m_BlurType, m_CurrentSettings.AfterOpaque, out int[] textureIndices, out ShaderPasses[] shaderPasses);
+
+                    // Execute the SSAO
+                    RTHandle cameraDepthTargetHandle = m_Renderer.cameraDepthTargetHandle;
+                    RenderAndSetBaseMap(ref cmd, ref renderingData, ref m_Renderer, ref m_Material, ref cameraDepthTargetHandle, ref m_SSAOTextures[0], ShaderPasses.AmbientOcclusion);
+
+                    // Execute the Blur Passes
+                    for (int i = 0; i &lt; shaderPasses.Length; i++)
+                    {
+                        int baseMapIndex = textureIndices[i];
+                        int targetIndex = textureIndices[i + 1];
+                        RenderAndSetBaseMap(ref cmd, ref renderingData, ref m_Renderer, ref m_Material, ref m_SSAOTextures[baseMapIndex], ref m_SSAOTextures[targetIndex], shaderPasses[i]);
+                    }
+
+                    // Set the global SSAO Params
+                    cmd.SetGlobalVector(s_AmbientOcclusionParamID, new Vector4(1f, 0f, 0f, m_CurrentSettings.DirectLightingStrength));
+                }
+            }
+
+...
+</code></pre><ul>
+<li><code>SSAO</code> 执行过程主要包括几个步骤：
+<ul>
+<li>通过 <code>GetPassOrder</code> 方法，获得当前模糊类型对应需要执行的 <code>Pass</code> 组。</li>
+<li>通过 <code>RenderAndSetBaseMap</code> 方法，传入深度图，执行 <code>ScreenSpaceAmbientOcclusion.shader</code> 的 <code>Pass 0</code>（<code>ShaderPasses.AmbientOcclusion</code>），输出到 <code>m_SSAOTextures[0]</code> 上。</li>
+<li>遍历 <code>Pass</code> 组，通过 <code>RenderAndSetBaseMap</code> 方法，将上一次的输出结果作为输入，执行每一个 <code>Pass</code> 输出。</li>
+<li>设置 <code>s_AmbientOcclusionParamID</code> 。</li>
+</ul>
+</li>
+</ul>
+<h2 id=ssao-pass>SSAO Pass</h2>
+<ul>
+<li><code>ShaderPasses.AmbientOcclusion</code> 对应的 <code>Pass</code> 的像素着色器为 <code>SSAO</code> ，其实现如下：</li>
+</ul>
+<pre tabindex=0><code>// ./ShaderLibrary/SSAO.hlsl
+
+...
+
+half4 SSAO(Varyings input) : SV_Target
+{
+    UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+    float2 uv = input.texcoord;
+    // Early Out for Sky...
+    float rawDepth_o = SampleDepth(uv);
+    // 1. 过滤深度范围，去除过小（天空盒距离）/过大（用户设置距离）
+    if (rawDepth_o &lt; SKY_DEPTH_VALUE)
+        return PackAONormal(HALF_ZERO, HALF_ZERO);
+
+    // Early Out for Falloff
+    float linearDepth_o = GetLinearEyeDepth(rawDepth_o);
+    half halfLinearDepth_o = half(linearDepth_o);
+    if (halfLinearDepth_o &gt; FALLOFF)
+        return PackAONormal(HALF_ZERO, HALF_ZERO);
+
+    float2 pixelDensity;
+    #if defined(SUPPORTS_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
+    UNITY_BRANCH if (_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
+    {
+        pixelDensity = RemapFoveatedRenderingDensity(RemapFoveatedRenderingNonUniformToLinear(uv));
+    }
+    else
+    #endif
+    {
+        pixelDensity = float2(1.0f, 1.0f);
+    }
+
+    // 2. 计算当前像素的法线、世界坐标（以相机为原点）
+    // Normal for this fragment
+    half3 normal_o = SampleNormal(uv, linearDepth_o, pixelDensity);
+
+    // View position for this fragment
+    float3 vpos_o = ReconstructViewPos(uv, linearDepth_o);
+
+    // Parameters used in coordinate conversion
+    // 传入的 VP 矩阵在 ScreenSpaceAbmibentOcclusion.OnCameraSetup 中特殊处理了，移除了相机的位移变换，即假设相机为世界坐标原点
+    half3 camTransform000102 = half3(_CameraViewProjections[unity_eyeIndex]._m00, _CameraViewProjections[unity_eyeIndex]._m01, _CameraViewProjections[unity_eyeIndex]._m02);
+    half3 camTransform101112 = half3(_CameraViewProjections[unity_eyeIndex]._m10, _CameraViewProjections[unity_eyeIndex]._m11, _CameraViewProjections[unity_eyeIndex]._m12);
+
+    const half rcpSampleCount = half(rcp(SAMPLE_COUNT));
+    half ao = HALF_ZERO;
+    half sHalf = HALF_MINUS_ONE;
+    UNITY_UNROLL
+
+    // 3. 采样多个点，计算 ao 值
+    for (int s = 0; s &lt; SAMPLE_COUNT; s++)
+    {
+        sHalf += HALF_ONE;
+
+        // 3.1 取采样点，计算其世界坐标（以相机为原点）和屏幕坐标
+        // Sample point
+        half3 v_s1 = PickSamplePoint(uv, s, sHalf, rcpSampleCount, normal_o, pixelDensity);
+        half3 vpos_s1 = half3(vpos_o + v_s1);
+        half2 spos_s1 = half2(
+            camTransform000102.x * vpos_s1.x + camTransform000102.y * vpos_s1.y + camTransform000102.z * vpos_s1.z,
+            camTransform101112.x * vpos_s1.x + camTransform101112.y * vpos_s1.y + camTransform101112.z * vpos_s1.z
+        );
+
+        // 3.2 计算采样点深度值和uv
+        half zDist = HALF_ZERO;
+        #if defined(_ORTHOGRAPHIC)
+            zDist = halfLinearDepth_o;
+            half2 uv_s1_01 = saturate((spos_s1 + HALF_ONE) * HALF_HALF);
+        #else
+            // 从世界空间变换到观察空间，并取反，得到深度值
+            zDist = half(-dot(UNITY_MATRIX_V[2].xyz, vpos_s1));
+            half2 uv_s1_01 = saturate(half2(spos_s1 * rcp(zDist) + HALF_ONE) * HALF_HALF);
+        #endif
+
+        #if defined(SUPPORTS_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
+        UNITY_BRANCH if (_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
+        {
+            uv_s1_01 = RemapFoveatedRenderingLinearToNonUniform(uv_s1_01);
+        }
+        #endif
+
+        // 3.3 计算采样点对应的uv，在深度图中的深度值，并检查采样点深度是否该深度的半径范围内
+        // Relative depth of the sample point
+        float rawDepth_s = SampleDepth(uv_s1_01);
+        float linearDepth_s = GetLinearEyeDepth(rawDepth_s);
+
+        // We need to make sure we not use the AO value if the sample point it's outside the radius or if it's the sky...
+        half halfLinearDepth_s = half(linearDepth_s);
+        half isInsideRadius = abs(zDist - halfLinearDepth_s) &lt; RADIUS ? 1.0 : 0.0;
+        isInsideRadius *= rawDepth_s &gt; SKY_DEPTH_VALUE ? 1.0 : 0.0;
+
+        // 3.4 计算深度图该深度值对应的点和当前像素点的相对坐标
+        // Relative postition of the sample point
+        half3 v_s2 = half3(ReconstructViewPos(uv_s1_01, linearDepth_s) - vpos_o);
+
+        // 3.5 计算每个采样点的 ao 影响
+        // Estimate the obscurance value
+        // kBeta 为防止自遮蔽的偏置量
+        half dotVal = dot(v_s2, normal_o) - kBeta * halfLinearDepth_o;
+        // 采样点的向量在法线上的投影，正半球会产生遮蔽
+        half a1 = max(dotVal, HALF_ZERO);
+        // 距离越近，遮蔽贡献更大，kEpsilon 防止出现分母为 0
+        half a2 = dot(v_s2, v_s2) + kEpsilon;
+        ao += a1 * rcp(a2) * isInsideRadius;
+    }
+
+    // 4. 计算最终的 ao 值
+    // Intensity normalization
+    // a1 为 O(RADIUS) ，a2 为 O(RADIUS^2)，ao = a1 / a2 导致 ao 受 RADIUS 影响，乘上 RADIUS 抵消该影响。
+    ao *= RADIUS;
+
+    // Calculate falloff...
+    half falloff = HALF_ONE - halfLinearDepth_o * half(rcp(FALLOFF));
+    falloff = falloff*falloff;
+
+    // Apply contrast + intensity + falloff^2
+    ao = PositivePow(saturate(ao * INTENSITY * falloff * rcpSampleCount), kContrast);
+
+    // 5. 将 ao 和法线打包返回，a 为 ao，gba 为法线
+    // Return the packed ao + normals
+    return PackAONormal(ao, normal_o);
+}
+
+...
+</code></pre><ul>
+<li><code>SSAO Pass</code> 主要通过取多个采样点，计算深度符合要求的且在当前点正半球上的点的 <code>ao</code> 值，累加后求平均值，得到所有采样点在当前点上产生的最终 <code>ao</code> 值。</li>
+</ul>
+<h2 id=blur-pass>Blur Pass</h2>
+<ul>
+<li><code>SSAO Pass</code> 计算完成后，还需要根据不同的设置进行双边滤波，主要如下：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style=text-align:center>模糊类型</th>
+<th style=text-align:center>渲染顺序</th>
+<th style=text-align:center>Pass组</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style=text-align:center><code>Bilateral</code></td>
+<td style=text-align:center>不透明渲染前</td>
+<td style=text-align:center><code>BilateralBlurHorizontal</code>（1）<br> <code>BilateralBlurVertical</code>（2） <br> <code>BilateralBlurFinal</code>（3）</td>
+</tr>
+<tr>
+<td style=text-align:center><code>Bilateral</code></td>
+<td style=text-align:center>不透明渲染后</td>
+<td style=text-align:center><code>BilateralBlurHorizontal</code>（1）<br> <code>BilateralBlurVertical</code>（2） <br> <code>BilateralAfterOpaque</code>（3）</td>
+</tr>
+<tr>
+<td style=text-align:center><code>Gaussian</code></td>
+<td style=text-align:center>不透明渲染前</td>
+<td style=text-align:center><code>GaussianBlurHorizontal</code>（5）<br> <code>GaussianBlurVertical</code>（6）</td>
+</tr>
+<tr>
+<td style=text-align:center><code>Gaussian</code></td>
+<td style=text-align:center>不透明渲染后</td>
+<td style=text-align:center><code>GaussianBlurHorizontal</code>（5）<br> <code>GaussianAfterOpaque</code>（7）</td>
+</tr>
+<tr>
+<td style=text-align:center><code>Kawase</code></td>
+<td style=text-align:center>不透明渲染前</td>
+<td style=text-align:center><code>KawaseBlur</code>（8）</td>
+</tr>
+<tr>
+<td style=text-align:center><code>Kawase</code></td>
+<td style=text-align:center>不透明渲染后</td>
+<td style=text-align:center><code>KawaseAfterOpaque</code>（9）</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>模糊的核心方法为 <code>Blur</code> 和 <code>BlurSmall</code> ，其中 <code>Blur</code> 取水平或竖直的点进行模糊计算，而 <code>BlurSmall</code> 取对角线进行计算。<code>Blur</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// ./ShaderLibrary/SSAO.hlsl
+
+...
+
+half4 Blur(const float2 uv, const float2 delta) : SV_Target
+{
+    half4 p0 =  SAMPLE_BASEMAP(uv                       );
+    half4 p1a = SAMPLE_BASEMAP(uv - delta * 1.3846153846);
+    half4 p1b = SAMPLE_BASEMAP(uv + delta * 1.3846153846);
+    half4 p2a = SAMPLE_BASEMAP(uv - delta * 3.2307692308);
+    half4 p2b = SAMPLE_BASEMAP(uv + delta * 3.2307692308);
+
+    half3 n0 = GetPackedNormal(p0);
+
+    half w0  =                                           half(0.2270270270);
+    // CompareNormal 用于过滤掉和当前点法线偏差过大的采样点
+    half w1a = CompareNormal(n0, GetPackedNormal(p1a)) * half(0.3162162162);
+    half w1b = CompareNormal(n0, GetPackedNormal(p1b)) * half(0.3162162162);
+    half w2a = CompareNormal(n0, GetPackedNormal(p2a)) * half(0.0702702703);
+    half w2b = CompareNormal(n0, GetPackedNormal(p2b)) * half(0.0702702703);
+
+    half s = half(0.0);
+    s += GetPackedAO(p0)  * w0;
+    s += GetPackedAO(p1a) * w1a;
+    s += GetPackedAO(p1b) * w1b;
+    s += GetPackedAO(p2a) * w2a;
+    s += GetPackedAO(p2b) * w2b;
+    s *= rcp(w0 + w1a + w1b + w2a + w2b);
+
+    return PackAONormal(s, n0);
+}
+
+...
+</code></pre><ul>
+<li>最后一步的模糊处理和前面的稍有不同，以 <code>Bilateral</code> 为例，最后一个模糊处理的像素着色器 <code>FinalBlur</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// ./ShaderLibrary/SSAO.hlsl
+
+...
+
+half4 FinalBlur(Varyings input) : SV_Target
+{
+    UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+
+    const float2 uv = input.texcoord;
+    const float2 delta = _SourceSize.zw * rcp(DOWNSAMPLE);
+    return HALF_ONE - BlurSmall(uv, delta );
+}
+
+...
+</code></pre><ul>
+<li>在最后一个模糊处理完成前，<code>ao</code> 值代表遮蔽量，而最后一个模糊处理完成后的值，会设置到 <code>directAmbientOcclusion</code> 和 <code>indirectAmbientOcclusion</code> 上，在计算光照的时候进行相乘，所以需要的是光照可达性，即 <code>1 - ao</code>。</li>
+<li>而对于在不透明渲染完成后的 <code>ao</code> 计算，则还需要进行其他处理，同样以 <code>Bilateral</code> 为例，最后一个模糊处理的 <code>Pass</code> 的实现如下：</li>
+</ul>
+<pre tabindex=0><code>// ./Shader/Utils/ScreenSpaceAmbientOcclusion.shader
+
+...
+
+        Pass
+        {
+            Name &quot;SSAO_Bilateral_FinalBlur_AfterOpaque&quot;
+
+            ZTest NotEqual
+            ZWrite Off
+            Cull Off
+            Blend One SrcAlpha, Zero One
+            BlendOp Add, Add
+
+            HLSLPROGRAM
+                #pragma vertex Vert
+                #pragma fragment FragBilateralAfterOpaque
+
+                #include_with_pragmas &quot;Packages/com.unity.render-pipelines.core/ShaderLibrary/FoveatedRenderingKeywords.hlsl&quot;
+                #include &quot;Packages/com.unity.render-pipelines.universal/ShaderLibrary/SSAO.hlsl&quot;
+
+                half4 FragBilateralAfterOpaque(Varyings input) : SV_Target
+                {
+                    half ao = FinalBlur(input).r;
+                    return half4(0.0, 0.0, 0.0, ao);
+                }
+
+            ENDHLSL
+        }
+
+...
+</code></pre><ul>
+<li>在不透明渲染后的最后模糊处理，直接将 <code>1 - ao</code> 作为 <code>a</code> 通道输出。可以看到，此 <code>Pass</code> 采用了 <code>Blend One SrcAlpha, Zero One</code>，即</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style=text-align:center>通道</th>
+<th style=text-align:center>Src因子</th>
+<th style=text-align:center>Dst因子</th>
+<th style=text-align:center>公式</th>
+<th style=text-align:center>输出结果<br>（像素着色器的返回是<code>(0, 0, 0, ao)</code>）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style=text-align:center><code>RGB</code></td>
+<td style=text-align:center><code>One</code></td>
+<td style=text-align:center><code>SrcAlpha</code></td>
+<td style=text-align:center><code>SrcColor * One + DstColor * SrcAlpha</code></td>
+<td style=text-align:center><code>缓冲区颜色 * ao</code></td>
+</tr>
+<tr>
+<td style=text-align:center><code>A</code></td>
+<td style=text-align:center><code>Zero</code></td>
+<td style=text-align:center><code>One</code></td>
+<td style=text-align:center><code>SrcAlpha * Zero + DstAlpha * One</code></td>
+<td style=text-align:center><code>缓冲区透明度</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>不透明渲染后的 <code>SSAO</code>，最终利用 <code>ao</code> 值直接和缓冲区的结果进行混合，不需要额外写一个读取场景颜色再乘回去的全屏 <code>Pass</code>，也不需要进行现有 <code>Shader</code> 的改造，就能获得 <code>AO</code> 效果，实现简单。但在物理上是错误的，因为 <code>AO</code> 同时遮蔽了直射光和高光，画面会比正常更暗。</li>
+<li>尽管如此，此方案也因为其兼容性和便利性，而被一些项目采用，甚至在观感上认为此表现的对比度更强，更符合美术期望。</li>
+</ul>
+<h1 id=总结>总结</h1>
+<ul>
+<li>环境光遮蔽在当代游戏项目中的使用越来越普遍，尽管其实现并不算复杂，但其覆盖的概念较多。从基础概念起进行理解推导，更容易掌握其实现过程。此外，<code>Unity</code> 中的 <code>SSAO</code> 实现在细节上有其特别的思路和算法，了解其实现有助于在 <code>SSAO</code> 的使用上找到合适的性能优化方案。</li>
+</ul>
+<h1 id=参考>参考</h1>
+<ul>
+<li><a href>Real-Time Rendering 4th Edition</a></li>
+</ul>
 <hr>
 <ul class=pager>
 <li class=next>
