@@ -1079,7 +1079,7 @@ static const TValue *getgeneric (Table *t, const TValue *key) {
     end
 </code></pre><ul>
 <li>其中，explist 为迭代器，只执行一次，返回迭代器函数 func 、状态 state 、迭代器初始值 val 。遍历过程即执行 func ，将返回的第一个参数 val_1 作为新的 val ，执行完 block 代码块后，再继续执行 func ，直到返回的第一个参数为空时停止。</li>
-<li>table 的迭代器有两种，pairs 和 ipairs 。</li>
+<li>table 的迭代器有两种，pairs 和 ipairs 。通常情况下，如果表不为弱表，返回的 key/value 都不为 nil 。</li>
 </ul>
 <h4 id=pairs>pairs</h4>
 <ul>
