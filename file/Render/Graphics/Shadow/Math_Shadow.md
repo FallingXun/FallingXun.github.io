@@ -97,3 +97,54 @@ y = \frac{SDF(\vec p_i) ^ 2 }{2 \cdot SDF(\vec p_{i-1})}
 ```math
 d = \sqrt{SDF(\vec p_i) ^ 2 - (\frac{SDF(\vec p_i) ^ 2 }{2 \cdot SDF(\vec p_{i-1})}) ^ 2}
 ```
+
+- Math_Shadow_21
+```math
+\frac{dp}{dy} = \frac{n}{z} 
+```
+
+- Math_Shadow_22
+```math
+dy = \frac {dz}{\cos \theta} \cos \phi
+```
+
+- Math_Shadow_23
+```math
+\frac{dp}{ds} = \frac {n}{z} \cdot \frac{dz}{ds} \cdot \frac{\cos \phi}{\cos \theta}
+```
+
+- Math_Shadow_24
+```math
+\frac{dz}{zds} = \rho
+```
+
+- Math_Shadow_25
+```math
+s = \int_{0}^{s} ds = \int_{n}^{z} \frac{1}{z \rho} dz =\frac{1}{\rho} \ln \frac{z}{n}
+```
+
+
+- Math_Shadow_26
+```math
+s = \int_{0}^{1} ds = \int_{n}^{f} \frac{1}{z \rho} dz = \frac{1}{\rho} \ln \frac{f}{n} = 1
+```
+
+- Math_Shadow_27
+```math
+\rho = \ln \frac{f}{n} 
+```
+
+- Math_Shadow_28
+```math
+s = \frac{\ln \frac{z}{n}}{\ln \frac{f}{n}} 
+```
+
+- Math_Shadow_29
+```math
+z_i = n(\frac{f}{n})^ s = n(\frac{f}{n})^ \frac{i}{N}
+```
+
+- Math_Shadow_30
+```math
+z_i = \lambda n(\frac{f}{n})^ \frac{i}{N} + (1 - \lambda)(n + \frac{i(f - n)}{N})
+```

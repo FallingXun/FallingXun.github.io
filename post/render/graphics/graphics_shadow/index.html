@@ -327,7 +327,7 @@ post-container">
 </ul>
 <h4 id=非平面性问题>非平面性问题</h4>
 <ul>
-<li>单边切比雪夫不等式中要求，a' = a - μ ＞ 0 ，即 a ＞ z_avg ，不等式才能成立。当遮挡物和接收物都为一个平面时，能满足这个关系。然而当出现非平面性的问题，即有多个遮挡物、多个接收物等情况，出现 a ≤ z_avg 时，会出现漏光的问题，即在本应该无光照的区域出现了光照效果。尽管通过在更小范围内使用更多采样点，能解决这个问题，但就会回到 PCF 计算带来的性能问题。因此，需要引入滤波器内核细分方案来处理非平面性问题。</li>
+<li>单边切比雪夫不等式中要求，<code>a' = a - μ ＞ 0</code> ，即 <code>a ＞ z_avg</code> ，不等式才能成立。当遮挡物和接收物都为一个平面时，能满足这个关系。然而当出现非平面性的问题，即有多个遮挡物、多个接收物等情况，出现 a ≤ z_avg 时，会出现漏光的问题，即在本应该无光照的区域出现了光照效果。尽管通过在更小范围内使用更多采样点，能解决这个问题，但就会回到 PCF 计算带来的性能问题。因此，需要引入滤波器内核细分方案来处理非平面性问题。</li>
 <li>当 a ≤ z_avg 时，表示着色点没有被遮挡，即光照计算结果为 1 。当滤波内核 w 较小时，即滤波区域较小时，阴影图区域内的绝大部分像素深度值都比着色点深度大，因此能认为都没有被遮挡。随着内核 w 逐渐增大，平均深度的误差会越来越大，因此会出现错误的结果。因此需要使用较小的滤波内核，即解决步骤为：
 <ul>
 <li>将滤波内核划分成更小的子内核 w'。</li>
@@ -354,6 +354,51 @@ post-container">
 <ul>
 <li>当数据出现多个峰值时，用正态分布来描述数据会不准确，此时使用 VSM 或 VSSM 进行阴影估计时，得到的结果则不准确。可以使用 MSM（Moment Shadow Mapping）来改善，即使用更高阶的矩（moment）。VSM 和 VSSM 使用二阶矩（方差）来描述数据的分布情况，对正态分布的数据则能得到较好的结果。对于其他数据情况，使用越高的矩则越能准确描述出数据的分布情况。通常情况下，使用四阶矩就足够近似得到数据分布情况。</li>
 </ul>
+<h3 id=csmcascaded-shadow-maps>CSM（Cascaded Shadow Maps）</h3>
+<ul>
+<li>在大型场景中使用 Shadow Maps 时，阴影图会变得很难调整，且容易出现阴影粉刺、锯齿等问题。而级联阴影（CSM）通过在近处提供更高分辨率的阴影图，在远处提供较低分辨率的阴影图，来减少阴影问题。
+<img src="/img/Render/Graphics/Shadow/CSM_1.png?raw=true" alt=CSM_1.png>
+</li>
+<li>如上图所示，视锥体被分成远近两部分（相机到近裁剪平面区间忽略），生成阴影图时，沿光照方向对两个视锥体建立包围盒，得到阴影图的覆盖范围。</li>
+</ul>
+<h4 id=阴影图生成>阴影图生成</h4>
+<p>
+<img src="/img/Render/Graphics/Shadow/CSM_2.png?raw=true" alt=CSM_2.png>
+</p>
+<ul>
+<li>对于场景中的一个微小平面（绿色），其投影到屏幕上的高度为 <code>dp</code> ，阴影图上对应的距离为 <code>ds</code> ，则有
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_21.png?raw=true" alt=Math_Shadow_21.png>
+其中，
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_22.png?raw=true" alt=Math_Shadow_22.png>
+因此可以得到，
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_23.png?raw=true" alt=Math_Shadow_23.png>
+</li>
+<li>为了让每个微小平面在屏幕上和阴影图上保持相同的误差，则 <code>dp/ds</code> 需要为常量值。由于此处是为了计算屏幕空间像素分布和深度图分辨率的关系，即主要是优化透视误差，而余弦因子与相机角度、光源方向、物体表面法线相关，即投影误差。尽管余弦因子在数值上会发生变化，但此处进行了近似简化，仅考虑透视误差，即可将其视为常量值，则有
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_24.png?raw=true" alt=Math_Shadow_24.png>
+</li>
+<li>由于 <code>s</code> 为 <code>[0, s]</code> ，则
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_25.png?raw=true" alt=Math_Shadow_25.png>
+</li>
+<li>当 <code>s</code> 为 <code>[0, 1]</code> 时，则有
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_26.png?raw=true" alt=Math_Shadow_26.png>
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_27.png?raw=true" alt=Math_Shadow_27.png>
+则 <code>s</code> 和 <code>z</code> 的关系为
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_28.png?raw=true" alt=Math_Shadow_28.png>
+则每一级的 <code>z</code> 表示为
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_29.png?raw=true" alt=Math_Shadow_29.png>
+</li>
+<li>然而，在这种分割方式下，分割点会变得可见，因为分割处是可见的，且分割处的分辨率会急剧下降。为了减少这种明显的分界线，通常会引入一个线性插值因子 <code>λ</code> 来调整分割点，即
+<img src="/img/Render/Graphics/Shadow/Math_Shadow_30.png?raw=true" alt=Math_Shadow_30.png>
+</li>
+</ul>
+<h4 id=阴影渲染>阴影渲染</h4>
+<ul>
+<li>生成多级阴影图后，对于场景的物体，通过和分割点比较，找到需要使用的阴影图，进行采样比较，得到该点的阴影信息。</li>
+</ul>
+<h4 id=应用>应用</h4>
+<ul>
+<li>CSM 通常应用于大场景的阴影渲染，与其他方法相比，在使用过程中通常不会有太多的问题，随着阴影图的分辨率提高，场景中所有物体的阴影锯齿边缘就能显著减少，几乎和物体到观察者的距离无关，是一项较优的方案，但不适用于物体集中在某一个较小的范围的场景。</li>
+</ul>
 <h3 id=dfssdistance-field-soft-shadow>DFSS（Distance Field Soft Shadow）</h3>
 <ul>
 <li>DFSS 不是基于 Shadow Mapping 的方法，而是在着色点和光源的连线上，通过 SDF 查找每个点与遮挡物的最小距离，得到安全角度，从而计算出着色点的光照量。</li>
@@ -377,7 +422,7 @@ post-container">
 <img src="/img/Render/Graphics/Shadow/DFSS_2.png?raw=true" alt=DFSS_2.png>
 </li>
 </ul>
-<h4 id=应用>应用</h4>
+<h4 id=应用-1>应用</h4>
 <p>
 <img src="/img/Render/Graphics/Shadow/DFSS_3.png?raw=true" alt=DFSS_3.png>
 </p>
@@ -435,6 +480,10 @@ post-container">
 </figure>
 </li>
 </ul>
+<h3 id=sssscreen-space-shadows>SSS（Screen Space Shadows）</h3>
+<ul>
+<li>todo</li>
+</ul>
 <h3 id=总结>总结</h3>
 <ul>
 <li>阴影是渲染中非常重要的一个技术，对于呈现更加真实的画面来说至关重要。Shadow Mapping 技术，基于其概念简单以及实现方便，目前仍然是使用相对普遍的技术。而 SDF 类的技术，在某些情况下也有优于 Shadow Mapping 的表现和性能。阴影的实现方式有很多，简单的可以是统一的圆底，复杂的可以是实时阴影，需要根据不同的项目需求，来选择适合的实现方式。</li>
@@ -446,6 +495,8 @@ post-container">
 <li><a href=https://jankautz.com/publications/VSSM_PG2010.pdf>Variance Soft Shadow Mapping</a></li>
 <li><a href=http://www.shaderwrangler.com/publications/sat/SAT_EG2005.pdf>Fast Summed-Area Table Generation and its Applications</a></li>
 <li><a href=https://iquilezles.org/articles/rmshadows/>Soft Shadows in RayMarched SDFs-2010</a></li>
+<li><a href=https://dl.acm.org/doi/epdf/10.1145/1128923.1128975>Parallel-Split Shadow Maps for Large-scale Virtual Environments</a></li>
+<li><a href=https://developer.download.nvidia.cn/SDK/10.5/opengl/src/cascaded_shadow_maps/doc/cascaded_shadow_maps.pdf>Cascaded Shadow Maps</a></li>
 </ul>
 <hr>
 <ul class=pager>
