@@ -1,0 +1,948 @@
+<!doctype html><html lang=zh-cn>
+<head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta property="og:site_name" content="Xun's Blog">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://fallingxun.github.io//">
+<meta property="twitter:image" content="https://fallingxun.github.io//">
+<meta name=title content>
+<meta property="og:title" content>
+<meta property="twitter:title" content>
+<meta name=description content>
+<meta property="og:description" content>
+<meta property="twitter:description" content>
+<meta property="twitter:card" content="summary">
+<meta name=keyword content>
+<link rel="shortcut icon" href=/img/favicon.ico>
+<title></title>
+<link rel=canonical href=/post/render/graphics/graphics_texturecompression/>
+<link rel=stylesheet href=/css/iDisqus.min.css>
+<link rel=stylesheet href=/css/bootstrap.min.css>
+<link rel=stylesheet href=/css/hugo-theme-cleanwhite.min.css>
+<link rel=stylesheet href=/css/zanshang.css>
+<link href=//cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css rel=stylesheet type=text/css>
+<script src=/js/jquery.min.js></script>
+<script src=/js/bootstrap.min.js></script>
+<script src=/js/hux-blog.min.js></script>
+</head>
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+<div class=container-fluid>
+<div class="navbar-header page-scroll">
+<button type=button class=navbar-toggle>
+<span class=sr-only>Toggle navigation</span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+<span class=icon-bar></span>
+</button>
+<a class=navbar-brand href=/>Xun's Blog</a>
+</div>
+<div id=huxblog_navbar>
+<div class=navbar-collapse>
+<ul class="nav navbar-nav navbar-right">
+<li>
+<a href=/>Home</a>
+</li>
+<li>
+<a href=/categories/googleplay%E7%B3%BB%E5%88%97>googleplay系列</a>
+</li>
+<li>
+<a href=/categories/lua%E7%B3%BB%E5%88%97>lua系列</a>
+</li>
+<li>
+<a href=/categories/tmp%E7%B3%BB%E5%88%97>tmp系列</a>
+</li>
+<li>
+<a href=/categories/unity%E7%B3%BB%E5%88%97>unity系列</a>
+</li>
+<li>
+<a href=/categories/%E5%9B%BE%E5%BD%A2%E5%AD%A6%E7%B3%BB%E5%88%97>图形学系列</a>
+</li>
+<li>
+<a href=/categories/%E6%B8%B2%E6%9F%93%E7%B3%BB%E5%88%97>渲染系列</a>
+</li>
+<li>
+<a href=/categories/%E7%AE%97%E6%B3%95%E7%B3%BB%E5%88%97>算法系列</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</nav>
+<script>var $body=document.body,$toggle=document.querySelector('.navbar-toggle'),$navbar=document.querySelector('#huxblog_navbar'),$collapse=document.querySelector('.navbar-collapse');$toggle.addEventListener('click',handleMagic);function handleMagic(a){$navbar.className.indexOf('in')>0?($navbar.className=" ",setTimeout(function(){$navbar.className.indexOf('in')<0&&($collapse.style.height="0px")},400)):($collapse.style.height="auto",$navbar.className+=" in")}</script>
+<style type=text/css>header.intro-header{background-image:url('/')}</style>
+<header class=intro-header>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<div class=post-heading>
+<div class=tags>
+</div>
+<h1></h1>
+<h2 class=subheading></h2>
+<span class=meta>
+Posted by
+Xun's Blog
+on
+Monday, January 1, 0001
+</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<article>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2
+col-md-10 col-md-offset-1
+post-container">
+<h1 id=纹理压缩>纹理压缩</h1>
+<blockquote>
+<p>本文以 ASTC 为主线，介绍块纹理压缩的基本原理、编码与解码流程，并对比 ETC 与 BC 两大主流格式。</p>
+</blockquote>
+<h2 id=目录>目录</h2>
+<ol>
+<li><a href=#1-%E7%AE%80%E4%BB%8B>简介</a></li>
+<li><a href=#2-astc>ASTC</a></li>
+<li><a href=#3-etc>ETC</a></li>
+<li><a href=#4-bc>BC</a></li>
+<li><a href=#5-%E6%A0%BC%E5%BC%8F%E5%AF%B9%E6%AF%94%E4%B8%8E%E9%80%89%E5%9E%8B>格式对比与选型</a></li>
+<li><a href=#6-%E5%8F%82%E8%80%83%E8%B5%84%E6%96%99>参考资料</a></li>
+</ol>
+<hr>
+<h2 id=1-简介>1. 简介</h2>
+<h3 id=11-为什么需要纹理压缩>1.1 为什么需要纹理压缩</h3>
+<p>纹理通常是游戏和实时渲染中占用显存最多的资源之一。一张 2048 × 2048 的 RGBA8 纹理约占 16 MiB，如果有 Mipmap、法线贴图、遮罩、光照贴图和 UI 图集，显存占用会迅速上升。除了容量，纹理还会持续消耗：</p>
+<ul>
+<li><strong>显存带宽</strong>：采样、Mipmap、各向异性过滤都会读取纹理数据；</li>
+<li><strong>缓存容量</strong>：纹理越大，越容易造成缓存未命中；</li>
+<li><strong>功耗</strong>：移动设备上，内存访问往往比算术运算更昂贵；</li>
+<li><strong>加载时间</strong>：未压缩资源的传输和解码成本更高。</li>
+</ul>
+<p>通用无损压缩（如 PNG、ZIP）可以减少磁盘体积，但不适合直接用于 GPU 实时采样，因为它的数据长度不固定、随机访问困难，而且每次采样都可能需要昂贵的串行解压。纹理压缩采用的是另一种思路：<strong>块压缩（Block Compression）</strong>。</p>
+<h3 id=12-块压缩的基本模型>1.2 块压缩的基本模型</h3>
+<p>块压缩把纹理切成固定大小的小块，每个块独立编码、独立解码。常见块尺寸是 4 × 4 texel，也有 5 × 5、6 × 6、8 × 8、12 × 12 等。</p>
+<p>
+<img src=/img/Render/Graphics/TextureCompression/01-overview.png alt=纹理压缩概览>
+</p>
+<p>一个压缩块通常包含以下信息：</p>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>端点（Endpoint）</td>
+<td>定义块内颜色渐变的起点和终点，通常是两个颜色</td>
+</tr>
+<tr>
+<td>权重 / 索引（Weight / Index）</td>
+<td>表示某个 texel 落在两个端点之间的哪一级</td>
+</tr>
+<tr>
+<td>分区（Partition）</td>
+<td>把块内 texel 分成若干区域，每个区域使用不同端点</td>
+</tr>
+<tr>
+<td>权重网格（Weight Grid）</td>
+<td>以低于 texel 分辨率的网格保存权重，解码时插值</td>
+</tr>
+<tr>
+<td>块模式（Block Mode）</td>
+<td>告诉解码器如何解释块内的位流</td>
+</tr>
+</tbody>
+</table>
+<p>块压缩有三个非常重要的工程性质：</p>
+<ol>
+<li><strong>固定码率</strong>：每个块固定占用若干字节，因此可以精确计算显存和带宽；</li>
+<li><strong>随机访问</strong>：解码一个块不依赖其他块，GPU 可以在任意位置直接读取；</li>
+<li><strong>硬件解码</strong>：格式由 GPU 固定功能单元解码，采样时不需要运行通用计算程序。</li>
+</ol>
+<p>代价是<strong>有损压缩</strong>。解码出来的纹理不是原始像素，而是在端点、权重和量化精度限制下得到的近似结果。</p>
+<h3 id=13-比特率与块大小>1.3 比特率与块大小</h3>
+<p>压缩格式常用 <strong>bpp（bits per pixel）</strong> 描述平均每个像素占用的位数：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>bpp = 每块位数 / (块宽 × 块高)
+</code></pre></div><p>例如：</p>
+<ul>
+<li>ASTC 每块固定 128 bit，4 × 4 块为 <code>128 / 16 = 8 bpp</code>；</li>
+<li>ASTC 8 × 8 块为 <code>128 / 64 = 2 bpp</code>；</li>
+<li>ASTC 12 × 12 块为 <code>128 / 144 ≈ 0.89 bpp</code>；</li>
+<li>ETC1 / BC1 每块 64 bit，4 × 4 块为 4 bpp；</li>
+<li>BC3 / BC7 每块 128 bit，4 × 4 块为 8 bpp。</li>
+</ul>
+<p>块越大，每个 texel 分到的位数越少，压缩率越高，但块内可表达的细节也越少。对于文字、边缘、法线、粗糙度遮罩等高频内容，盲目使用大块会造成明显的块状伪影。</p>
+<h3 id=14-主流纹理压缩类型>1.4 主流纹理压缩类型</h3>
+<table>
+<thead>
+<tr>
+<th>格式家族</th>
+<th style=text-align:right>典型块大小</th>
+<th style=text-align:right>每块位数</th>
+<th style=text-align:right>典型 bpp</th>
+<th>主要特点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ASTC</td>
+<td style=text-align:right>4 × 4 至 12 × 12</td>
+<td style=text-align:right>128 bit</td>
+<td style=text-align:right>0.89–8</td>
+<td>块尺寸可调，LDR/HDR、1–4 通道，跨平台</td>
+</tr>
+<tr>
+<td>ETC1</td>
+<td style=text-align:right>4 × 4</td>
+<td style=text-align:right>64 bit</td>
+<td style=text-align:right>4</td>
+<td>仅 RGB，移动端 ES 2.0 普及</td>
+</tr>
+<tr>
+<td>ETC2 / EAC</td>
+<td style=text-align:right>4 × 4</td>
+<td style=text-align:right>64 bit / 128 bit</td>
+<td style=text-align:right>4 / 8</td>
+<td>ETC2 增加更多模式和 RGBA 支持</td>
+</tr>
+<tr>
+<td>BC1–BC7</td>
+<td style=text-align:right>4 × 4</td>
+<td style=text-align:right>64 bit / 128 bit</td>
+<td style=text-align:right>4 / 8</td>
+<td>桌面 GPU 常用，BC6H 支持 HDR，BC7 支持高质量 RGBA</td>
+</tr>
+<tr>
+<td>PVRTC</td>
+<td style=text-align:right>可变</td>
+<td style=text-align:right>—</td>
+<td style=text-align:right>2–4</td>
+<td>PowerVR 平台传统格式，现代项目使用减少</td>
+</tr>
+</tbody>
+</table>
+<p>在现代跨平台项目中，常见的组合是：</p>
+<ul>
+<li><strong>ASTC 为主</strong>：移动端和现代桌面端统一使用，块尺寸按内容选择；</li>
+<li><strong>ETC2 作为 Android 回退</strong>：覆盖不支持 ASTC 的旧设备；</li>
+<li><strong>BC 系列作为桌面/DirectX 路径</strong>：BC7 用于高质量 RGBA，BC6H 用于 HDR，BC5 用于法线。</li>
+</ul>
+<h3 id=15-解码与采样的关系>1.5 解码与采样的关系</h3>
+<p>需要区分“块”和“texel”：</p>
+<ul>
+<li><strong>块</strong>是显存中的压缩数据单元，例如一个 ASTC 块固定 128 bit；</li>
+<li><strong>texel</strong> 是解码后纹理中的一个像素颜色。</li>
+</ul>
+<p>GPU 采样纹理时，会定位到覆盖采样位置的压缩块，读出 128 bit（或 64 bit）块数据，解出块内的 texel 颜色，再在 texel 颜色上执行双线性、三线性或各向异性过滤。<strong>采样不是直接对 128 bit 做插值，而是对解码后的 texel 颜色做过滤。</strong></p>
+<hr>
+<h2 id=2-astc>2. ASTC</h2>
+<h3 id=21-astc-的设计目标>2.1 ASTC 的设计目标</h3>
+<p>ASTC（Adaptive Scalable Texture Compression）是 Khronos 制定的块纹理压缩标准，目标是用同一套编码框架覆盖从高质量到高压缩率、从 LDR 到 HDR、从 RGB 到 RGBA 的广泛场景。</p>
+<p>ASTC 最核心的两个特点：</p>
+<ol>
+<li><strong>每块固定 128 bit（16 字节）</strong>；</li>
+<li><strong>块尺寸可选</strong>，因此比特率可以在约 0.89–8 bpp 之间变化。</li>
+</ol>
+<p>ASTC 规范允许的二维块尺寸共有 14 种：</p>
+<table>
+<thead>
+<tr>
+<th>块尺寸</th>
+<th style=text-align:right>texel 数</th>
+<th style=text-align:right>bpp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4 × 4</td>
+<td style=text-align:right>16</td>
+<td style=text-align:right>8.00</td>
+</tr>
+<tr>
+<td>5 × 4</td>
+<td style=text-align:right>20</td>
+<td style=text-align:right>6.40</td>
+</tr>
+<tr>
+<td>5 × 5</td>
+<td style=text-align:right>25</td>
+<td style=text-align:right>5.12</td>
+</tr>
+<tr>
+<td>6 × 5</td>
+<td style=text-align:right>30</td>
+<td style=text-align:right>4.27</td>
+</tr>
+<tr>
+<td>6 × 6</td>
+<td style=text-align:right>36</td>
+<td style=text-align:right>3.56</td>
+</tr>
+<tr>
+<td>8 × 5</td>
+<td style=text-align:right>40</td>
+<td style=text-align:right>3.20</td>
+</tr>
+<tr>
+<td>8 × 6</td>
+<td style=text-align:right>48</td>
+<td style=text-align:right>2.67</td>
+</tr>
+<tr>
+<td>8 × 8</td>
+<td style=text-align:right>64</td>
+<td style=text-align:right>2.00</td>
+</tr>
+<tr>
+<td>10 × 5</td>
+<td style=text-align:right>50</td>
+<td style=text-align:right>2.56</td>
+</tr>
+<tr>
+<td>10 × 6</td>
+<td style=text-align:right>60</td>
+<td style=text-align:right>2.13</td>
+</tr>
+<tr>
+<td>10 × 8</td>
+<td style=text-align:right>80</td>
+<td style=text-align:right>1.60</td>
+</tr>
+<tr>
+<td>10 × 10</td>
+<td style=text-align:right>100</td>
+<td style=text-align:right>1.28</td>
+</tr>
+<tr>
+<td>12 × 10</td>
+<td style=text-align:right>120</td>
+<td style=text-align:right>1.07</td>
+</tr>
+<tr>
+<td>12 × 12</td>
+<td style=text-align:right>144</td>
+<td style=text-align:right>0.89</td>
+</tr>
+</tbody>
+</table>
+<p>注意：表中的 <code>5 × 4</code> 和 <code>4 × 5</code> 在编码语义上是等价的旋转关系，具体存储时以规范定义的块尺寸编码为准。</p>
+<p>
+<img src=/img/Render/Graphics/TextureCompression/03-block-sizes.png alt="ASTC 块尺寸与比特率">
+</p>
+<h3 id=22-astc-的编码流程>2.2 ASTC 的编码流程</h3>
+<p>ASTC 的编码器不是按固定格式往 128 bit 里填字段，而是先选择一种<strong>块模式（Block Mode）</strong>，再由该模式决定后续字段如何解释。</p>
+<p>一个典型的编码流程如下：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>选择块尺寸和 Block Mode
+        │
+        ▼
+把块划分成 1–4 个 partition
+        │
+        ▼
+为每个 partition 估计两个颜色端点
+        │
+        ▼
+选择端点量化模式和权重网格
+        │
+        ▼
+把每个 texel 投影到端点渐变线上，得到权重
+        │
+        ▼
+量化端点与权重，打包成 128 bit
+</code></pre></div><p>
+<img src=/img/Render/Graphics/TextureCompression/02-astc-pipeline.png alt="ASTC 编码与解码流程">
+</p>
+<h4 id=221-选择块模式>2.2.1 选择块模式</h4>
+<p>块模式决定了：</p>
+<ul>
+<li>块尺寸；</li>
+<li>partition 的数量和模式；</li>
+<li>端点量化方式；</li>
+<li>权重网格尺寸；</li>
+<li>权重位宽；</li>
+<li>是否使用 dual-plane；</li>
+<li>颜色分量和 HDR/LDR 模式。</li>
+</ul>
+<p>因此，ASTC 的位流没有一个“从 bit 0 到 bit 127 永远不变”的布局。<strong>Block Mode 是解码器理解其余位的入口</strong>。</p>
+<h4 id=222-分区>2.2.2 分区</h4>
+<p>一个块内的颜色可能不属于同一条渐变线。例如一个 8 × 8 块里同时有皮肤、头发和背景，单个 Min/Max 端点无法拟合。</p>
+<p>ASTC 支持把块分成 1–4 个 partition。每个 partition 有自己的一对端点，并共享或独立使用权重信息。分区模式由块模式和分区索引共同决定，解码端可以通过规范中的哈希函数还原每个 texel 属于哪个 partition。</p>
+<p>分区不是任意多边形划分，而是规范定义的有限模式集合。它足以把块内颜色聚类到几个区域，在比特预算内显著改善质量。</p>
+<h4 id=223-端点>2.2.3 端点</h4>
+<p>对每个 partition，编码器需要选择两个端点，通常表示该区域颜色分布的两个极值或主方向端点。</p>
+<p>在简化编码器中，可以直接取 partition 内所有 texel 的 min/max 颜色：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>E0 = min(color of texels)
+E1 = max(color of texels)
+</code></pre></div><p>更高质量的编码器会搜索端点位置，或者使用主成分分析、最小二乘、误差迭代等方法，使所有 texel 到端点渐变线的整体误差最小。</p>
+<p>ASTC 的端点量化不是只有 8 bit 一种选择。常见端点量化模式包括：</p>
+<ul>
+<li>8 bit；</li>
+<li>6 bit；</li>
+<li>5 bit + trit（三进制值）；</li>
+<li>4 bit + quint（五进制值）。</li>
+</ul>
+<p>trit 和 quint 的意义在于：用非 2 的幂的量化级数，在有限位数内获得更细的端点精度。例如 QUANT80 每通道有 80 个级别，接近 6.32 bit 的表达能力，但实际只需要 4 bit + 一个 quint 分量。</p>
+<blockquote>
+<p>这里容易产生误解：<strong>“两个端点”不是每个 texel 都存两个颜色。</strong> 端点属于整个 partition，一个块通常只存少量的端点；大量 texel 通过权重共享这对端点。</p>
+</blockquote>
+<h4 id=224-权重与权重网格>2.2.4 权重与权重网格</h4>
+<p>给定端点 <code>E0</code>、<code>E1</code>，一个 texel 的颜色可以写成：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>color = E0 + t × (E1 - E0)
+</code></pre></div><p>其中 <code>t</code> 是 0 到 1 之间的插值参数。编码器把 texel 颜色投影到 <code>E0 → E1</code> 的向量上，求出 <code>t</code>，再量化为 <code>n</code> bit：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>t = dot(p - E0, E1 - E0) / dot(E1 - E0, E1 - E0)
+Index = clamp(round(t × (2ⁿ - 1)), 0, 2ⁿ - 1)
+</code></pre></div><p>实际实现中通常会预先计算每块的缩放和偏置：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>Range  = E1 - E0
+Scale  = (2ⁿ - 1) / dot(Range, Range)
+Scaled = Range × Scale
+Bias   = (dot(E0, E0) - dot(E1, E0)) × Scale
+
+Index = clamp(round(dot(p, Scaled) + Bias), 0, 2ⁿ - 1)
+</code></pre></div><p>这样每个 texel 只需要一次 dot、一次加法和一次 round。</p>
+<p>ASTC 的权重不一定是“每个 texel 一个”。规范允许权重网格的尺寸小于块尺寸，解码时通过双线性插值把粗网格扩展到每个 texel。这样做可以节省大量权重位，尤其适合 8 × 8、10 × 10、12 × 12 等大块。</p>
+<p>
+<img src=/img/Render/Graphics/TextureCompression/04-weight-grid.png alt=权重网格插值>
+</p>
+<h4 id=225-打包成-128-bit>2.2.5 打包成 128 bit</h4>
+<p>最终编码器需要把以下信息写入 128 bit：</p>
+<ul>
+<li>Block Mode；</li>
+<li>partition 数量和 partition 模式；</li>
+<li>每个 partition 的端点量化值；</li>
+<li>权重网格尺寸与权重位宽；</li>
+<li>每个网格点的量化权重；</li>
+<li>dual-plane、HDR、通道模式等标志。</li>
+</ul>
+<p>由于不同 Block Mode 的字段数量不同，ASTC 的打包逻辑必须严格遵循规范的位布局。解码器不能靠“猜”字段，只能先解析 Block Mode，再按对应模式读取。</p>
+<h3 id=23-astc-的解码流程>2.3 ASTC 的解码流程</h3>
+<p>解码端大致执行以下步骤：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>读取 128 bit 块
+      │
+      ▼
+解析 Block Mode
+      │
+      ▼
+确定块尺寸、partition 和端点模式
+      │
+      ▼
+反量化端点，得到 E0、E1
+      │
+      ▼
+读取权重网格，按 texel 位置双线性插值
+      │
+      ▼
+color = E0 + w / (2ⁿ - 1) × (E1 - E0)
+      │
+      ▼
+输出 texel 颜色
+</code></pre></div><p>对于 dual-plane 模式，RGB 和 Alpha 可以使用不同的权重网格；对于 HDR 模式，端点反量化和颜色表示会使用不同的数值范围。无论哪种模式，核心结构都可以概括为：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>端点 + 权重 + 分区 + 插值
+</code></pre></div><h4 id=231-权重网格如何对应到-texel>2.3.1 权重网格如何对应到 texel</h4>
+<p>假设一个 8 × 8 块使用 4 × 4 权重网格。4 × 4 网格不是只有 4 个值，而是 <strong>4 列 × 4 行 = 16 个权重值</strong>。每个网格点位于一个 2 × 2 texel 单元的中心：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>8 × 8 texel 块                4 × 4 权重网格
+┌────┬────┬────┬────┐
+│ G00│ G01│ G02│ G03│          G00 覆盖左上 2 × 2 texel
+├────┼────┼────┼────┤          G01 覆盖下一组 2 × 2 texel
+│ G10│ G11│ G12│ G13│          ...
+├────┼────┼────┼────┤
+│ G20│ G21│ G22│ G23│
+├────┼────┼────┼────┤
+│ G30│ G31│ G32│ G33│
+└────┴────┴────┴────┘
+</code></pre></div><p>解码某个 texel 时，先根据它的块内坐标计算网格坐标：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>gx = (x + 0.5) × gridWidth  / blockWidth  - 0.5
+gy = (y + 0.5) × gridHeight / blockHeight - 0.5
+</code></pre></div><p>然后把 <code>gx</code>、<code>gy</code> 夹取到合法范围，再对周围 2 × 2 个网格权重做双线性插值。例如 8 × 8 块、4 × 4 网格、texel <code>(3,3)</code>：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>gx = (3 + 0.5) × 4 / 8 - 0.5 = 1.25
+gy = (3 + 0.5) × 4 / 8 - 0.5 = 1.25
+</code></pre></div><p>它使用 <code>G11</code>、<code>G12</code>、<code>G21</code>、<code>G22</code> 四个权重：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>w = 0.75 × 0.75 × G11
+  + 0.75 × 0.25 × G12
+  + 0.25 × 0.75 × G21
+  + 0.25 × 0.25 × G22
+</code></pre></div><p>这解释了为什么粗网格不会让整个块只有一个颜色：<strong>网格虽然粗，但每个 texel 仍然会得到独立的、连续变化的权重。</strong></p>
+<h3 id=24-不同块大小的处理方式>2.4 不同块大小的处理方式</h3>
+<p>ASTC 的编码框架相同，但块尺寸不同会导致明显的策略差异：</p>
+<table>
+<thead>
+<tr>
+<th>块尺寸</th>
+<th style=text-align:right>比特率</th>
+<th>典型处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4 × 4</td>
+<td style=text-align:right>8.00 bpp</td>
+<td>权重网格可以接近全分辨率，适合高质量颜色、法线、细节</td>
+</tr>
+<tr>
+<td>5 × 4 / 5 × 5</td>
+<td style=text-align:right>6.40 / 5.12 bpp</td>
+<td>仍可保留较高权重精度，适合通用颜色纹理</td>
+</tr>
+<tr>
+<td>6 × 5 / 6 × 6</td>
+<td style=text-align:right>4.27 / 3.56 bpp</td>
+<td>权重开始变紧，常需要减少权重位宽或使用更粗网格</td>
+</tr>
+<tr>
+<td>8 × 5 / 8 × 6 / 8 × 8</td>
+<td style=text-align:right>3.20 / 2.67 / 2.00 bpp</td>
+<td>通常使用缩减权重网格和分区，适合中等频率内容</td>
+</tr>
+<tr>
+<td>10 × 5 / 10 × 6 / 10 × 8 / 10 × 10</td>
+<td style=text-align:right>2.56–1.28 bpp</td>
+<td>需要更粗的网格、更多依赖分区和内容平滑性</td>
+</tr>
+<tr>
+<td>12 × 10 / 12 × 12</td>
+<td style=text-align:right>1.07 / 0.89 bpp</td>
+<td>适合低频、大面积渐变或远距离物体，不适合文字和硬边</td>
+</tr>
+</tbody>
+</table>
+<p>具体来说：</p>
+<ul>
+<li><strong>4 × 4</strong>：一个块只有 16 个 texel，128 bit 相对充裕。ASTC 可以给端点分配较高精度，并使用全尺寸权重网格。例如，一种单分区、全尺寸权重网格的简化编码器可以使用两个 RGB888 端点（48 bit）加 16 个 3-bit 权重（48 bit），其余位留给块模式和配置。高质量 ASTC 编码器还会在这个块尺寸上尝试多个 partition 和端点模式。</li>
+<li><strong>5 × 5</strong>：25 个 texel，如果使用 3-bit 权重需要 75 bit。例如使用 RGB666 端点时，两个端点约 36 bit，加上 75 bit 权重和模式位，仍能放进 128 bit。相比 4 × 4，它节省约 36% 的存储，但块内细节拟合能力下降。</li>
+<li><strong>6 × 6</strong>：36 个 texel。如果仍然使用 3-bit 权重，需要 108 bit，留给端点和模式的位太少。因此通常把权重降为 2-bit，并使用 QUANT80 端点，权重占 72 bit，端点和模式占其余部分。6 × 6 的质量通常已能看出下降，适合对体积敏感、内容较平滑的纹理。</li>
+<li><strong>8 × 8 及以上</strong>：权重位预算更紧。8 × 8 如果存 2-bit 权重且每个 texel 一个权重，就需要 128 bit，完全没有空间放端点、分区和模式。因此必须使用缩减权重网格，并通常配合分区。例如 8 × 8 块使用 4 × 4 网格、2-bit 权重时，权重只需 32 bit，剩下的位可以用于端点和配置。</li>
+<li><strong>10 × 10 / 12 × 12</strong>：块内 texel 数达到 100/144，几乎只能表达低频变化。编码器通常依赖更粗的权重网格、多个 partition 和内容自适应搜索；如果原图细节丰富，就会出现明显的块状模糊或颜色渗漏。</li>
+</ul>
+<blockquote>
+<p>这里的“必须/通常”是工程上的实际约束：规范虽然定义了合法的模式组合，但 128 bit 的总预算决定了哪些组合真正可用。具体合法组合应以 ASTC 规范中的 block mode 表为准。</p>
+</blockquote>
+<h3 id=25-astc-的采样过程>2.5 ASTC 的采样过程</h3>
+<p>渲染时对 ASTC 纹理采样，硬件大致执行：</p>
+<ol>
+<li>根据 UV 和 Mip 选择定位纹理坐标；</li>
+<li>找到覆盖该坐标的一个或多个 128 bit 块；</li>
+<li>解码这些块中的 texel 颜色；</li>
+<li>在解码后的 texel 颜色上做双线性/三线性/各向异性过滤；</li>
+<li>返回最终的 RGBA 值。</li>
+</ol>
+<p>硬件只解码采样所需的块，而不是一次性解码整张贴图。相邻采样点如果落在同一个块内，可以复用块解码结果和缓存。</p>
+<h2 id=3-etc>3. ETC</h2>
+<h3 id=31-etc-的定位>3.1 ETC 的定位</h3>
+<p>ETC（Ericsson Texture Compression）是为移动端设计的块纹理压缩家族。它在 Android/OpenGL ES 生态中非常普及：</p>
+<ul>
+<li>ETC1：OpenGL ES 2.0 时代的基础格式，仅支持 RGB；</li>
+<li>ETC2：OpenGL ES 3.0 起强制支持，增加差分模式、T/H/Planar 模式和 EAC 透明通道；</li>
+<li>ETC2 + EAC：可以组合成 RGBA 压缩。</li>
+</ul>
+<p>ETC 的基本块是固定的 <strong>4 × 4 texel</strong>。ETC1 的颜色块为 64 bit，因此是 4 bpp；ETC2 的 RGBA 通常由两个 64 bit 块组成，达到 8 bpp。</p>
+<p>
+<img src=/img/Render/Graphics/TextureCompression/05-etc.png alt="ETC 编码与解码">
+</p>
+<h3 id=32-etc1-的编码与解码>3.2 ETC1 的编码与解码</h3>
+<h4 id=321-块结构>3.2.1 块结构</h4>
+<p>ETC1 的 64 bit 块通常包含：</p>
+<ul>
+<li>两个子块（2 × 4 或 4 × 2）；</li>
+<li>每个子块一个基色（RGB444）；</li>
+<li>每个子块一个 3-bit 调制表索引；</li>
+<li>每个 texel 一个 2-bit 索引；</li>
+<li>flip 位和 differential 位。</li>
+</ul>
+<p>一个简化的逻辑布局如下：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>┌──────────────────────────────────────────────┐
+│ Base Color 0 │ Base Color 1 │ Table │ Indices │
+│    RGB444    │    RGB444    │ 3×2   │ 2×16    │
+└──────────────────────────────────────────────┘
+                64 bit / 4×4 块
+</code></pre></div><h4 id=322-解码公式>3.2.2 解码公式</h4>
+<p>ETC1 的核心是“基色 + 调制表”：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>color(texel) = BaseColor[subblock]
+             + Modifier[tableIndex][pixelIndex]
+</code></pre></div><p>每个 texel 的 2-bit 索引不是直接表示颜色，而是从 4 个调制值中选择一个。调制表中的值通常是正负亮度偏移，例如 <code>{-8, -2, 2, 8}</code> 这样的形式。这样，一个子块可以表示基色附近的四个明暗台阶。</p>
+<h4 id=323-编码流程>3.2.3 编码流程</h4>
+<p>ETC1 编码器大致需要：</p>
+<ol>
+<li>选择 flip 方向，把 4 × 4 块分成 2 × 4 或 4 × 2 两个子块；</li>
+<li>对每个子块估计基色，通常取子块的平均色或颜色范围中心；</li>
+<li>选择调制表，使每个 texel 的量化误差尽量小；</li>
+<li>为每个 texel 选择最优的 2-bit 索引；</li>
+<li>把基色、表索引、像素索引和标志位打包成 64 bit。</li>
+</ol>
+<p>由于每个子块只有一个基色和一张调制表，ETC1 对色相变化和复杂渐变的表达能力有限。它适合颜色相对均匀的漫反射纹理，不适合高质量法线、文字和细节丰富的贴图。</p>
+<h3 id=33-etc2-的扩展>3.3 ETC2 的扩展</h3>
+<p>ETC2 在保持 4 × 4 / 64 bit 结构的基础上，增加了多种模式：</p>
+<h4 id=individual-模式>Individual 模式</h4>
+<p>两个子块各自使用独立的 RGB444 基色。适合两个区域颜色差异较大的情况。</p>
+<h4 id=differential-模式>Differential 模式</h4>
+<p>第一个子块使用 RGB555 基色，第二个子块的颜色通过与第一个子块的 3-bit 有符号差值表示。这样可以在两个子块颜色接近时获得更高精度；如果差值超出范围，编码器会退回 individual 模式。</p>
+<h4 id=t-模式>T 模式</h4>
+<p>T 模式使用两个颜色端点和一个中间色，适合双色内容和边缘。它比 ETC1 的“单基色 + 调制表”更灵活。</p>
+<h4 id=h-模式>H 模式</h4>
+<p>H 模式从两个端点派生出更多明暗级别，适合平滑渐变和具有明显方向性的颜色变化。</p>
+<h4 id=planar-模式>Planar 模式</h4>
+<p>Planar 模式使用一个基色和两个斜率来表示平滑的颜色平面。它特别适合低频、缓变的区域。</p>
+<h4 id=eac-透明通道>EAC 透明通道</h4>
+<p>EAC（ETC2 Alpha Compression）是单独的 64 bit 单通道块，使用基值、倍数和逐 texel 索引表示 Alpha 或单通道数据。一个 ETC2 RGBA 纹理通常由一个 64 bit 颜色块和一个 64 bit Alpha 块组成，总计 128 bit / 4 × 4，即 8 bpp。</p>
+<p>ETC2 的编码器需要在多种模式之间选择。通常会对每种模式计算误差，再选出最优模式；这也是 ETC2 编码比 ETC1 更复杂的原因。</p>
+<h3 id=34-etc-的块大小与处理方式>3.4 ETC 的块大小与处理方式</h3>
+<p>ETC 家族没有 ASTC 那样可自由选择的块尺寸，通常固定为 4 × 4：</p>
+<table>
+<thead>
+<tr>
+<th>格式</th>
+<th style=text-align:right>每块位数</th>
+<th style=text-align:right>bpp</th>
+<th>处理方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ETC1 RGB</td>
+<td style=text-align:right>64 bit</td>
+<td style=text-align:right>4</td>
+<td>两个子块，各自基色 + 调制表 + 2-bit 索引</td>
+</tr>
+<tr>
+<td>ETC2 RGB</td>
+<td style=text-align:right>64 bit</td>
+<td style=text-align:right>4</td>
+<td>individual/differential/T/H/Planar 多模式选择</td>
+</tr>
+<tr>
+<td>ETC2 RGBA</td>
+<td style=text-align:right>128 bit</td>
+<td style=text-align:right>8</td>
+<td>64 bit 颜色块 + 64 bit EAC Alpha 块</td>
+</tr>
+</tbody>
+</table>
+<p>因为块尺寸固定，ETC 无法通过“把块变大”继续降低码率。要获得更低的码率，需要使用其他格式或降低分辨率。这也是 ASTC 在大块、低码率场景中更有弹性的原因之一。</p>
+<h3 id=35-etc-的使用场景>3.5 ETC 的使用场景</h3>
+<ul>
+<li>Android OpenGL ES 3.0 及以上设备的保底格式；</li>
+<li>对兼容性要求高、不能假设 ASTC 可用的项目；</li>
+<li>颜色相对简单、分辨率不高的漫反射贴图；</li>
+<li>需要与 ETC1 旧资源保持兼容的项目。</li>
+</ul>
+<p>在高通、Mali、PowerVR 等移动 GPU 上，ETC2 通常都有硬件解码支持。工程上常见策略是：<strong>优先 ASTC，ETC2 作为最低端设备回退</strong>。</p>
+<hr>
+<h2 id=4-bc>4. BC</h2>
+<h3 id=41-bc-家族概览>4.1 BC 家族概览</h3>
+<p>BC（Block Compression）是 Microsoft DirectX 体系中的块压缩格式家族，常见于桌面 GPU 和 DirectX 纹理管线。BC 系列通常使用固定的 4 × 4 块：</p>
+<ul>
+<li>BC1–BC3：颜色和 Alpha，64 bit 或 128 bit；</li>
+<li>BC4–BC5：单通道/双通道，常用于法线、粗糙度、遮罩；</li>
+<li>BC6H：HDR RGB，128 bit；</li>
+<li>BC7：高质量 RGBA，128 bit。</li>
+</ul>
+<p>
+<img src=/img/Render/Graphics/TextureCompression/06-bc.png alt="BC 家族编码与解码">
+</p>
+<h3 id=42-bc1>4.2 BC1</h3>
+<p>BC1（也称 DXT1）是最经典的颜色块格式：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>64 bit / 4×4 块
+┌──────────────┬──────────────┬────────────────┐
+│ Endpoint 0   │ Endpoint 1   │ Pixel Indices  │
+│ RGB565·16bit │ RGB565·16bit │ 2bit × 16      │
+└──────────────┴──────────────┴────────────────┘
+</code></pre></div><p>解码时，两个 RGB565 端点生成四个候选颜色：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>C0 = E0
+C1 = E1
+C2 = 2/3 × E0 + 1/3 × E1
+C3 = 1/3 × E0 + 2/3 × E1
+</code></pre></div><p>每个 texel 用 2-bit 索引选择其中一个颜色。通过调整端点顺序，BC1 还可以启用 1-bit Alpha 或透明模式。</p>
+<p>BC1 的编码重点是选择两个端点和每个 texel 的 2-bit 索引，使整体误差最小。它适合不透明或简单透明颜色纹理，但不适合高质量渐变和法线。</p>
+<h3 id=43-bc2-与-bc3>4.3 BC2 与 BC3</h3>
+<p><strong>BC2</strong> 使用 128 bit：</p>
+<ul>
+<li>64 bit 颜色块，结构类似 BC1；</li>
+<li>64 bit 显式 4-bit Alpha，每个 texel 一个 4-bit Alpha 值。</li>
+</ul>
+<p><strong>BC3</strong> 也使用 128 bit，但 Alpha 采用“端点 + 索引”的方式：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>64 bit 颜色块（类似 BC1）
++ 64 bit Alpha 块
+  ├─ 2 个 8-bit Alpha 端点
+  └─ 16 个 3-bit Alpha 索引
+</code></pre></div><p>BC3 的 Alpha 渐变比 BC2 的 4-bit 显式 Alpha 更平滑，适合带柔和透明边缘的纹理。</p>
+<h3 id=44-bc4-与-bc5>4.4 BC4 与 BC5</h3>
+<p>BC4 是单通道格式，64 bit / 4 × 4：</p>
+<ul>
+<li>两个 8-bit 通道端点；</li>
+<li>16 个 3-bit 索引；</li>
+<li>解码时在端点之间插值。</li>
+</ul>
+<p>BC5 由两个 BC4 块组成，共 128 bit / 4 × 4，包含两个独立通道。它常用于法线贴图：把法线 X/Y 两个分量分别压缩，运行时根据 X/Y 重建 Z，避免直接压缩 RGB 法线导致的归一化误差。</p>
+<h3 id=45-bc6h-与-bc7>4.5 BC6H 与 BC7</h3>
+<p>BC6H 面向 HDR RGB，128 bit / 4 × 4，支持半精度端点、分区和多种模式。它适合 HDR 环境贴图、光照贴图和高质量 HDR 颜色数据。</p>
+<p>BC7 面向 LDR RGBA，128 bit / 4 × 4，提供 8 种模式。不同模式可以组合：</p>
+<ul>
+<li>0–3 个 partition；</li>
+<li>不同位宽的端点；</li>
+<li>2–4 bit 的 per-texel 索引；</li>
+<li>显式或隐含的 Alpha；</li>
+<li>多种端点预测方式。</li>
+</ul>
+<p>BC7 的编码器需要在多个模式、分区模式和端点组合中搜索，复杂度较高，但质量明显优于 BC1/BC3，特别适合高质量 UI、颜色纹理和带 Alpha 的贴图。</p>
+<h3 id=46-bc-的编码与解码核心>4.6 BC 的编码与解码核心</h3>
+<p>BC 家族的格式差异很大，但核心都可以抽象为：</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>对每个 partition：
+    选择端点
+    选择索引位宽和分区模式
+    为每个 texel 选择索引
+
+解码：
+    color = endpoint0 + index / maxIndex × (endpoint1 - endpoint0)
+</code></pre></div><p>BC1/BC3 的搜索空间相对较小；BC7 需要在 8 个模式、多个分区和不同端点量化之间搜索，因此编码速度和质量的取舍更明显。</p>
+<h3 id=47-bc-的块大小与平台>4.7 BC 的块大小与平台</h3>
+<p>BC 通常固定为 4 × 4：</p>
+<table>
+<thead>
+<tr>
+<th>格式</th>
+<th style=text-align:right>每块位数</th>
+<th style=text-align:right>bpp</th>
+<th>主要用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BC1</td>
+<td style=text-align:right>64 bit</td>
+<td style=text-align:right>4</td>
+<td>RGB，简单透明</td>
+</tr>
+<tr>
+<td>BC2</td>
+<td style=text-align:right>128 bit</td>
+<td style=text-align:right>8</td>
+<td>RGB + 4-bit Alpha</td>
+</tr>
+<tr>
+<td>BC3</td>
+<td style=text-align:right>128 bit</td>
+<td style=text-align:right>8</td>
+<td>RGB + 平滑 Alpha</td>
+</tr>
+<tr>
+<td>BC4</td>
+<td style=text-align:right>64 bit</td>
+<td style=text-align:right>4</td>
+<td>单通道</td>
+</tr>
+<tr>
+<td>BC5</td>
+<td style=text-align:right>128 bit</td>
+<td style=text-align:right>8</td>
+<td>双通道、法线</td>
+</tr>
+<tr>
+<td>BC6H</td>
+<td style=text-align:right>128 bit</td>
+<td style=text-align:right>8</td>
+<td>HDR RGB</td>
+</tr>
+<tr>
+<td>BC7</td>
+<td style=text-align:right>128 bit</td>
+<td style=text-align:right>8</td>
+<td>高质量 RGBA</td>
+</tr>
+</tbody>
+</table>
+<p>BC 主要在 DirectX / 桌面 GPU 上使用。移动端是否支持 BC 取决于 GPU、图形 API 和具体格式能力；在跨平台项目中，通常需要为不同平台准备 ASTC、ETC2 或 BC 的资源变体。</p>
+<hr>
+<h2 id=5-格式对比与选型>5. 格式对比与选型</h2>
+<h3 id=51-核心对比>5.1 核心对比</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>ASTC</th>
+<th>ETC1</th>
+<th>ETC2 / EAC</th>
+<th>BC1–BC7</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>块大小</td>
+<td>4 × 4 至 12 × 12</td>
+<td>固定 4 × 4</td>
+<td>固定 4 × 4</td>
+<td>固定 4 × 4</td>
+</tr>
+<tr>
+<td>每块位数</td>
+<td>128 bit</td>
+<td>64 bit</td>
+<td>64 / 128 bit</td>
+<td>64 / 128 bit</td>
+</tr>
+<tr>
+<td>bpp</td>
+<td>0.89–8</td>
+<td>4</td>
+<td>4 / 8</td>
+<td>4 / 8</td>
+</tr>
+<tr>
+<td>RGB 支持</td>
+<td>是</td>
+<td>是</td>
+<td>是</td>
+<td>是</td>
+</tr>
+<tr>
+<td>Alpha 支持</td>
+<td>是</td>
+<td>否</td>
+<td>ETC2 RGBA + EAC</td>
+<td>BC2/BC3/BC7</td>
+</tr>
+<tr>
+<td>HDR</td>
+<td>是</td>
+<td>否</td>
+<td>否</td>
+<td>BC6H</td>
+</tr>
+<tr>
+<td>分区</td>
+<td>1–4</td>
+<td>两个子块</td>
+<td>多模式</td>
+<td>BC7 支持 1–3 个分区</td>
+</tr>
+<tr>
+<td>权重网格</td>
+<td>可选缩减、双线性插值</td>
+<td>固定 2-bit 索引</td>
+<td>固定/模式相关</td>
+<td>固定索引或模式相关</td>
+</tr>
+<tr>
+<td>主要平台</td>
+<td>移动 + 现代桌面</td>
+<td>旧 Android</td>
+<td>Android ES 3.0+</td>
+<td>DirectX / 桌面</td>
+</tr>
+<tr>
+<td>典型定位</td>
+<td>统一、可伸缩</td>
+<td>兼容保底</td>
+<td>Android 保底</td>
+<td>桌面高质量</td>
+</tr>
+</tbody>
+</table>
+<h3 id=52-选型建议>5.2 选型建议</h3>
+<p><strong>颜色纹理</strong></p>
+<ul>
+<li>高质量移动端：ASTC 5 × 5 或 6 × 6；</li>
+<li>桌面高质量：BC7；</li>
+<li>Android 兼容回退：ETC2；</li>
+<li>细节很多且显存充足：ASTC 4 × 4 或 BC7。</li>
+</ul>
+<p><strong>法线贴图</strong></p>
+<ul>
+<li>ASTC 4 × 4 / 5 × 5；</li>
+<li>桌面优先 BC5；</li>
+<li>避免低质量 BC1/ETC1 直接压缩 RGB 法线。</li>
+</ul>
+<p><strong>带 Alpha 的纹理</strong></p>
+<ul>
+<li>ASTC RGBA；</li>
+<li>BC3 或 BC7；</li>
+<li>ETC2 RGBA + EAC；</li>
+<li>注意 Alpha 边缘的块状伪影，必要时使用更小块或独立 Alpha 通道。</li>
+</ul>
+<p><strong>HDR 纹理</strong></p>
+<ul>
+<li>ASTC HDR；</li>
+<li>BC6H。</li>
+</ul>
+<p><strong>超低码率、远距离或低频内容</strong></p>
+<ul>
+<li>ASTC 8 × 8、10 × 10、12 × 12；</li>
+<li>配合 Mipmap 和流式加载；</li>
+<li>不建议对文字、UI、硬边法线使用大块。</li>
+</ul>
+<h3 id=53-工程注意事项>5.3 工程注意事项</h3>
+<ol>
+<li><strong>尺寸对齐</strong>：块压缩要求纹理宽高是块尺寸的倍数。带 Mipmap 时，最低一级也要满足对齐要求。</li>
+<li><strong>sRGB 标记</strong>：压缩格式本身不等于颜色空间，创建纹理时要正确设置 sRGB/线性标记。</li>
+<li><strong>Mipmap</strong>：压缩前生成 Mipmap，或按 Mip 逐级压缩；不能简单把压缩块直接平均。</li>
+<li><strong>平台变体</strong>：同一资源通常需要 ASTC、ETC2、BC 等多个变体。</li>
+<li><strong>质量验证</strong>：压缩质量与内容强相关，必须用目标内容在目标 GPU 上验证，不能只看理论 bpp。</li>
+<li><strong>运行时代价</strong>：GPU 编码适合实时/运行时生成纹理，但完整 ASTC 搜索通常还是离线编码质量更高。</li>
+</ol>
+<hr>
+<h2 id=6-参考资料>6. 参考资料</h2>
+<ul>
+<li>Khronos Data Format Specification（ASTC、ETC 等）：<a href=https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.html>https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.html</a></li>
+<li>ARM astc-encoder：<a href=https://github.com/ARM-software/astc-encoder>https://github.com/ARM-software/astc-encoder</a></li>
+<li>Microsoft BC7 格式文档：<a href=https://learn.microsoft.com/en-us/windows/win32/direct3d11/bc7-format>https://learn.microsoft.com/en-us/windows/win32/direct3d11/bc7-format</a></li>
+<li>Microsoft BC6H 格式文档：<a href=https://learn.microsoft.com/en-us/windows/win32/direct3d11/bc6h-format>https://learn.microsoft.com/en-us/windows/win32/direct3d11/bc6h-format</a></li>
+<li>参考实现库：<a href=../../README.md><code>UnityAstcGpuEncoder</code></a>（当前项目，仅作参考实现记录）</li>
+</ul>
+<hr>
+<h2 id=附一句话总结>附：一句话总结</h2>
+<p><strong>纹理压缩的本质，是用固定大小的块、少量端点和小型权重网格近似表示大量 texel；ASTC 通过可变的块尺寸、分区、端点量化和权重网格，在质量、码率和平台覆盖之间提供了最大的可调空间。</strong></p>
+<hr>
+<ul class=pager>
+<li class=previous>
+<a href=/post/render/graphics/graphics_ambientocclusion/ data-toggle=tooltip data-placement=top title="图形学篇 — 环境光遮蔽（AO）">&larr;
+Previous Post</a>
+</li>
+<li class=next>
+<a href=/post/tmp/textmeshprogcoptimize/ data-toggle=tooltip data-placement=top title="TMP(TextMeshPro)优化篇 — (1) 堆内存">Next
+Post &rarr;</a>
+</li>
+</ul>
+<div id=disqus-comment></div>
+</div>
+<div class="col-lg-2 col-lg-offset-0
+visible-lg-block
+sidebar-container
+catalog-container">
+<div class=side-catalog>
+<hr class="hidden-sm hidden-xs">
+<h5>
+<a class=catalog-toggle href=#>CATALOG</a>
+</h5>
+<ul class=catalog-body></ul>
+</div>
+</div>
+<div class="col-lg-11 col-lg-offset-1
+col-md-10 col-md-offset-1
+sidebar-container">
+</div>
+</div>
+</div>
+</article>
+<footer>
+<div class=container>
+<div class=row>
+<div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+<ul class="list-inline text-center">
+</ul>
+<p class="copyright text-muted">
+Copyright &copy; Xun's Blog 2026
+<br>
+<a href=https://themes.gohugo.io/hugo-theme-cleanwhite>CleanWhite Hugo Theme</a> by <a href=https://zhaohuabing.com>Huabing</a> |
+<iframe style=margin-left:2px;margin-bottom:-5px frameborder=0 scrolling=0 width=100px height=20px src="https://ghbtns.com/github-btn.html?user=zhaohuabing&repo=hugo-theme-cleanwhite&type=star&count=true"></iframe>
+</p>
+</div>
+</div>
+</div>
+</footer>
+<script>function loadAsync(f,b){var c=document,d='script',a=c.createElement(d),e=c.getElementsByTagName(d)[0];a.src=f,b&&a.addEventListener('load',function(a){b(null,a)},!1),e.parentNode.insertBefore(a,e)}</script>
+<script>$('#tag_cloud').length!==0&&loadAsync("/js/jquery.tagcloud.js",function(){$.fn.tagcloud.defaults={color:{start:'#bbbbee',end:'#0085a1'}},$('#tag_cloud a').tagcloud()})</script>
+<script>loadAsync("https://cdnjs.cloudflare.com/ajax/libs/fastclick/1.0.6/fastclick.js",function(){var a=document.querySelector("nav");a&&FastClick.attach(a)})</script>
+<script type=text/javascript>function generateCatalog(a){_containerSelector='div.post-container';var h=$(_containerSelector),c,d,e,f,g,b;return c=h.find('h1,h2,h3,h4,h5,h6'),$(a).html(''),c.each(function(){d=$(this).prop('tagName').toLowerCase(),g="#"+$(this).prop('id'),e=$(this).text(),b=$('<a href="'+g+'" rel="nofollow">'+e+'</a>'),f=$('<li class="'+d+'_nav"></li>').append(b),$(a).append(f)}),!0}generateCatalog(".catalog-body"),$(".catalog-toggle").click(function(a){a.preventDefault(),$('.side-catalog').toggleClass("fold")}),loadAsync("/js/jquery.nav.js",function(){$('.catalog-body').onePageNav({currentClass:"active",changeHash:!1,easing:"swing",filter:"",scrollSpeed:700,scrollOffset:0,scrollThreshold:.2,begin:null,end:null,scrollChange:null,padding:80})})</script>
+</body>
+</html>
